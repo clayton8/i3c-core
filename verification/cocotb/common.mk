@@ -50,6 +50,7 @@ ifeq ($(SIM), verilator)
     COMPILE_ARGS += -Wall -Wno-fatal
     COMPILE_ARGS += --x-assign unique --x-initial unique
 
+    EXTRA_ARGS += --autoflush
     EXTRA_ARGS += --trace --trace-structs
     EXTRA_ARGS += $(VERILATOR_COVERAGE)
     EXTRA_ARGS += -Wno-DECLFILENAME -Wno-TIMESCALEMOD
