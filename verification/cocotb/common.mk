@@ -14,8 +14,7 @@ $(info From common.mk, CURDIR is $(CURDIR))
 # Set pythonpath so that tests can access common modules
 export PYTHONPATH := $(PYTHONPATH):$(CURDIR)/common
 
-# Add empty file to common sources to enforce
-# configuration build before running the tests
+# Add empty file to common sources to enforce configuration build before running the tests
 COMMON_SOURCES += $(TEST_DIR)/sim_build/i3c_config.vh
 
 VERILOG_INCLUDE_DIRS= \
@@ -43,7 +42,6 @@ else
     VERILATOR_COVERAGE = ""
 endif
 
-# Enable processing of #delay statements
 ifeq ($(SIM), verilator)
     COMPILE_ARGS += --timing
     COMPILE_ARGS += +define+DIGITAL_IO_I3C
@@ -70,8 +68,7 @@ ifeq ($(SIM), vcs)
 endif
 
 COCOTB_HDL_TIMEUNIT         = 1ns
-# we need 1fs resolution to handle 333MHz clocks
-COCOTB_HDL_TIMEPRECISION    = 1fs
+COCOTB_HDL_TIMEPRECISION    = 1fs ## we need 1fs resolution to handle 333MHz clocks
 
 # Build directory
 comma := ,
@@ -100,8 +97,10 @@ all: sim convert-vpd2vcd
 
 endif
 
-CFG_FILE ?= $(I3C_ROOT)/i3c_core_configs.yaml## Path: YAML file holding configuration of the I3C RTL
-CFG_NAME ?= axi## Valid configuration name from the YAML configuration file
+## Path: YAML file holding configuration of the I3C RTL
+CFG_FILE ?= $(I3C_ROOT)/i3c_core_configs.yaml
+## Valid configuration name from the YAML configuration file
+CFG_NAME ?= axi
 
 $(TEST_DIR)/sim_build/i3c_config.vh:
 	pushd $(I3C_ROOT) && CFG_FILE=$(CFG_FILE) CFG_NAME=$(CFG_NAME) make config && popd
