@@ -337,7 +337,7 @@ module controller
 
     // Muxed
     ctrl_bus_i[phy_mux_select] = bus;
-    end
+  end
 
   configuration xconfiguration (
       .clk_i                           (clk_i),
