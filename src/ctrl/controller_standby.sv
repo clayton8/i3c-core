@@ -236,9 +236,9 @@ module controller_standby
     bus_addr_valid_o = sel_i2c_i3c ? i3c_bus_addr_valid_o : i2c_bus_addr_valid_o;
 
     // Connect IBI only in I3C mode
-    i3c_ibi_queue_full_i = sel_i2c_i3c ? ibi_queue_full_i : '0;
-    i3c_ibi_queue_empty_i = sel_i2c_i3c ? ibi_queue_empty_i : '0;
-    i3c_ibi_queue_rvalid_i = sel_i2c_i3c ? ibi_queue_rvalid_i : '0;
+    i3c_ibi_queue_full_i = sel_i2c_i3c ? ibi_queue_full_i : '0; // TODO unused
+    i3c_ibi_queue_empty_i = sel_i2c_i3c ? ibi_queue_empty_i : '0; // TODO unused
+    i3c_ibi_queue_rvalid_i = sel_i2c_i3c ? ibi_queue_rvalid_i : '0; // TODO unused
     ibi_queue_rready_o = sel_i2c_i3c ? i3c_ibi_queue_rready_o : '0;
 
     tx_host_nack_o = sel_i2c_i3c ? i3c_tx_host_nack_o : i2c_tx_host_nack_o;
@@ -456,8 +456,8 @@ module controller_standby
       .tx_host_nack_o(i3c_tx_host_nack_o),
       .tx_pr_end_o(tx_pr_end_o),
       .tx_pr_start_o(tx_pr_start_o),
-      .set_dasa_o(set_dasa_o),
-      .set_dasa_valid_o(set_dasa_valid_o),
+      .dasa_o(set_dasa_o), // TODO propagate name change further up
+      .set_dasa_o(set_dasa_valid_o), // TODO propagate name change further up
       .set_dasa_virtual_device_o(set_dasa_virtual_device_o),
       .set_aasa_o(set_aasa_o),
       .set_aasa_virt_o(set_aasa_virt_o),

@@ -195,8 +195,8 @@ module ccc
     // I3C_BCAST_SETXTIME
 
     // Set Dynamic Address from Static Address
-    output logic [6:0] set_dasa_o,
-    output logic set_dasa_valid_o,
+    output logic [6:0] dasa_o,
+    output logic set_dasa_o,
     output logic set_dasa_virtual_device_o,
     output logic set_aasa_o,
     output logic set_aasa_virt_o,
@@ -925,8 +925,8 @@ module ccc
     endcase
   end
 
-  assign set_dasa_valid_o = set_dasa_valid;
-  assign set_dasa_o = set_dasa_addr;
+  assign dasa_o = set_dasa_addr;
+  assign set_dasa_o = set_dasa_valid;
   assign set_dasa_virtual_device_o = is_byte_virtual_addr ? set_dasa_valid : 1'b0;
   assign set_aasa_o = set_aasa_valid;
   assign set_aasa_virt_o = set_aasa_virt_valid;
@@ -1107,11 +1107,11 @@ module ccc
         `I3C_BCAST_SETAASA: begin
           if (state_q == RxTbit && bus_rx_done_i) begin
             if (~target_dyn_address_valid_i && ~(target_sta_address_i inside {[7'h00:7'h07], 7'h3E, 7'h5E, 7'h6E, 7'h76, [7'h78:7'h7F]})) begin
-                set_aasa_valid <= 1'b1;
-              end
-              if (~virtual_target_dyn_address_valid_i && ~(virtual_target_sta_address_i inside {[7'h00:7'h07], 7'h3E, 7'h5E, 7'h6E, 7'h76, [7'h78:7'h7F]})) begin
-                set_aasa_virt_valid <= 1'b1;
-              end
+              set_aasa_valid <= 1'b1;
+            end
+            if (~virtual_target_dyn_address_valid_i && ~(virtual_target_sta_address_i inside {[7'h00:7'h07], 7'h3E, 7'h5E, 7'h6E, 7'h76, [7'h78:7'h7F]})) begin
+              set_aasa_virt_valid <= 1'b1;
+            end
           end else begin
             set_aasa_valid <= 1'b0;
             set_aasa_virt_valid <= 1'b0;
