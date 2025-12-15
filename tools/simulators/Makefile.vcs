@@ -32,13 +32,20 @@ VCS_WORKDIR = vcs_work
 
 BUILD_ARGS = -sverilog -full64 -licqueue -ntb_opts uvm-1.2 -timescale=1ns/1ps -lca
 BUILD_ARGS += -Xcflags='-Wno-error=implicit-function-declaration -Wno-error=int-conversion'
-RUN_ARGS = -licqueue -ucli -assert nopostproc
+RUN_ARGS = -licqueue -assert nopostproc
 
 vcs-build:
 	mkdir -p $(VCS_WORKDIR)/
-	$(VCS) $(BUILD_ARGS) -o $(VCS_WORKDIR)/simv \
-	-f $(UVM_TB_FILES) $(EXTRA_BUILD_ARGS)
+	$(VCS) \
+    $(BUILD_ARGS) \
+    -o $(VCS_WORKDIR)/simv \
+	  -f $(UVM_TB_FILES) \
+    $(EXTRA_BUILD_ARGS)
 
 vcs: vcs-build
-	$(VCS_WORKDIR)/simv -l $(VCS_WORKDIR)/vcs.log $(RUN_ARGS) \
-	+UVM_TESTNAME=$(UVM_TESTNAME) +UVM_TEST_SEQ=$(UVM_TEST_SEQ) $(EXTRA_RUN_ARGS)
+	$(VCS_WORKDIR)/simv \
+    -l $(VCS_WORKDIR)/vcs.log \
+    $(RUN_ARGS) \
+    +UVM_TESTNAME=$(UVM_TESTNAME) \
+    +UVM_TEST_SEQ=$(UVM_VSEQ_TEST) \
+    $(EXTRA_RUN_ARGS)

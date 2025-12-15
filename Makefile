@@ -133,6 +133,11 @@ verification-docs-with-sim: cocotbxml-to-hjson-sim-results
 # Tests
 #
 
+list-tests:
+	cd $(COCOTB_VERIF_DIR) && $(NOX) --list
+	cd $(UVM_VERIF_DIR) && $(NOX) --list
+	cd $(TOOL_VERIF_DIR) && $(NOX) --list
+
 # COCOTB
 
 test: config ## Run single module test (use `TEST=<test_name>` flag)
@@ -158,19 +163,19 @@ tests-coverage: ## Run all verification/block/* RTL tests with coverage
 
 # UVM
 
-test-i3c-vip-uvm: config ## Run single I3C VIP UVM test with nox (use 'TEST=<i3c_driver|i3c_monitor>' flag)
+test-i3c-vip-uvm: config ## Run single I3C VIP UVM test (use 'TEST=<i3c_driver|i3c_monitor>' flag)
 	cd $(UVM_VERIF_DIR) && $(NOX) -s $(TEST)
 
-tests-i3c-vip-uvm: config ## Run all I3C VIP UVM tests with nox
+tests-i3c-vip-uvm: config ## Run all I3C VIP UVM tests
 	cd $(UVM_VERIF_DIR) && $(NOX) -s "i3c_verify_uvm"
 
-tests-i3c-vip-uvm-debug: config ## Run debugging I3C VIP UVM tests with nox
+tests-i3c-vip-uvm-debug: config ## Run debugging I3C VIP UVM tests
 	cd $(UVM_VERIF_DIR) && $(NOX) -t "uvm_debug_tests"
 
-tests-uvm: config ## Run all I3C Core UVM tests with nox
+tests-uvm: config ## Run all I3C Core UVM tests
 	cd $(UVM_VERIF_DIR) && $(NOX) -s "i3c_core_verify_uvm"
 
-tests-uvm-debug: config ## Run debugging I3C Core UVM tests with nox
+tests-uvm-debug: config ## Run debugging I3C Core UVM tests
 	cd $(UVM_VERIF_DIR) && $(NOX) -s "i3c_core_uvm_debug_tests"
 
 # Tools
