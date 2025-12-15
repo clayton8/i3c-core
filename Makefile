@@ -166,6 +166,9 @@ tests-coverage: ## Run all verification/block/* RTL tests with coverage
 test-i3c-uvm-tag: config
 	cd $(UVM_VERIF_DIR) && $(NOX) -t $(TAG)
 
+test-i3c-uvm-session: config
+	cd $(UVM_VERIF_DIR) && $(NOX) -s $(TEST)
+
 test-i3c-vip-uvm: config ## Run single I3C VIP UVM test (use 'TEST=<i3c_driver|i3c_monitor>' flag)
 	cd $(UVM_VERIF_DIR) && $(NOX) -s $(TEST)
 
