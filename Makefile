@@ -34,6 +34,10 @@ TESTS_RESULTS_DIR   ?= $(COCOTB_VERIF_DIR)
 # Base directory present in "file" entries in XMLs with cocotb results
 TESTS_XML_BASE_PATH ?= $(I3C_ROOT_DIR)
 
+NOX_COMMON_ARGS     ?= -R --no-venv ## The python environment is managed outside of Nox, so always pass these flags
+NOX_EXTRA_ARGS      ?=
+NOX                 ?= $(PYTHON) -m nox $(NOX_COMMON_ARGS) $(NOX_EXTRA_ARGS)
+
 NUM_PROC            := $$(($$(nproc)-1))
 
 # Environment variables
@@ -87,13 +91,13 @@ config-print: ## Print configuration name, filename and RDL arguments
 lint: lint-rtl lint-tests ## Run RTL and tests lint
 
 lint-check: lint-rtl ## Run RTL lint and check lint on tests source code without fixing errors
-	cd $(COCOTB_VERIF_DIR) && $(PYTHON) -m nox -R -s test_lint --no-venv
+	cd $(COCOTB_VERIF_DIR) && $(NOX) -s test_lint
 
 lint-rtl: ## Run lint on RTL source code
 	$(SHELL) $(TOOL_DIR)/verible-scripts/run.sh
 
 lint-tests: ## Run lint on tests source code
-	cd $(COCOTB_VERIF_DIR) && $(PYTHON) -m nox -R -s lint --no-venv
+	cd $(COCOTB_VERIF_DIR) && $(NOX) -s lint
 
 lint-verilator:
 	verilator --timing -Wall --lint-only -f $(I3C_ROOT_DIR)/src/i3c.f
@@ -132,47 +136,47 @@ verification-docs-with-sim: cocotbxml-to-hjson-sim-results
 # COCOTB
 
 test: config ## Run single module test (use `TEST=<test_name>` flag)
-	cd $(COCOTB_VERIF_DIR) && $(PYTHON) -m nox -R -s $(TEST)_verify --no-venv
+	cd $(COCOTB_VERIF_DIR) && $(NOX) -s $(TEST)_verify
 
 tests: tests-axi tests-ahb ## Run all verification/cocotb/* RTL tests fro AHB and AXI bus configurations without coverage
 
 tests-axi: ## Run all verification/cocotb/* RTL tests for AXI bus configuration without coverage
 	$(MAKE) config CFG_NAME=axi
-	cd $(COCOTB_VERIF_DIR) && $(PYTHON) -m nox -R -t "axi" --no-venv --forcecolor
+	cd $(COCOTB_VERIF_DIR) && $(NOX) -t "axi"
 
 tests-ahb: ## Run all verification/cocotb/* RTL tests for AHB bus configuration without coverage
 	$(MAKE) config CFG_NAME=ahb
-	cd $(COCOTB_VERIF_DIR) && $(PYTHON) -m nox -R -t "ahb" --no-venv --forcecolor
+	cd $(COCOTB_VERIF_DIR) && $(NOX) -t "ahb"
 
 tests-i2c: ## Run all I2C tests without coverage
 	$(MAKE) config CFG_NAME=ahb
-	cd $(COCOTB_VERIF_DIR) && $(PYTHON) -m nox -R -t "i2c" --no-venv --forcecolor
+	cd $(COCOTB_VERIF_DIR) && $(NOX) -t "i2c"
 
 # TODO: Enable full coverage flow
 tests-coverage: ## Run all verification/block/* RTL tests with coverage
-	cd $(COCOTB_VERIF_DIR) && BLOCK_COVERAGE_ENABLE=1 $(PYTHON) -m nox -R -k "verify" --no-venv
+	cd $(COCOTB_VERIF_DIR) && BLOCK_COVERAGE_ENABLE=1 $(NOX) -k "verify"
 
 # UVM
 
 test-i3c-vip-uvm: config ## Run single I3C VIP UVM test with nox (use 'TEST=<i3c_driver|i3c_monitor>' flag)
-	cd $(UVM_VERIF_DIR) && $(PYTHON) -m nox -R -s $(TEST) --no-venv
+	cd $(UVM_VERIF_DIR) && $(NOX) -s $(TEST)
 
 tests-i3c-vip-uvm: config ## Run all I3C VIP UVM tests with nox
-	cd $(UVM_VERIF_DIR) && $(PYTHON) -m nox -R -s "i3c_verify_uvm" --no-venv
+	cd $(UVM_VERIF_DIR) && $(NOX) -s "i3c_verify_uvm"
 
 tests-i3c-vip-uvm-debug: config ## Run debugging I3C VIP UVM tests with nox
-	cd $(UVM_VERIF_DIR) && $(PYTHON) -m nox -R -t "uvm_debug_tests" --no-venv
+	cd $(UVM_VERIF_DIR) && $(NOX) -t "uvm_debug_tests"
 
 tests-uvm: config ## Run all I3C Core UVM tests with nox
-	cd $(UVM_VERIF_DIR) && $(PYTHON) -m nox -R -s "i3c_core_verify_uvm" --no-venv
+	cd $(UVM_VERIF_DIR) && $(NOX) -s "i3c_core_verify_uvm"
 
 tests-uvm-debug: config ## Run debugging I3C Core UVM tests with nox
-	cd $(UVM_VERIF_DIR) && $(PYTHON) -m nox -R -s "i3c_core_uvm_debug_tests" --no-venv
+	cd $(UVM_VERIF_DIR) && $(NOX) -s "i3c_core_uvm_debug_tests"
 
 # Tools
 
 tests-tool: ## Run all tool tests
-	cd $(TOOL_VERIF_DIR) && $(PYTHON) -m nox -k "verify" --no-venv
+	cd $(TOOL_VERIF_DIR) && $(NOX) -k "verify"
 
 ################################################################################
 #
