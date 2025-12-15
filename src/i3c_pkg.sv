@@ -10,6 +10,14 @@ package i3c_pkg;
   localparam int unsigned DatAw = $clog2(`DAT_DEPTH);
   localparam int unsigned DctAw = $clog2(`DCT_DEPTH);
 
+  localparam int unsigned I3cDataWidth = 8;
+  localparam int unsigned I3cAddrWidth = 7;
+  localparam int unsigned I3cTimeParamWidth = 20;
+
+  typedef logic      [I3cDataWidth-1:0] i3c_byte_t;
+  typedef logic      [I3cAddrWidth-1:0] i3c_addr_t;
+  typedef logic [I3cTimeParamWidth-1:0] i3c_timeparam_t;
+
   // Bus signal state
   typedef struct packed {
     logic value;
