@@ -35,9 +35,10 @@ BUILD_ARGS += -Xcflags='-Wno-error=implicit-function-declaration -Wno-error=int-
 RUN_ARGS = -licqueue -ucli -assert nopostproc
 
 vcs-build:
-	$(VCS) $(BUILD_ARGS) -o $(VCS_WORKDIR) \
+	mkdir -p $(VCS_WORKDIR)/
+	$(VCS) $(BUILD_ARGS) -o $(VCS_WORKDIR)/simv \
 	-f $(UVM_TB_FILES) $(EXTRA_BUILD_ARGS)
 
 vcs: vcs-build
-	./vcs_run/vcs_test -l vcs.log $(RUN_ARGS) \
+	$(VCS_WORKDIR)/simv -l $(VCS_WORKDIR)/vcs.log $(RUN_ARGS) \
 	+UVM_TESTNAME=$(UVM_TESTNAME) +UVM_TEST_SEQ=$(UVM_TEST_SEQ) $(EXTRA_RUN_ARGS)
