@@ -31,6 +31,7 @@ VCS = vcs
 VCS_WORKDIR = vcs_work
 
 BUILD_ARGS = -sverilog -full64 -licqueue -ntb_opts uvm-1.2 -timescale=1ns/1ps -lca
+BUILD_ARGS += -Xcflags='-Wno-error=implicit-function-declaration -Wno-error=int-conversion'
 RUN_ARGS = -licqueue -ucli -assert nopostproc
 
 vcs-build:
