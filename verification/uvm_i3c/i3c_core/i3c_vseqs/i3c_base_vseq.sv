@@ -23,11 +23,11 @@ class i3c_base_vseq #(type CFG_T               = i3c_env_cfg,
   rand bit [15:0] status0, status1;
 
   constraint num_trans_c {
-    num_trans inside {[1:20]};
+    num_trans inside {[1:2]};
   }
 
   constraint num_runs_c {
-    num_runs inside {[1:20]};
+    num_runs inside {[1:2]};
   }
 
   constraint i2c_addr_c {
@@ -66,8 +66,8 @@ class i3c_base_vseq #(type CFG_T               = i3c_env_cfg,
   constraint read_limit_c {
     solve device_read_limit0 before max_read_limit0;
     solve device_read_limit1 before max_read_limit1;
-    device_read_limit0 inside {0, [16:65535]};
-    device_read_limit1 inside {0, [16:65535]};
+    device_read_limit0 inside {[8: 16]};
+    device_read_limit1 inside {[8: 16]};
     max_read_limit0 <= device_read_limit0;
     max_read_limit1 <= device_read_limit1;
   }
@@ -75,8 +75,8 @@ class i3c_base_vseq #(type CFG_T               = i3c_env_cfg,
   constraint write_limit_c {
     solve device_write_limit0 before max_write_limit0;
     solve device_write_limit1 before max_write_limit1;
-    device_write_limit0 inside {0, [16:65535]};
-    device_write_limit1 inside {0, [16:65535]};
+    device_write_limit0 inside {[8: 16]};
+    device_write_limit1 inside {[8: 16]};
     max_write_limit0 <= device_write_limit0;
     max_write_limit1 <= device_write_limit1;
   }

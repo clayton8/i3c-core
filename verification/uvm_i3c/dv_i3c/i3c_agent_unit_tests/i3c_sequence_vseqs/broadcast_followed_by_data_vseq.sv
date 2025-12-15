@@ -19,6 +19,10 @@ class broadcast_followed_by_data_vseq extends base_vseq #(
              .t1(m_cfg.m_i3c_agent_cfg_dev.i3c_target1));
     prep_cfg(.t0(m_cfg.m_i3c_agent_cfg_host.i3c_target0),
              .t1(m_cfg.m_i3c_agent_cfg_host.i3c_target1));
+    `uvm_info(get_full_name(), $sformatf("dev.i3c_target0:\n %p", m_cfg.m_i3c_agent_cfg_dev.i3c_target0), UVM_LOW)
+    `uvm_info(get_full_name(), $sformatf("dev.i3c_target1:\n %p", m_cfg.m_i3c_agent_cfg_dev.i3c_target1), UVM_LOW)
+    `uvm_info(get_full_name(), $sformatf("host.i3c_target0:\n %p", m_cfg.m_i3c_agent_cfg_host.i3c_target0), UVM_LOW)
+    `uvm_info(get_full_name(), $sformatf("host.i3c_target0:\n %p", m_cfg.m_i3c_agent_cfg_host.i3c_target0), UVM_LOW)
     fork
       fork
         dev.start(p_sequencer.m_i3c_sequencer_dev);
