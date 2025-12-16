@@ -1,3 +1,7 @@
+###########
+# PROJECT #
+###########
+
 [project]
 name = "i3c-core"
 version = "0.1.0"
@@ -99,6 +103,10 @@ dependencies = [
     "wcwidth==0.2.13",
     "zstandard==0.23.0",
 ]
+
+########
+# TOOL #
+########
 
 [tool.uv.workspace]
 members = [
