@@ -140,7 +140,11 @@ list-tests:
 
 # COCOTB
 
-test: config ## Run single module test (use `TEST=<test_name>` flag)
+# All tests map to the testplan, and are implemented as a Nox session named "$(TEST)_verify"
+# Passing the testname as `TEST=<test_name>` will run all sub-testpoints associated with the test
+#
+test: config ## Run all testpoints for a single test (use `TEST=<test_name>` flag)
+	$(MAKE) config CFG_NAME=$(CFG_NAME)
 	cd $(COCOTB_VERIF_DIR) && $(NOX) -s $(TEST)_verify
 
 tests: tests-axi tests-ahb ## Run all verification/cocotb/* RTL tests fro AHB and AXI bus configurations without coverage
@@ -182,7 +186,7 @@ tests-uvm: config ## Run all I3C Core UVM tests
 	cd $(UVM_VERIF_DIR) && $(NOX) -s "i3c_core_verify_uvm"
 
 tests-uvm-debug: config ## Run debugging I3C Core UVM tests
-	cd $(UVM_VERIF_DIR) && $(NOX) -s "i3c_core_uvm_debug_tests"
+	cd $(UVM_VERIF_DIR) && $(NOX) -t "i3c_core_uvm_debug_tests"
 
 # Tools
 
