@@ -154,6 +154,10 @@ test: config ## Run all testpoints for a single test (use `TEST=<test_name>` fla
 	$(MAKE) config CFG_NAME=$(CFG_NAME)
 	$(NOX) -f $(COCOTB_NOXFILE) -s $(TEST)_verify
 
+test-s: config
+	$(MAKE) config CFG_NAME=$(CFG_NAME)
+	$(NOX) -f $(COCOTB_NOXFILE) -s $(TEST)
+
 tests: tests-axi tests-ahb ## Run all verification/cocotb/* RTL tests fro AHB and AXI bus configurations without coverage
 
 tests-axi: ## Run all verification/cocotb/* RTL tests for AXI bus configuration without coverage
