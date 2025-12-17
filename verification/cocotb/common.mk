@@ -59,6 +59,7 @@ ifeq ($(SIM), vcs)
     COMPILE_ARGS += +define+DIGITAL_IO_I3C
     COMPILE_ARGS += $(foreach dir,$(VERILOG_INCLUDE_DIRS),-y $(dir))
     COMPILE_ARGS += -debug_access+all +memcbk -assert svaext
+    COMPILE_ARGS += -Xcflags='-Wno-error=implicit-function-declaration -Wno-error=int-conversion'
     SIM_ARGS += +dumpon
     EXTRA_ARGS += +vcs+vcdpluson +vpdfile+dump.vpd +vcs+lic+wait
 
