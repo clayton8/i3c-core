@@ -37,6 +37,10 @@ TESTS_XML_BASE_PATH ?= $(I3C_ROOT_DIR)
 NOX_COMMON_ARGS     ?= -R --no-venv ## The python environment is managed outside of Nox, so always pass these flags
 NOX_EXTRA_ARGS      ?=
 NOX                 ?= $(PYTHON) -m nox $(NOX_COMMON_ARGS) $(NOX_EXTRA_ARGS)
+COCOTB_NOXFILE      := $(COCOTB_VERIF_DIR)/noxfile.py
+UVM_NOXFILE         := $(UVM_VERIF_DIR)/noxfile.py
+TOOL_NOXFILE        := $(TOOL_VERIF_DIR)/noxfile.py
+
 
 NUM_PROC            := $$(($$(nproc)-1))
 
@@ -79,9 +83,12 @@ RDL_ARGS    := $(shell $(PYTHON) $(CFG_GEN) $(CFG_NAME) $(CFG_FILE) reg_gen_opts
 config-rdl: config-print
 	$(PYTHON) $(TOOL_DIR)/reg_gen/reg_gen.py --input-file=$(RDL_REGS) --output-dir=$(RDL_GEN_DIR) $(RDL_ARGS) $(EXTRA_REG_GEN_ARGS)
 
-config-print: ## Print configuration name, filename and RDL arguments
-	@echo Using \'$(CFG_NAME)\' I3C configuration from \'$(CFG_FILE)\'.
-	@echo Using RDL options: $(RDL_ARGS).
+config-print:
+	@echo ""
+	@echo "I3C configuration:         $(CFG_NAME)"
+	@echo "I3C configuration file:    $(CFG_FILE)"
+	@echo "RDL options:               $(RDL_ARGS)"
+	@echo ""
 
 ################################################################################
 #
@@ -91,13 +98,13 @@ config-print: ## Print configuration name, filename and RDL arguments
 lint: lint-rtl lint-tests ## Run RTL and tests lint
 
 lint-check: lint-rtl ## Run RTL lint and check lint on tests source code without fixing errors
-	cd $(COCOTB_VERIF_DIR) && $(NOX) -s test_lint
+	$(NOX) -f $(COCOTB_NOXFILE) -s test_lint
 
 lint-rtl: ## Run lint on RTL source code
 	$(SHELL) $(TOOL_DIR)/verible-scripts/run.sh
 
 lint-tests: ## Run lint on tests source code
-	cd $(COCOTB_VERIF_DIR) && $(NOX) -s lint
+	$(NOX) -f $(COCOTB_NOXFILE) -s lint
 
 lint-verilator:
 	verilator --timing -Wall --lint-only -f $(I3C_ROOT_DIR)/src/i3c.f
@@ -134,9 +141,9 @@ verification-docs-with-sim: cocotbxml-to-hjson-sim-results
 #
 
 list-tests:
-	cd $(COCOTB_VERIF_DIR) && $(NOX) --list
-	cd $(UVM_VERIF_DIR) && $(NOX) --list
-	cd $(TOOL_VERIF_DIR) && $(NOX) --list
+	$(NOX) -f $(COCOTB_NOXFILE) --list
+	$(NOX) -f $(UVM_NOXFILE)    --list
+	$(NOX) -f $(TOOL_NOXFILE)  --list
 
 # COCOTB
 
@@ -145,21 +152,21 @@ list-tests:
 #
 test: config ## Run all testpoints for a single test (use `TEST=<test_name>` flag)
 	$(MAKE) config CFG_NAME=$(CFG_NAME)
-	cd $(COCOTB_VERIF_DIR) && $(NOX) -s $(TEST)_verify
+	$(NOX) -f $(COCOTB_NOXFILE) -s $(TEST)_verify
 
 tests: tests-axi tests-ahb ## Run all verification/cocotb/* RTL tests fro AHB and AXI bus configurations without coverage
 
 tests-axi: ## Run all verification/cocotb/* RTL tests for AXI bus configuration without coverage
 	$(MAKE) config CFG_NAME=axi
-	cd $(COCOTB_VERIF_DIR) && $(NOX) -t "axi"
+	$(NOX) -f $(COCOTB_NOXFILE) -t "axi"
 
 tests-ahb: ## Run all verification/cocotb/* RTL tests for AHB bus configuration without coverage
 	$(MAKE) config CFG_NAME=ahb
-	cd $(COCOTB_VERIF_DIR) && $(NOX) -t "ahb"
+	$(NOX) -f $(COCOTB_NOXFILE) -t "ahb"
 
 tests-i2c: ## Run all I2C tests without coverage
 	$(MAKE) config CFG_NAME=ahb
-	cd $(COCOTB_VERIF_DIR) && $(NOX) -t "i2c"
+	$(NOX) -f $(COCOTB_NOXFILE) -t "i2c"
 
 # TODO: Enable full coverage flow
 tests-coverage: ## Run all verification/block/* RTL tests with coverage
@@ -168,30 +175,30 @@ tests-coverage: ## Run all verification/block/* RTL tests with coverage
 # UVM
 
 test-i3c-uvm-tag: config
-	cd $(UVM_VERIF_DIR) && $(NOX) -t $(TAG)
+	$(NOX) -f $(UVM_NOXFILE) -t $(TAG)
 
 test-i3c-uvm-session: config
-	cd $(UVM_VERIF_DIR) && $(NOX) -s $(TEST)
+	$(NOX) -f $(UVM_NOXFILE) -s $(TEST)
 
 test-i3c-vip-uvm: config ## Run single I3C VIP UVM test (use 'TEST=<i3c_driver|i3c_monitor>' flag)
-	cd $(UVM_VERIF_DIR) && $(NOX) -s $(TEST)
+	$(NOX) -f $(UVM_NOXFILE) -s $(TEST)
 
 tests-i3c-vip-uvm: config ## Run all I3C VIP UVM tests
-	cd $(UVM_VERIF_DIR) && $(NOX) -s "i3c_verify_uvm"
+	$(NOX) -f $(UVM_NOXFILE) -s "i3c_verify_uvm"
 
 tests-i3c-vip-uvm-debug: config ## Run debugging I3C VIP UVM tests
-	cd $(UVM_VERIF_DIR) && $(NOX) -t "uvm_debug_tests"
+	$(NOX) -f $(UVM_NOXFILE) -t "uvm_debug_tests"
 
 tests-uvm: config ## Run all I3C Core UVM tests
-	cd $(UVM_VERIF_DIR) && $(NOX) -s "i3c_core_verify_uvm"
+	$(NOX) -f $(UVM_NOXFILE) -s "i3c_core_verify_uvm"
 
 tests-uvm-debug: config ## Run debugging I3C Core UVM tests
-	cd $(UVM_VERIF_DIR) && $(NOX) -t "i3c_core_uvm_debug_tests"
+	$(NOX) -f $(UVM_NOXFILE) -t "i3c_core_uvm_debug_tests"
 
 # Tools
 
 tests-tool: ## Run all tool tests
-	cd $(TOOL_VERIF_DIR) && $(NOX) -k "verify"
+	$(NOX) -f $(TOOL_NOXFILE) -k "verify"
 
 ################################################################################
 #
