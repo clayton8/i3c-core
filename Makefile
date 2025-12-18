@@ -1,32 +1,37 @@
 # Copyright (c) 2024 Antmicro <www.antmicro.com>
 # SPDX-License-Identifier: Apache-2.0
 
-SHELL = bash
+SHELL   = bash
 PYTHON ?= python3
 
 # Directory structure
 I3C_ROOT_DIR        := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
-
-SRC_DIR             := $(I3C_ROOT_DIR)/src/
-VERIFICATION_DIR    := $(I3C_ROOT_DIR)/verification/
-THIRD_PARTY_DIR     := $(I3C_ROOT_DIR)/third_party/
+SRC_DIR             := $(I3C_ROOT_DIR)/src
+VERIFICATION_DIR    := $(I3C_ROOT_DIR)/verification
+THIRD_PARTY_DIR     := $(I3C_ROOT_DIR)/third_party
 
 COCOTB_VERIF_DIR    := $(VERIFICATION_DIR)/cocotb
 BLOCK_VERIF_DIR     := $(COCOTB_VERIF_DIR)/block
 TOP_VERIF_DIR       := $(COCOTB_VERIF_DIR)/top
-TOOL_VERIF_DIR      := $(VERIFICATION_DIR)/tools/
-UVM_VERIF_DIR       := $(VERIFICATION_DIR)/uvm_i3c/
+TOOL_VERIF_DIR      := $(VERIFICATION_DIR)/tools
+UVM_VERIF_DIR       := $(VERIFICATION_DIR)/uvm_i3c
 TESTPLAN_DIR        := $(VERIFICATION_DIR)/testplan
 
-TOOL_DIR            := $(I3C_ROOT_DIR)/tools/
-UVM_TOOL_DIR        := $(TOOL_DIR)/uvm/
-GENERIC_UVM_DIR     := $(UVM_TOOL_DIR)/generic/## Path: UVM installation directory
-VERILATOR_UVM_DIR   := $(UVM_TOOL_DIR)/verilator/## Path: UVM installation directory with Verilator patches
+TOOL_DIR            := $(I3C_ROOT_DIR)/tools
+UVM_TOOL_DIR        := $(TOOL_DIR)/uvm
+## Path: UVM installation directory
+GENERIC_UVM_DIR     := $(UVM_TOOL_DIR)/generic
+ ## Path: UVM installation directory with Verilator patches
+VERILATOR_UVM_DIR   := $(UVM_TOOL_DIR)/verilator
 
-CALIPTRA_ROOT       ?= $(THIRD_PARTY_DIR)/caliptra-rtl## Path: caliptra-rtl repository
+CALIPTRA_ROOT       ?= $(THIRD_PARTY_DIR)/caliptra-rtl
+
 # TODO: Connect to version selection in tools/simulators/
-UVM_DIR             ?= $(VERILATOR_UVM_DIR)/## Select UVM version
-SIMULATOR           ?= verilator## Supported: verilator, dsim, questa, vcs
+## Select UVM version
+UVM_DIR             ?= $(VERILATOR_UVM_DIR)/
+## Supported: verilator, dsim, questa, vcs
+SIMULATOR           ?= verilator
+
 REPO_URL            ?= https://github.com/chipsalliance/i3c-core/tree/main/
 
 # Path to directory with XMLs with tests' results
@@ -34,9 +39,10 @@ TESTS_RESULTS_DIR   ?= $(COCOTB_VERIF_DIR)
 # Base directory present in "file" entries in XMLs with cocotb results
 TESTS_XML_BASE_PATH ?= $(I3C_ROOT_DIR)
 
-NOX_COMMON_ARGS     ?= -R --no-venv ## The python environment is managed outside of Nox, so always pass these flags
-NOX_EXTRA_ARGS      ?=
 NOX                 ?= $(PYTHON) -m nox $(NOX_COMMON_ARGS) $(NOX_EXTRA_ARGS)
+## The python environment is managed outside of Nox, so always pass these flags
+NOX_COMMON_ARGS     ?= -R --no-venv
+NOX_EXTRA_ARGS      ?=
 COCOTB_NOXFILE      := $(COCOTB_VERIF_DIR)/noxfile.py
 UVM_NOXFILE         := $(UVM_VERIF_DIR)/noxfile.py
 TOOL_NOXFILE        := $(TOOL_VERIF_DIR)/noxfile.py
@@ -63,13 +69,17 @@ endif
 #
 # I3C configuration
 #
+# - The 'config' target builds any output collateral needed for the selected configuration
+#   - This includes RTL headers files / defines and RDL
+#   - This should be run before any other operations, and may leave in-tree untracked files
+# - The 'config-print' target prints the selected config according to the variable selection
 
-CFG_GEN              = $(TOOL_DIR)/i3c_config/i3c_core_config.py
-
-## Path: YAML file holding configuration of the I3C RTL
-CFG_FILE            ?= $(I3C_ROOT_DIR)/i3c_core_configs.yaml
-## Valid configuration name from the YAML configuration file
-CFG_NAME            ?= ahb
+## Configuration generator tool
+CFG_GEN   = $(TOOL_DIR)/i3c_config/i3c_core_config.py
+## YAML file holding valid configuration sets for the I3C RTL
+CFG_FILE ?= $(I3C_ROOT_DIR)/i3c_core_configs.yaml
+## Selected configuration to use from CFG_FILE
+CFG_NAME ?= ahb
 
 config: config-rtl config-rdl ## Generate RDL and RTL configuration files
 
