@@ -109,12 +109,14 @@ class VerificationTest:
         defaultNameCoverage = "coverage.dat"
         defaultTestNameLog = f"{self.testName}{pfx}.log"
         defaultNameVDB = f"{self.sim_build}/simv.vdb"
+        defaultNameFSDB = "dump.fsdb"
 
         testNameVCD = f"{self.testName}{pfx}.vcd"
         testNameXML = f"{self.testName}{pfx}.xml"
         testCoverageName = f"{self.testName}{pfx}_{coverage}.dat"
         testNameLog = f"{self.testName}{pfx}_{coverage}.log"
         testNameVDB = f"{self.testName}{pfx}.vdb"
+        testNameFSDB = f"{self.testName}{pfx}.fsdb"
 
         self.filenames = {
             "vcd_default": defaultNameVCD,
@@ -126,6 +128,8 @@ class VerificationTest:
             "cov": testCoverageName,
             "vdb_default": defaultNameVDB,
             "vdb": testNameVDB,
+            "fsdb_default": defaultNameFSDB,
+            "fsdb": testNameFSDB,
         }
 
         def get_path(name):
@@ -141,6 +145,8 @@ class VerificationTest:
             "cov": get_path(testCoverageName),
             "vdb_default": get_path(defaultNameVDB),
             "vdb": get_path(testNameVDB),
+            "fsdb_default": get_path(defaultNameFSDB),
+            "fsdb": get_path(testNameFSDB),
         }
 
     def rename_default(self, dest: str):
@@ -158,6 +164,7 @@ class VerificationTest:
             else:
                 self.rename_default("cov")
         self.rename_default("vcd")
+        self.rename_default("fsdb")
 
 
 def create_test_id(session_name: str, args: list[str]):
