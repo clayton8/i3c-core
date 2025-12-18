@@ -249,7 +249,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "black", specifier = ">=24.4.2" },
-    { name = "cocotb", specifier = "==1.9.0" },
+    { name = "cocotb", specifier = ">=1.8.1,<2.0.0" },
     { name = "crc", specifier = ">=7.0.0" },
     { name = "flake8", specifier = ">=7.0.0" },
     { name = "isort", specifier = ">=5.13.2" },
