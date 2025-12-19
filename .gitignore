@@ -6,6 +6,7 @@ __pycache__
 *.dat
 *.egg-info
 *.exe
+*.fsdb*
 *.info
 *.ipynb
 *.json
@@ -24,6 +25,7 @@ dsim-build
 dsim.env
 i3cPHYsim_icarus
 i3cPHYsim_verilator
+novas.*
 obj_dir/
 program.hex
 questa_work/
@@ -38,6 +40,7 @@ tools/uvm/generic
 tools/uvm/verilator
 uvm-1.2*/
 vcs_work/
+verdiLog/
 venv/
 verification/tools/i3c_defines.svh
 work/
