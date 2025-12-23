@@ -561,8 +561,7 @@ module ccc
     state_d = state_q;
     unique case (state_q)
       Idle: begin
-        if (is_in_hdr_mode_i) state_d = Idle;
-        else state_d = WaitCCC;
+        if(!is_in_hdr_mode_i) state_d = WaitCCC;
       end
       WaitCCC: begin
         // stay in Idle if the bus is in hdr_mode (we ignore the HDR traffic)
