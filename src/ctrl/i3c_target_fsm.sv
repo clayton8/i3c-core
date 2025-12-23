@@ -206,8 +206,7 @@ module i3c_target_fsm #(
     DoRstAction,
     // state to park in while the bus is in HDR mode
     // in this state we ignore all the traffic
-    HDRMode = 8'ha0,
-    DoHdrExit
+    HDRMode = 8'ha0
   } primary_state_e;
 
   primary_state_e state_q, state_d;
@@ -459,25 +458,6 @@ module i3c_target_fsm #(
       DoRstAction: begin
       end
       HDRMode: begin
-        bus_rx_req_bit_o = '0;
-        bus_rx_req_byte_o = '0;
-        bus_tx_req_byte_o = '0;
-        bus_tx_req_bit_o = '0;
-        bus_tx_req_value_o = 8'h1;
-        tx_pr_start_o = '0;
-        tx_pr_abort_o = '0;
-        tx_host_nack_o = '0;
-        bus_addr_d = '0;
-        bus_addr_valid = '0;
-        bus_rnw_d = '0;
-        nack_transaction_d = '0;
-        parity_err_o = '0;
-        ibi_begin_o = '0;
-        ccc_valid_o = 1'b0;
-        ccc_code = '0;
-        ccc_code_valid = 1'b0;
-      end
-      DoHdrExit: begin
       end
       DoHotJoin: begin
       end
@@ -607,9 +587,6 @@ module i3c_target_fsm #(
       HDRMode: begin
         if (~is_in_hdr_mode_i) state_d = Idle;
       end
-      DoHdrExit: begin
-        state_d = Idle;
-      end
       DoHotJoin: begin
         if (is_hotjoin_done_i) state_d = Idle;
       end
@@ -618,8 +595,6 @@ module i3c_target_fsm #(
       end
     endcase
 
-    // Bypass state transition for HDR Exit Pattern
-    //if (hdr_exit_detect_i) state_d = DoHdrExit;
     // park in HDR state if we're in HDR mode
     if (is_in_hdr_mode_i) state_d = HDRMode;
     // Bypass any state transition when a stop is received
@@ -721,7 +696,7 @@ module i3c_target_fsm #(
       bins valid_stop_trans =
         (RxFByte, CheckFByte, TxAckFByte, RxSByte, RxSByteRepeated, CheckSByte, TxAckSByte,
          RxPWriteData, RxPWriteTbit, TxPReadData, TxPReadTbit, Wait, DoIBI, DoneIBI, DoCCC,
-         DoneCCC, DoHotJoin, DoRstAction, DoHdrExit => Idle);
+         DoneCCC, DoHotJoin, DoRstAction => Idle);
     }
     BusStartEvent: coverpoint bus_start_det_i {
       bins start_detected = {1'b1};
