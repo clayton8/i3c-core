@@ -191,6 +191,9 @@ module ccc
     output logic ent_hdr_6_o,
     output logic ent_hdr_7_o,
 
+    input  logic exit_hdr_i,
+    input  logic is_in_hdr_mode_i,
+
     // Exchange Timing Information
     // I3C_BCAST_SETXTIME
 
@@ -361,6 +364,8 @@ module ccc
     end else begin
       if (ccc_valid_i) begin
         command_code <= ccc_i;
+      end else if (exit_hdr_i) begin
+        command_code <= '0;
       end
     end
   end
@@ -544,14 +549,59 @@ module ccc
     end
   end
 
+  always_ff @(posedge clk_i or negedge rst_ni) begin: detect_hdr_enter
+    if (~rst_ni) begin
+      ent_hdr_0_o <= '0;
+      ent_hdr_1_o <= '0;
+      ent_hdr_2_o <= '0;
+      ent_hdr_3_o <= '0;
+      ent_hdr_4_o <= '0;
+      ent_hdr_5_o <= '0;
+      ent_hdr_6_o <= '0;
+      ent_hdr_7_o <= '0;
+    end else begin
+      unique case(command_code)
+        `I3C_BCAST_ENTHDR0:
+          ent_hdr_0_o <= '1;
+        `I3C_BCAST_ENTHDR1:
+          ent_hdr_1_o <= '1;
+        `I3C_BCAST_ENTHDR2:
+          ent_hdr_2_o <= '1;
+        `I3C_BCAST_ENTHDR3:
+          ent_hdr_3_o <= '1;
+        `I3C_BCAST_ENTHDR4:
+          ent_hdr_4_o <= '1;
+        `I3C_BCAST_ENTHDR5:
+          ent_hdr_5_o <= '1;
+        `I3C_BCAST_ENTHDR6:
+          ent_hdr_6_o <= '1;
+        `I3C_BCAST_ENTHDR7:
+          ent_hdr_7_o <= '1;
+        default: begin
+          ent_hdr_0_o <= '0;
+          ent_hdr_1_o <= '0;
+          ent_hdr_2_o <= '0;
+          ent_hdr_3_o <= '0;
+          ent_hdr_4_o <= '0;
+          ent_hdr_5_o <= '0;
+          ent_hdr_6_o <= '0;
+          ent_hdr_7_o <= '0;
+        end
+      endcase
+    end
+  end
+
   always_comb begin : state_functions
     state_d = state_q;
     unique case (state_q)
       Idle: begin
-        state_d = WaitCCC;
+        if (is_in_hdr_mode_i) state_d = Idle;
+        else state_d = WaitCCC;
       end
       WaitCCC: begin
-        if (ccc_valid_i) state_d = RxTbit;
+        // stay in Idle if the bus is in hdr_mode (we ignore the HDR traffic)
+        if (is_in_hdr_mode_i) state_d = Idle;
+        else if (ccc_valid_i) state_d = RxTbit;
       end
       RxTbit: begin
         if (bus_rx_done_i) begin
@@ -812,10 +862,6 @@ module ccc
 
   // Handle all DIRECT GET CCCs
   always_comb begin : proc_get
-    // Put a safe default RIGHT at the beginning, avoids having to repeat it everywhere
-    // Avoids infered flops in case it gets forgotten even once
-    tx_data = '0; 
-    // TODO clean up the code below
     case (command_code)
       // 1 Byte
       `I3C_DIRECT_GETBCR: begin
@@ -888,27 +934,12 @@ module ccc
       end
       // n Bytes
       `I3C_DIRECT_GETCAPS: begin
-        if(!valid_defining_byte || defining_byte == 8'h00) begin
+        if( !valid_defining_byte || defining_byte == 8'h00) begin
           tx_data_id_init = 8'h03;
-
-          // tx_data_id counts down from 3, so the x in GETCAPx as per the spec is calculated as
-          // x = 3-tx_data_id+1
-          unique case (tx_data_id)
-            8'd3: begin
-              // GETCAP1 - We don't support any HDR Modes
-              tx_data = 8'h00;
-            end
-            8'd2: begin
-              // GETCAP2
-              tx_data[3:0] = 4'h1; // We support I3C Basic v1.1.1
-            end
-            8'd1: begin
-              // GETCAP3
-              tx_data[6] = 1'b1; // We support IBI MDB Support (see Sect. 5.1.6.2.2)
-              tx_data[3] = 1'b1; // We support an optional defining byte for GETCAPS
-            end
-            default: ; // Already covered outside of this case tree
-          endcase
+          if (tx_data_id == 8'h03) tx_data = 8'h00; // We don't support HDR Modes
+          else if (tx_data_id == 8'h02) tx_data = 8'h01; // We support I3C Basic v1.1.1
+          else if (tx_data_id == 8'h01) tx_data = 8'h48; // We send IBI MDB and support some GETCAPS defining bytes
+          else tx_data = '0;
         end else if (valid_defining_byte && defining_byte == 8'h93) begin
           tx_data_id_init = 8'h01;
           if (tx_data_id == 8'h01) tx_data = 8'h35; // We share peripheral logic with side effects
@@ -1185,7 +1216,6 @@ module ccc
   // * ENTTM
   // * SETBRGTGT
   // * ENTAS[0-3]
-  // * ENTHDR[0-7]
   assign set_brgtgt_o = '0;
   assign entas0_o = '0;
   assign entas1_o = '0;
@@ -1193,14 +1223,6 @@ module ccc
   assign entas3_o = '0;
   assign ent_tm_o = '0;
   assign tm_o = '0;
-  assign ent_hdr_0_o = '0;
-  assign ent_hdr_1_o = '0;
-  assign ent_hdr_2_o = '0;
-  assign ent_hdr_3_o = '0;
-  assign ent_hdr_4_o = '0;
-  assign ent_hdr_5_o = '0;
-  assign ent_hdr_6_o = '0;
-  assign ent_hdr_7_o = '0;
 
 
   ccc_entdaa xccc_entdaa (
