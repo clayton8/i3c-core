@@ -96,6 +96,7 @@ module ccc
     input logic ccc_valid_i,
 
     output logic done_fsm_o,
+    output logic invalid_ccc_o,
     output logic next_ccc_o,
 
     // Bus Monitor interface
@@ -190,6 +191,9 @@ module ccc
     output logic ent_hdr_5_o,
     output logic ent_hdr_6_o,
     output logic ent_hdr_7_o,
+
+    input  logic exit_hdr_i,
+    input  logic is_in_hdr_mode_i,
 
     // Exchange Timing Information
     // I3C_BCAST_SETXTIME
@@ -341,6 +345,9 @@ module ccc
 
   logic       get_status_in_progress;
 
+  logic       ccc_expected_parity;
+  assign ccc_expected_parity = ^{ccc_i, 1'b1};
+
   always_ff @(posedge clk_i or negedge rst_ni) begin : report_get_status_done
     if (~rst_ni) begin
       get_status_in_progress <= '0;
@@ -361,6 +368,8 @@ module ccc
     end else begin
       if (ccc_valid_i) begin
         command_code <= ccc_i;
+      end else if (exit_hdr_i) begin
+        command_code <= '0;
       end
     end
   end
@@ -417,12 +426,14 @@ module ccc
     RxDataTbit,
     TxData,
     TxDataTbit,
-    WaitForBusCond,
+    WaitForBusCond, // 0x0F
     NextCCC,
     DoneCCC,
     HandleENTDAA,
     HandleTargetENTDAA,
-    HandleVirtualTargetENTDAA
+    HandleVirtualTargetENTDAA,
+    HandleDoneENTDAA,
+    CCCError
   } state_e;
 
   state_e state_q, state_d;
@@ -462,6 +473,13 @@ module ccc
   logic is_byte_rsvd_addr;
   assign is_byte_rsvd_addr = (rx_data == {7'h7E, 1'b0}) | (command_addr == 7'h7E);
 
+  logic is_incorrect_byte_match;
+  assign is_incorrect_byte_match = (rx_data inside {
+        8'h7C, 8'hBC, 8'hDC, 8'hEC, 8'hF4, 8'hF8, 8'hFE, 8'hFD
+      }) | (command_addr inside {
+        8'h7C, 8'hBC, 8'hDC, 8'hEC, 8'hF4, 8'hF8, 8'hFE, 8'hFD
+      });
+
   logic is_byte_our_dynamic_addr;
   logic is_byte_our_virtual_dynamic_addr;
   logic is_byte_our_static_addr;
@@ -482,7 +500,6 @@ module ccc
   assign is_byte_virtual_addr = is_byte_our_virtual_dynamic_addr | is_byte_our_virtual_static_addr;
 
   logic supported_direct_command_code;
-
   assign supported_direct_command_code = command_code inside {
     // Setters
     `I3C_DIRECT_SETDASA,
@@ -503,8 +520,32 @@ module ccc
     `I3C_DIRECT_GETCAPS
   };
 
-  logic unsupported_def_byte;
+  logic read_only_command;
+  assign read_only_command = command_code inside {
+    `I3C_DIRECT_GETSTATUS,
+    `I3C_DIRECT_GETCAPS,
+    `I3C_DIRECT_GETBCR,
+    `I3C_DIRECT_GETDCR,
+    `I3C_DIRECT_GETMWL,
+    `I3C_DIRECT_GETMRL,
+    `I3C_DIRECT_GETPID
+  };
 
+  logic write_only_command;
+  assign write_only_command =  command_code inside {
+    `I3C_DIRECT_SETDASA,
+    `I3C_DIRECT_SETNEWDA,
+    `I3C_DIRECT_SETXTIME,
+    `I3C_DIRECT_SETMWL,
+    `I3C_DIRECT_SETMRL,
+    `I3C_DIRECT_ENEC,
+    `I3C_DIRECT_DISEC
+  };
+
+  logic direction_error;
+  assign direction_error = (read_only_command & ~command_rnw) | (write_only_command & command_rnw);
+
+  logic unsupported_def_byte;
   assign unsupported_def_byte = have_defining_byte & valid_defining_byte & (
         (command_code == `I3C_DIRECT_RSTACT) & ~(defining_byte inside {8'h00, 8'h01, 8'h02, 8'h81, 8'h82})
       | (command_code == `I3C_DIRECT_GETCAPS) & ~(defining_byte inside {8'h00, 8'h93}));
@@ -513,10 +554,11 @@ module ccc
   assign supported_direct_command = supported_direct_command_code & ~unsupported_def_byte;
 
   logic direct_addr_ack;
-
-  assign direct_addr_ack = (command_code == `I3C_DIRECT_SETDASA) ?
-      ((is_byte_our_static_addr && ~target_dyn_address_valid_i) | (is_byte_our_virtual_static_addr && ~virtual_target_dyn_address_valid_i)) :
-      ((is_byte_our_addr | is_byte_virtual_addr) & supported_direct_command  | is_byte_rsvd_addr );
+  assign direct_addr_ack = ~direction_error & ((command_code == `I3C_DIRECT_SETDASA) ?
+      ((is_byte_our_static_addr && ~target_dyn_address_valid_i) |
+        (is_byte_our_virtual_static_addr && ~virtual_target_dyn_address_valid_i)) :
+      ((is_byte_our_addr | is_byte_virtual_addr) & supported_direct_command |
+        is_byte_rsvd_addr ));
 
   always_ff @(posedge clk_i or negedge rst_ni) begin : proc_addr
     if (~rst_ni) begin
@@ -544,19 +586,78 @@ module ccc
     end
   end
 
+  always_ff @(posedge clk_i or negedge rst_ni) begin: detect_hdr_enter
+    if (~rst_ni) begin
+      ent_hdr_0_o <= '0;
+      ent_hdr_1_o <= '0;
+      ent_hdr_2_o <= '0;
+      ent_hdr_3_o <= '0;
+      ent_hdr_4_o <= '0;
+      ent_hdr_5_o <= '0;
+      ent_hdr_6_o <= '0;
+      ent_hdr_7_o <= '0;
+    end else begin
+      if (bus_rx_done_i & (state_q == RxTbit) & (ccc_expected_parity == bus_rx_data_i[0])) begin
+        unique case(command_code)
+          `I3C_BCAST_ENTHDR0:
+            ent_hdr_0_o <= '1;
+          `I3C_BCAST_ENTHDR1:
+            ent_hdr_1_o <= '1;
+          `I3C_BCAST_ENTHDR2:
+            ent_hdr_2_o <= '1;
+          `I3C_BCAST_ENTHDR3:
+            ent_hdr_3_o <= '1;
+          `I3C_BCAST_ENTHDR4:
+            ent_hdr_4_o <= '1;
+          `I3C_BCAST_ENTHDR5:
+            ent_hdr_5_o <= '1;
+          `I3C_BCAST_ENTHDR6:
+            ent_hdr_6_o <= '1;
+          `I3C_BCAST_ENTHDR7:
+            ent_hdr_7_o <= '1;
+          default: begin
+            ent_hdr_0_o <= '0;
+            ent_hdr_1_o <= '0;
+            ent_hdr_2_o <= '0;
+            ent_hdr_3_o <= '0;
+            ent_hdr_4_o <= '0;
+            ent_hdr_5_o <= '0;
+            ent_hdr_6_o <= '0;
+            ent_hdr_7_o <= '0;
+          end
+        endcase
+      end else if (exit_hdr_i) begin
+        ent_hdr_0_o <= '0;
+        ent_hdr_1_o <= '0;
+        ent_hdr_2_o <= '0;
+        ent_hdr_3_o <= '0;
+        ent_hdr_4_o <= '0;
+        ent_hdr_5_o <= '0;
+        ent_hdr_6_o <= '0;
+        ent_hdr_7_o <= '0;
+      end
+    end
+  end
+
   always_comb begin : state_functions
     state_d = state_q;
     unique case (state_q)
       Idle: begin
-        state_d = WaitCCC;
+        if (is_in_hdr_mode_i) state_d = Idle;
+        else state_d = WaitCCC;
       end
       WaitCCC: begin
-        if (ccc_valid_i) state_d = RxTbit;
+        // stay in Idle if the bus is in hdr_mode (we ignore the HDR traffic)
+        if (is_in_hdr_mode_i) state_d = Idle;
+        else if (ccc_valid_i) state_d = RxTbit;
       end
       RxTbit: begin
         if (bus_rx_done_i) begin
+          // Check T-bit
+          if (ccc_expected_parity != bus_rx_data_i[0]) begin
+            state_d = CCCError;
           // have defining byte
-          if (have_defining_byte && command_code == `I3C_DIRECT_GETCAPS) state_d = RxDefByteOrBusCond;
+          end else if (have_defining_byte && command_code == `I3C_DIRECT_GETCAPS) state_d = RxDefByteOrBusCond;
           else if (have_defining_byte) state_d = RxDefByte;
           else begin
             // ENTDAA is special
@@ -583,7 +684,7 @@ module ccc
         end else if (~virtual_target_dyn_address_valid_i) begin
           state_d = HandleVirtualTargetENTDAA;
         end else begin
-          state_d = Idle;
+          state_d = HandleDoneENTDAA;
         end
       end
       HandleTargetENTDAA: begin
@@ -591,14 +692,16 @@ module ccc
           if (~virtual_target_dyn_address_valid_i) begin
             state_d = HandleVirtualTargetENTDAA;
           end else begin
-            state_d = Idle;
+            state_d = HandleDoneENTDAA;
           end
         end
       end
       HandleVirtualTargetENTDAA: begin
         if (entdaa_done) begin
-          state_d = Idle;
+          state_d = HandleDoneENTDAA;
         end
+      end
+      HandleDoneENTDAA: begin
       end
       RxDefByte: begin
         if (bus_rx_done_i) state_d = RxDefByteTbit;
@@ -639,9 +742,10 @@ module ccc
             else state_d = WaitForBusCond;
           end
           else begin
-            if (is_byte_rsvd_addr) state_d = NextCCC;
-            else if ((is_byte_our_addr || is_byte_virtual_addr) && command_rnw && supported_direct_command) state_d = TxData;
-            else if ((is_byte_our_addr || is_byte_virtual_addr) && ~command_rnw && supported_direct_command) begin
+            if (is_incorrect_byte_match) state_d = CCCError;
+            else if (is_byte_rsvd_addr) state_d = NextCCC;
+            else if ((is_byte_our_addr || is_byte_virtual_addr) && command_rnw && supported_direct_command && ~direction_error) state_d = TxData;
+            else if ((is_byte_our_addr || is_byte_virtual_addr) && ~command_rnw && supported_direct_command && ~direction_error) begin
               if (command_code == `I3C_DIRECT_SETXTIME) state_d = RxSubCmdByte;
               else state_d = RxData;
             end else state_d = WaitForBusCond;
@@ -680,6 +784,9 @@ module ccc
       DoneCCC: begin
         state_d = Idle;
       end
+      CCCError: begin
+        state_d = Idle;
+      end
       default: begin
       end
     endcase
@@ -697,6 +804,7 @@ module ccc
 
     done_fsm_o = '0;
     next_ccc_o = '0;
+    invalid_ccc_o = '0;
     unique case (state_q)
       Idle: begin
 
@@ -768,6 +876,10 @@ module ccc
       DoneCCC: begin
         done_fsm_o = '1;
       end
+      CCCError: begin
+        invalid_ccc_o = '1;
+        done_fsm_o = '1;
+      end
       default: begin
       end
     endcase
@@ -812,10 +924,6 @@ module ccc
 
   // Handle all DIRECT GET CCCs
   always_comb begin : proc_get
-    // Put a safe default RIGHT at the beginning, avoids having to repeat it everywhere
-    // Avoids infered flops in case it gets forgotten even once
-    tx_data = '0; 
-    // TODO clean up the code below
     case (command_code)
       // 1 Byte
       `I3C_DIRECT_GETBCR: begin
@@ -888,27 +996,12 @@ module ccc
       end
       // n Bytes
       `I3C_DIRECT_GETCAPS: begin
-        if(!valid_defining_byte || defining_byte == 8'h00) begin
+        if( !valid_defining_byte || defining_byte == 8'h00) begin
           tx_data_id_init = 8'h03;
-
-          // tx_data_id counts down from 3, so the x in GETCAPx as per the spec is calculated as
-          // x = 3-tx_data_id+1
-          unique case (tx_data_id)
-            8'd3: begin
-              // GETCAP1 - We don't support any HDR Modes
-              tx_data = 8'h00;
-            end
-            8'd2: begin
-              // GETCAP2
-              tx_data[3:0] = 4'h1; // We support I3C Basic v1.1.1
-            end
-            8'd1: begin
-              // GETCAP3
-              tx_data[6] = 1'b1; // We support IBI MDB Support (see Sect. 5.1.6.2.2)
-              tx_data[3] = 1'b1; // We support an optional defining byte for GETCAPS
-            end
-            default: ; // Already covered outside of this case tree
-          endcase
+          if (tx_data_id == 8'h03) tx_data = 8'h00; // We don't support HDR Modes
+          else if (tx_data_id == 8'h02) tx_data = 8'h01; // We support I3C Basic v1.1.1
+          else if (tx_data_id == 8'h01) tx_data = 8'h48; // We send IBI MDB and support some GETCAPS defining bytes
+          else tx_data = '0;
         end else if (valid_defining_byte && defining_byte == 8'h93) begin
           tx_data_id_init = 8'h01;
           if (tx_data_id == 8'h01) tx_data = 8'h35; // We share peripheral logic with side effects
@@ -1185,7 +1278,6 @@ module ccc
   // * ENTTM
   // * SETBRGTGT
   // * ENTAS[0-3]
-  // * ENTHDR[0-7]
   assign set_brgtgt_o = '0;
   assign entas0_o = '0;
   assign entas1_o = '0;
@@ -1193,14 +1285,6 @@ module ccc
   assign entas3_o = '0;
   assign ent_tm_o = '0;
   assign tm_o = '0;
-  assign ent_hdr_0_o = '0;
-  assign ent_hdr_1_o = '0;
-  assign ent_hdr_2_o = '0;
-  assign ent_hdr_3_o = '0;
-  assign ent_hdr_4_o = '0;
-  assign ent_hdr_5_o = '0;
-  assign ent_hdr_6_o = '0;
-  assign ent_hdr_7_o = '0;
 
 
   ccc_entdaa xccc_entdaa (
