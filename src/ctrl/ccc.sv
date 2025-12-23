@@ -564,7 +564,7 @@ module ccc
         if(!is_in_hdr_mode_i) state_d = WaitCCC;
       end
       WaitCCC: begin
-        // stay in Idle if the bus is in hdr_mode (we ignore the HDR traffic)
+        // Go back to Idle if the bus is in hdr_mode (we ignore the HDR traffic)
         if (is_in_hdr_mode_i) state_d = Idle;
         else if (ccc_valid_i) state_d = RxTbit;
       end
