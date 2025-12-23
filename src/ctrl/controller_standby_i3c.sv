@@ -267,7 +267,7 @@ module controller_standby_i3c
   logic entdaa;
   logic ent_tm;
   logic [7:0] tm;
-  logic ent_hdr_0, ent_hdr_1, ent_hdr_2, ent_hdr_3, ent_hdr_4, ent_hdr_5, ent_hdr_6, ent_hdr_7;
+  logic [7:0] ent_hdr
   logic get_acccr;
   logic set_brgtgt;
   logic get_mxds;
@@ -290,7 +290,7 @@ module controller_standby_i3c
     Ibi
   } xfer_mux_sel_e;
 
-  assign is_in_hdr_mode = ent_hdr_0 | ent_hdr_1 | ent_hdr_2 | ent_hdr_3 | ent_hdr_4 | ent_hdr_5 | ent_hdr_6 | ent_hdr_7;
+  assign is_in_hdr_mode = |ent_hdr;
   // Mux Rx/Tx between
   // 0 - Target FSM
   // 1 - CCC
@@ -518,14 +518,7 @@ module controller_standby_i3c
       .ent_tm_o                  (ent_tm),
       .tm_o                      (tm),
       .is_in_hdr_mode_i          (is_in_hdr_mode),
-      .ent_hdr_0_o               (ent_hdr_0),
-      .ent_hdr_1_o               (ent_hdr_1),
-      .ent_hdr_2_o               (ent_hdr_2),
-      .ent_hdr_3_o               (ent_hdr_3),
-      .ent_hdr_4_o               (ent_hdr_4),
-      .ent_hdr_5_o               (ent_hdr_5),
-      .ent_hdr_6_o               (ent_hdr_6),
-      .ent_hdr_7_o               (ent_hdr_7),
+      .ent_hdr_o                 (ent_hdr),
       .exit_hdr_i                (hdr_exit_detect),
       .set_dasa_o                (set_dasa_o),
       .set_dasa_valid_o          (set_dasa_valid_o),

@@ -182,14 +182,8 @@ module ccc
     // I3C_BCAST_ENDXFER
 
     // Enter HDR Mode 0-7
-    output logic ent_hdr_0_o,
-    output logic ent_hdr_1_o,
-    output logic ent_hdr_2_o,
-    output logic ent_hdr_3_o,
-    output logic ent_hdr_4_o,
-    output logic ent_hdr_5_o,
-    output logic ent_hdr_6_o,
-    output logic ent_hdr_7_o,
+
+    output logic [7:0] ent_hdr_o,
 
     input  logic exit_hdr_i,
     input  logic is_in_hdr_mode_i,
@@ -549,45 +543,17 @@ module ccc
     end
   end
 
+
+
   always_ff @(posedge clk_i or negedge rst_ni) begin: detect_hdr_enter
     if (~rst_ni) begin
-      ent_hdr_0_o <= '0;
-      ent_hdr_1_o <= '0;
-      ent_hdr_2_o <= '0;
-      ent_hdr_3_o <= '0;
-      ent_hdr_4_o <= '0;
-      ent_hdr_5_o <= '0;
-      ent_hdr_6_o <= '0;
-      ent_hdr_7_o <= '0;
+      ent_hdr_o <= '0;
     end else begin
-      unique case(command_code)
-        `I3C_BCAST_ENTHDR0:
-          ent_hdr_0_o <= '1;
-        `I3C_BCAST_ENTHDR1:
-          ent_hdr_1_o <= '1;
-        `I3C_BCAST_ENTHDR2:
-          ent_hdr_2_o <= '1;
-        `I3C_BCAST_ENTHDR3:
-          ent_hdr_3_o <= '1;
-        `I3C_BCAST_ENTHDR4:
-          ent_hdr_4_o <= '1;
-        `I3C_BCAST_ENTHDR5:
-          ent_hdr_5_o <= '1;
-        `I3C_BCAST_ENTHDR6:
-          ent_hdr_6_o <= '1;
-        `I3C_BCAST_ENTHDR7:
-          ent_hdr_7_o <= '1;
-        default: begin
-          ent_hdr_0_o <= '0;
-          ent_hdr_1_o <= '0;
-          ent_hdr_2_o <= '0;
-          ent_hdr_3_o <= '0;
-          ent_hdr_4_o <= '0;
-          ent_hdr_5_o <= '0;
-          ent_hdr_6_o <= '0;
-          ent_hdr_7_o <= '0;
-        end
-      endcase
+      if (command_code inside {[`I3C_BCAST_ENTHDR0:`I3C_BCAST_ENTHDR7]}) begin
+        ent_hdr_o[command_code - `I3C_BCAST_ENTHDR0] <= 1'b1;
+      end else begin
+        ent_hdr_o <= '0;
+      end
     end
   end
 
