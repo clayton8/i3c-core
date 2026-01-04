@@ -269,10 +269,10 @@ module controller_standby_i3c
   logic ibi_begin;
   logic ibi_done;
 
-  logic [7:0] ccc_byte;
-  logic       ccc_valid;
-  logic       ccc_done;
-  logic       ccc_next;
+  i3c_byte_t ccc_data;
+  logic      ccc_valid;
+  logic      ccc_done;
+  logic      ccc_next;
 
 // Bus events detection
   logic bus_timeout;
@@ -500,7 +500,7 @@ module controller_standby_i3c
     .ibi_begin_o                (ibi_begin),
     .ibi_done_i                 (ibi_done),
 
-    .ccc_o                      (ccc_byte),
+    .ccc_data_o                 (ccc_data),
     .ccc_valid_o                (ccc_valid),
     .is_ccc_done_i              (ccc_done),
     .is_next_ccc_i              (ccc_next),
@@ -522,7 +522,7 @@ module controller_standby_i3c
 
     .arbitration_lost_i,
 
-    .ccc_i                     (ccc_byte),
+    .ccc_data_i                (ccc_data),
     .ccc_valid_i               (ccc_valid),
     .done_fsm_o                (ccc_done),
     .next_ccc_o                (ccc_next),
