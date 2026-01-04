@@ -90,8 +90,8 @@ module ccc
     input  logic clk_i,  // Clock
     input  logic rst_ni, // Async reset, active low
 
-    // CC is decoded from the frame by the primary FSM
-    input  logic [7:0] ccc_i,
+    // CCC data is extracted from the frame by the main FSM
+    input  i3c_byte_t ccc_data_i,
     // Assert valid when you want to give control to this FSM
     input  logic ccc_valid_i,
 
@@ -357,7 +357,7 @@ module ccc
       command_code <= '0;
     end else begin
       if (ccc_valid_i) begin
-        command_code <= ccc_i;
+        command_code <= ccc_data_i;
       end
     end
   end
