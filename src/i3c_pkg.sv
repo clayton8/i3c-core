@@ -18,6 +18,11 @@ package i3c_pkg;
   typedef logic      [I3cAddrWidth-1:0] i3c_addr_t;
   typedef logic [I3cTimeParamWidth-1:0] i3c_timeparam_t;
 
+  typedef enum logic {
+    OpenDrain = 1'b0,
+    PushPull  = 1'b1
+  } i3c_drive_e;
+
   // Bus signal state
   typedef struct packed {
     logic value;
@@ -35,6 +40,32 @@ package i3c_pkg;
     logic rstart_det;
     logic stop_det;
   } bus_state_t;
+
+  // Tx descriptor
+  typedef struct packed {
+    i3c_drive_e drive_type;
+    logic       req_byte;
+    logic       req_bit;
+    i3c_byte_t  data;
+  } bus_tx_req_t;
+
+  typedef struct packed {
+    logic error;
+    logic idle;
+    logic done;
+  } bus_tx_rsp_t;
+
+  // Rx descriptor
+  typedef struct packed {
+    logic req_byte;
+    logic req_bit;
+  } bus_rx_req_t;
+
+  typedef struct packed {
+    logic      idle;
+    logic      done;
+    i3c_byte_t data;
+  } bus_rx_rsp_t;
 
   // Memory port to DAT table
   typedef struct packed {
