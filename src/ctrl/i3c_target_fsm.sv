@@ -243,7 +243,7 @@ module i3c_target_fsm #(
                                  virtual_target_sta_address_valid_i ? (virtual_target_sta_address_i == bus_addr_q) :
                                  1'b0;
 
-  assign is_rsvd_byte_match = ({bus_addr_q, bus_rnw_q} == 8'hFC);
+  assign is_rsvd_byte_match = ({bus_addr_q, bus_rnw_q} == 8'hFC); // `I3C_RSVD_BYTE
 
   always_ff @(posedge clk_i or negedge rst_ni) begin : update_bus_addr_matcher
     if (~rst_ni) begin
