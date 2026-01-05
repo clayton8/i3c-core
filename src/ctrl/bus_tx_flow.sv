@@ -33,19 +33,15 @@ module bus_tx_flow import i3c_pkg::*; (
   input  logic scl_posedge_i,
   input  logic scl_stable_low_i,
 
-  // Tx request and data
-  input  logic      req_byte_i,
-  input  logic      req_bit_i,
-  input  i3c_byte_t req_value_i,
+  // Tx request in
+  input  bus_tx_req_t tx_req_i,
 
-  // Bus flow control and errors
-  output logic bus_tx_done_o,
-  output logic bus_tx_idle_o,
-  output logic req_error_o,
-  output logic bus_error_o,
+  // Tx response out
+  output bus_tx_rsp_t tx_rsp_o,
+
+  output logic bus_error_o, // Unused
 
   // Open Drain / Push Pull
-  input  logic sel_od_pp_i,
   output logic sel_od_pp_o,
 
   // Output I3C SDA bus line
@@ -64,7 +60,8 @@ module bus_tx_flow import i3c_pkg::*; (
 
   logic tx_idle;
   logic tx_done; // Indicates finished bit write
-  logic req_error, bus_error, errorPany;
+  logic bus_tx_done;
+  logic req_error, bus_error;
 
   typedef enum logic [2:0] {
     Idle,
@@ -75,8 +72,7 @@ module bus_tx_flow import i3c_pkg::*; (
 
   tx_state_e state_d, state_q;
 
-
-  assign reqs    = {req_byte_i, req_bit_i};
+  assign reqs    = {tx_req_i.req_byte, tx_req_i.req_bit};
   assign req_any = |reqs;
   // Clever way to ensure that only one bit is HIGH
   // Source: https://stackoverflow.com/a/11235598
@@ -98,27 +94,25 @@ module bus_tx_flow import i3c_pkg::*; (
       end
     end else begin
       bit_counter_d = 4'd7;
-      req_value_d   = (bit_counter_q == 4'd7) ? req_value_i : '0;
+      req_value_d   = (bit_counter_q == 4'd7) ? tx_req_i.data : '0;
     end
   end
 
   always_comb begin : tx_fsm
-    bus_tx_idle_o = '0;
-    bus_tx_done_o = '0;
-    drive_bit_en = '0;
+    bus_tx_done = 1'b0;
+    drive_bit_en = 1'b0;
     drive_bit_value = 1'b1; // Pullup by default
-    bit_counter_en = '0;
+    bit_counter_en = 1'b0;
 
     state_d = state_q;
     unique case (state_q)
       Idle: begin
-        bus_tx_idle_o = tx_idle;
         drive_bit_en  = tx_idle ? req_any : 1'b0;
-        drive_bit_value = req_byte_i ? req_value_i[7] : req_value_i[0];
+        drive_bit_value = tx_req_i.req_byte ? tx_req_i.data[7] : tx_req_i.data[0];
 
-        if (tx_idle && req_byte_i) begin
+        if (tx_idle && tx_req_i.req_byte) begin
           state_d = DriveByte;
-        end else if (tx_idle && req_bit_i) begin
+        end else if (tx_idle && tx_req_i.req_bit) begin
           state_d = DriveBit;
         end
       end
@@ -127,7 +121,7 @@ module bus_tx_flow import i3c_pkg::*; (
         drive_bit_en = req_any;
         drive_bit_value = req_value_q[7];
         if ((bit_counter_q == 4'd0) && tx_done) begin
-          bus_tx_done_o = 1'b1;
+          bus_tx_done = 1'b1;
           state_d = NextTaskDecision;
         end
       end
@@ -135,17 +129,17 @@ module bus_tx_flow import i3c_pkg::*; (
         drive_bit_value = req_value_q[0];
         drive_bit_en = req_any;
         if (tx_done) begin
-          bus_tx_done_o = 1'b1;
+          bus_tx_done = 1'b1;
           state_d = NextTaskDecision;
         end
       end
       NextTaskDecision: begin
         drive_bit_en = req_any;
-        drive_bit_value = req_byte_i ? req_value_i[7] : req_value_i[0];
+        drive_bit_value = tx_req_i.req_byte ? tx_req_i.data[7] : tx_req_i.data[0];
 
-        if (req_byte_i) begin
+        if (tx_req_i.req_byte) begin
           state_d = DriveByte;
-        end else if (req_bit_i) begin
+        end else if (tx_req_i.req_bit) begin
           state_d = DriveBit;
         end else begin
           state_d = Idle;
@@ -176,9 +170,14 @@ module bus_tx_flow import i3c_pkg::*; (
     .sda_o
   );
 
-  assign req_error_o = req_error;
+  assign tx_rsp_o = '{
+    error: req_error,
+    idle:  (state_q == Idle),
+    done:  bus_tx_done
+  };
+
   assign bus_error_o = bus_error;
-  assign sel_od_pp_o = sel_od_pp_i; // Feedthrough for now
+  assign sel_od_pp_o = tx_req_i.drive_type; // Feedthrough for now
 
   // Sequential process for all flops
   always_ff @(posedge clk_i or negedge rst_ni) begin
