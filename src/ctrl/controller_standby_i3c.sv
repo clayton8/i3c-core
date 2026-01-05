@@ -175,29 +175,8 @@ module controller_standby_i3c
 );
 
   // Bus TX flow
-  logic bus_tx_req_err;
-  logic bus_tx_done;
-  logic bus_tx_idle;
-  logic bus_tx_req_byte;
-  logic bus_tx_req_bit;
-  logic [7:0] bus_tx_req_value;
-  logic bus_tx_sel_od_pp;
-
-  logic fsm_bus_tx_req_err;
-  logic fsm_bus_tx_done;
-  logic fsm_bus_tx_idle;
-  logic fsm_bus_tx_req_byte;
-  logic fsm_bus_tx_req_bit;
-  logic [7:0] fsm_bus_tx_req_value;
-  logic fsm_bus_tx_sel_od_pp;
-
-  logic ccc_bus_tx_req_err;
-  logic ccc_bus_tx_done;
-  logic ccc_bus_tx_idle;
-  logic ccc_bus_tx_req_byte;
-  logic ccc_bus_tx_req_bit;
-  logic [7:0] ccc_bus_tx_req_value;
-  logic ccc_bus_tx_sel_od_pp;
+  bus_tx_req_t bus_tx_req, bus_tx_req_fsm, bus_tx_req_ccc, bus_tx_req_ibi;
+  bus_tx_rsp_t bus_tx_rsp, bus_tx_rsp_fsm, bus_tx_rsp_ccc, bus_tx_rsp_ibi;
 
   logic ibi_bus_tx_req_err;
   logic ibi_bus_tx_done;
@@ -208,23 +187,8 @@ module controller_standby_i3c
   logic ibi_bus_tx_sel_od_pp;
 
   // Bus RX flow
-  logic bus_rx_req_bit;
-  logic bus_rx_req_byte;
-  logic bus_rx_done;
-  logic bus_rx_idle;
-  logic [7:0] bus_rx_data;
-
-  logic fsm_bus_rx_req_bit;
-  logic fsm_bus_rx_req_byte;
-  logic fsm_bus_rx_done;
-  logic fsm_bus_rx_idle;
-  logic [7:0] fsm_bus_rx_data;
-
-  logic ccc_bus_rx_req_bit;
-  logic ccc_bus_rx_req_byte;
-  logic ccc_bus_rx_done;
-  logic ccc_bus_rx_idle;
-  logic [7:0] ccc_bus_rx_data;
+  bus_rx_req_t bus_rx_req, bus_rx_req_fsm, bus_rx_req_ccc, bus_rx_req_ibi;
+  bus_rx_rsp_t bus_rx_rsp, bus_rx_rsp_fsm, bus_rx_rsp_ccc, bus_rx_rsp_ibi;
 
   logic ibi_bus_rx_req_bit;
   logic ibi_bus_rx_req_byte;
@@ -274,7 +238,7 @@ module controller_standby_i3c
   logic      ccc_done;
   logic      ccc_next;
 
-// Bus events detection
+  // Bus events detection
   logic bus_timeout;
   logic hotjoin_done;
 
@@ -330,24 +294,17 @@ module controller_standby_i3c
   end
 
   always_comb begin
-    ccc_bus_tx_req_err = '0;
-    ccc_bus_tx_done    = '0;
-    ccc_bus_tx_idle    = '0;
-    fsm_bus_tx_req_err = '0;
-    fsm_bus_tx_done    = '0;
-    fsm_bus_tx_idle    = '0;
-    bus_tx_req_byte    = '0;
-    bus_tx_req_bit     = '0;
-    bus_tx_req_value   = '0;
-    bus_tx_sel_od_pp   = '0;
-    bus_rx_req_bit     = '0;
-    bus_rx_req_byte    = '0;
-    fsm_bus_rx_done    = '0;
-    fsm_bus_rx_idle    = '0;
-    fsm_bus_rx_data    = '0;
-    ccc_bus_rx_done    = '0;
-    ccc_bus_rx_idle    = '0;
-    ccc_bus_rx_data    = '0;
+    bus_tx_req = '{default: '0};
+    bus_rx_req = '{default: '0};
+
+    bus_tx_rsp_fsm = '{default: '0};
+    bus_tx_rsp_ccc = '{default: '0};
+    bus_tx_rsp_ibi = '{default: '0};
+
+    bus_rx_rsp_fsm = '{default: '0};
+    bus_rx_rsp_ccc = '{default: '0};
+    bus_rx_rsp_ibi = '{default: '0};
+
     ibi_bus_tx_req_err = '0;
     ibi_bus_tx_done    = '0;
     ibi_bus_tx_idle    = '0;
@@ -356,49 +313,39 @@ module controller_standby_i3c
 
     unique case (xfer_mux_sel)
       Fsm: begin
-        fsm_bus_tx_req_err = bus_tx_req_err;
-        fsm_bus_tx_done    = bus_tx_done;
-        fsm_bus_tx_idle    = bus_tx_idle;
-        bus_tx_req_byte    = fsm_bus_tx_req_byte;
-        bus_tx_req_bit     = fsm_bus_tx_req_bit;
-        bus_tx_req_value   = fsm_bus_tx_req_value;
-        bus_tx_sel_od_pp   = fsm_bus_tx_sel_od_pp;
+        bus_tx_req = bus_tx_req_fsm;
+        bus_rx_req = bus_rx_req_fsm;
 
-        bus_rx_req_bit     = fsm_bus_rx_req_bit;
-        bus_rx_req_byte    = fsm_bus_rx_req_byte;
-        fsm_bus_rx_done    = bus_rx_done;
-        fsm_bus_rx_idle    = bus_rx_idle;
-        fsm_bus_rx_data    = bus_rx_data;
+        bus_tx_rsp_fsm = bus_tx_rsp;
+        bus_rx_rsp_fsm = bus_rx_rsp;
       end
       Ccc: begin
-        ccc_bus_tx_req_err = bus_tx_req_err; // unused
-        ccc_bus_tx_done    = bus_tx_done;
-        ccc_bus_tx_idle    = bus_tx_idle;    // unused
-        bus_tx_req_byte    = ccc_bus_tx_req_byte;
-        bus_tx_req_bit     = ccc_bus_tx_req_bit;
-        bus_tx_req_value   = ccc_bus_tx_req_value;
-        bus_tx_sel_od_pp   = ccc_bus_tx_sel_od_pp;
+        bus_tx_req = bus_tx_req_ccc;
+        bus_rx_req = bus_rx_req_ccc;
 
-        bus_rx_req_bit     = ccc_bus_rx_req_bit;
-        bus_rx_req_byte    = ccc_bus_rx_req_byte;
-        ccc_bus_rx_done    = bus_rx_done;
-        ccc_bus_rx_idle    = bus_rx_idle;
-        ccc_bus_rx_data    = bus_rx_data;
+        bus_tx_rsp_ccc = bus_tx_rsp;
+        bus_rx_rsp_ccc = bus_rx_rsp;
       end
       Ibi: begin
-        ibi_bus_tx_req_err = bus_tx_req_err; // unused
-        ibi_bus_tx_done    = bus_tx_done;
-        ibi_bus_tx_idle    = bus_tx_idle;    // unused
-        bus_tx_req_byte    = ibi_bus_tx_req_byte;
-        bus_tx_req_bit     = ibi_bus_tx_req_bit;
-        bus_tx_req_value   = ibi_bus_tx_req_value;
-        bus_tx_sel_od_pp   = ibi_bus_tx_sel_od_pp;
+        bus_tx_req = bus_tx_req_ibi;
+        bus_rx_req = bus_rx_req_ibi;
 
-        bus_rx_req_bit     = ibi_bus_rx_req_bit;
-        bus_rx_req_byte    = ibi_bus_rx_req_byte;
-        ibi_bus_rx_done    = bus_rx_done;
+        bus_tx_rsp_ibi = bus_tx_rsp;
+        bus_rx_rsp_ibi = bus_rx_rsp;
+
+        ibi_bus_tx_req_err = bus_tx_rsp.error; // unused
+        ibi_bus_tx_done    = bus_tx_rsp.done;
+        ibi_bus_tx_idle    = bus_tx_rsp.idle;    // unused
+        bus_tx_req.req_byte   = ibi_bus_tx_req_byte;
+        bus_tx_req.req_bit    = ibi_bus_tx_req_bit;
+        bus_tx_req.data       = ibi_bus_tx_req_value;
+        bus_tx_req.drive_type = ibi_bus_tx_sel_od_pp;
+
+        ibi_bus_rx_done     = bus_rx_rsp.done;
         // No idle signal for ibi_bus
-        ibi_bus_rx_data    = bus_rx_data;
+        ibi_bus_rx_data     = bus_rx_rsp.data;
+        bus_rx_req.req_bit  = ibi_bus_rx_req_bit;
+        bus_rx_req.req_byte = ibi_bus_rx_req_byte;
       end
       default: ;
     endcase
@@ -435,27 +382,13 @@ module controller_standby_i3c
     .target_idle_o        (/* unused */),
     .target_transmitting_o(/* unused */),
 
-    // Tx request
-    .bus_tx_req_byte_o    (fsm_bus_tx_req_byte),
-    .bus_tx_req_bit_o     (fsm_bus_tx_req_bit),
-    .bus_tx_req_value_o   (fsm_bus_tx_req_value),
-    .bus_tx_sel_od_pp_o   (fsm_bus_tx_sel_od_pp),
+    .bus_tx_req_o(bus_tx_req_fsm),
+    .bus_tx_rsp_i(bus_tx_rsp_fsm),
 
-    // Tx response
-    .bus_tx_req_err_i     (fsm_bus_tx_req_err),
-    .bus_tx_done_i        (fsm_bus_tx_done),
-    .bus_tx_idle_i        (fsm_bus_tx_idle),
+    .bus_rx_req_o(bus_rx_req_fsm),
+    .bus_rx_rsp_i(bus_rx_rsp_fsm),
 
-    // Rx request
-    .bus_rx_req_bit_o     (fsm_bus_rx_req_bit),
-    .bus_rx_req_byte_o    (fsm_bus_rx_req_byte),
-
-    // Rx response
-    .bus_rx_data_i        (fsm_bus_rx_data),
-    .bus_rx_done_i        (fsm_bus_rx_done),
-    .bus_rx_idle_i        (fsm_bus_rx_idle),
-
-    // 
+    // Private read start/abort
     .tx_pr_start_o              (tx_pr_start_o),
     .tx_pr_abort_o              (tx_pr_abort),
 
@@ -522,26 +455,20 @@ module controller_standby_i3c
 
     .arbitration_lost_i,
 
-    .ccc_data_i                (ccc_data),
-    .ccc_valid_i               (ccc_valid),
-    .done_fsm_o                (ccc_done),
-    .next_ccc_o                (ccc_next),
+    .ccc_data_i (ccc_data),
+    .ccc_valid_i(ccc_valid),
+    .done_fsm_o (ccc_done),
+    .next_ccc_o (ccc_next),
 
-    .bus_start_det_i           (ctrl_bus_i.start_det),
-    .bus_rstart_det_i          (ctrl_bus_i.rstart_det),
-    .bus_stop_det_i            (ctrl_bus_i.stop_det),
+    .bus_start_det_i (ctrl_bus_i.start_det),
+    .bus_rstart_det_i(ctrl_bus_i.rstart_det),
+    .bus_stop_det_i  (ctrl_bus_i.stop_det),
 
-    .bus_tx_done_i             (ccc_bus_tx_done),
+    .bus_tx_req_o(bus_tx_req_ccc),
+    .bus_tx_rsp_i(bus_tx_rsp_ccc),
 
-    .bus_tx_req_byte_o         (ccc_bus_tx_req_byte),
-    .bus_tx_req_bit_o          (ccc_bus_tx_req_bit),
-    .bus_tx_req_value_o        (ccc_bus_tx_req_value),
-    .bus_tx_sel_od_pp_o        (ccc_bus_tx_sel_od_pp),
-
-    .bus_rx_data_i             (ccc_bus_rx_data),
-    .bus_rx_done_i             (ccc_bus_rx_done),
-    .bus_rx_req_bit_o          (ccc_bus_rx_req_bit),
-    .bus_rx_req_byte_o         (ccc_bus_rx_req_byte),
+    .bus_rx_req_o(bus_rx_req_ccc),
+    .bus_rx_rsp_i(bus_rx_rsp_ccc),
 
     .target_sta_address_i      (target_sta_addr_i),
     .target_sta_address_valid_i(target_sta_addr_valid_i),
@@ -680,23 +607,18 @@ module controller_standby_i3c
     .t_su_dat_i,
     .t_hd_dat_i,
 
-    .sel_od_pp_o     (phy_sel_od_pp_o),
+    .sel_od_pp_o(phy_sel_od_pp_o),
 
     .scl_negedge_i   (ctrl_bus_i.scl.neg_edge),
     .scl_posedge_i   (ctrl_bus_i.scl.pos_edge),
     .scl_stable_low_i(ctrl_bus_i.scl.stable_low),
 
-    .sda_o           (tx_sda),
+    .sda_o(tx_sda),
 
-    .sel_od_pp_i     (bus_tx_sel_od_pp),
-    .req_byte_i      (bus_tx_req_byte),
-    .req_bit_i       (bus_tx_req_bit),
-    .req_value_i     (bus_tx_req_value),
+    .tx_req_i(bus_tx_req),
+    .tx_rsp_o(bus_tx_rsp),
 
-    .bus_tx_done_o   (bus_tx_done),
-    .bus_tx_idle_o   (bus_tx_idle),
-    .req_error_o     (bus_tx_req_err),
-    .bus_error_o     (/* unused */)
+    .bus_error_o(/* unused */)
   );
 
   bus_rx_flow xbus_rx_flow (
@@ -707,12 +629,8 @@ module controller_standby_i3c
     .scl_stable_high_i(ctrl_bus_i.scl.stable_high),
     .sda_i            (ctrl_bus_i.sda.value),
 
-    .rx_req_bit_i     (bus_rx_req_bit),
-    .rx_req_byte_i    (bus_rx_req_byte),
-
-    .rx_data_o        (bus_rx_data),
-    .rx_done_o        (bus_rx_done),
-    .rx_idle_o        (bus_rx_idle)
+    .rx_req_i(bus_rx_req),
+    .rx_rsp_o(bus_rx_rsp)
   );
 
   i3c_bus_monitor xbus_monitor (
