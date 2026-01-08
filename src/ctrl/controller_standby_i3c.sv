@@ -267,7 +267,7 @@ module controller_standby_i3c
   logic entdaa;
   logic ent_tm;
   logic [7:0] tm;
-  logic [7:0] ent_hdr
+  logic [7:0] ent_hdr;
   logic get_acccr;
   logic set_brgtgt;
   logic get_mxds;
