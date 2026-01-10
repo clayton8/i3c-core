@@ -304,7 +304,7 @@ module ccc
   logic       rst_action_valid;
 
   // Data structure for any CCC
-  logic [7:0] command_code;
+  ccc_cmd_e command_code;
   // logic [7:0] defining_byte;
   // logic       defining_byte_valid;
   // logic [7:0] subcommand_byte;
@@ -344,7 +344,7 @@ module ccc
       get_status_done_o <= '0;
     end else begin
       if (done_fsm_o) get_status_in_progress <= 1'b0;
-      else if ((command_code == `I3C_DIRECT_GETSTATUS) && ccc_valid_i)
+      else if ((command_code == CCC_DIRECT_GETSTATUS) && ccc_valid_i)
         get_status_in_progress <= 1'b1;
 
       if (get_status_in_progress & done_fsm_o) get_status_done_o <= 1'b1;
@@ -354,10 +354,10 @@ module ccc
 
   always_ff @(posedge clk_i or negedge rst_ni) begin : register_ccc
     if (~rst_ni) begin
-      command_code <= '0;
+      command_code <= ccc_cmd_e'('0);
     end else begin
       if (ccc_valid_i) begin
-        command_code <= ccc_data_i;
+        command_code <= ccc_cmd_e'(ccc_data_i);
       end
     end
   end
@@ -372,9 +372,9 @@ module ccc
   assign bus_tx_req_o = entdaa_o ? tx_req_entdaa : tx_req_ccc;
   assign bus_rx_req_o = entdaa_o ? rx_req_entdaa : rx_req_ccc;
 
-  assign have_defining_byte = command_code inside {`I3C_BCAST_ENDXFER, `I3C_BCAST_RSTACT,
-                                                   `I3C_BCAST_MLANE, `I3C_DIRECT_GETCAPS,
-                                                   `I3C_DIRECT_ENDXFER, `I3C_DIRECT_RSTACT};
+  assign have_defining_byte = command_code inside {CCC_BCAST_ENDXFER, CCC_BCAST_RSTACT,
+                                                   CCC_BCAST_MLANE, CCC_DIRECT_GETCAPS,
+                                                   CCC_DIRECT_ENDXFER, CCC_DIRECT_RSTACT};
 
   typedef enum logic [7:0] {
     Idle,
@@ -460,36 +460,36 @@ module ccc
 
   assign supported_direct_command_code = command_code inside {
     // Setters
-    `I3C_DIRECT_SETDASA,
-    `I3C_DIRECT_SETNEWDA,
-    `I3C_DIRECT_SETXTIME,
-    `I3C_DIRECT_SETMWL,
-    `I3C_DIRECT_SETMRL,
-    `I3C_DIRECT_ENEC,
-    `I3C_DIRECT_DISEC,
+    CCC_DIRECT_SETDASA,
+    CCC_DIRECT_SETNEWDA,
+    CCC_DIRECT_SETXTIME,
+    CCC_DIRECT_SETMWL,
+    CCC_DIRECT_SETMRL,
+    CCC_DIRECT_ENEC,
+    CCC_DIRECT_DISEC,
     // Getters
-    `I3C_DIRECT_GETBCR,
-    `I3C_DIRECT_GETDCR,
-    `I3C_DIRECT_RSTACT,
-    `I3C_DIRECT_GETSTATUS,
-    `I3C_DIRECT_GETMWL,
-    `I3C_DIRECT_GETMRL,
-    `I3C_DIRECT_GETPID,
-    `I3C_DIRECT_GETCAPS
+    CCC_DIRECT_GETBCR,
+    CCC_DIRECT_GETDCR,
+    CCC_DIRECT_RSTACT,
+    CCC_DIRECT_GETSTATUS,
+    CCC_DIRECT_GETMWL,
+    CCC_DIRECT_GETMRL,
+    CCC_DIRECT_GETPID,
+    CCC_DIRECT_GETCAPS
   };
 
   logic unsupported_def_byte;
 
   assign unsupported_def_byte = have_defining_byte & valid_defining_byte & (
-        (command_code == `I3C_DIRECT_RSTACT) & ~(defining_byte inside {8'h00, 8'h01, 8'h02, 8'h81, 8'h82}) // TODO correct parenthesis?
-      | (command_code == `I3C_DIRECT_GETCAPS) & ~(defining_byte inside {8'h00, 8'h93}));
+        (command_code == CCC_DIRECT_RSTACT) & ~(defining_byte inside {8'h00, 8'h01, 8'h02, 8'h81, 8'h82}) // TODO correct parenthesis?
+      | (command_code == CCC_DIRECT_GETCAPS) & ~(defining_byte inside {8'h00, 8'h93}));
 
   logic supported_direct_command;
   assign supported_direct_command = supported_direct_command_code & ~unsupported_def_byte;
 
   logic direct_addr_ack;
 
-  assign direct_addr_ack = (command_code == `I3C_DIRECT_SETDASA) ?
+  assign direct_addr_ack = (command_code == CCC_DIRECT_SETDASA) ?
       ((is_byte_our_static_addr && ~target_dyn_address_valid_i) | (is_byte_our_virtual_static_addr && ~virtual_target_dyn_address_valid_i)) :
       ((is_byte_our_addr | is_byte_virtual_addr) & supported_direct_command  | is_byte_rsvd_addr );
 
@@ -552,11 +552,11 @@ module ccc
       RxTbit: begin
         if (bus_rx_rsp_i.done) begin
           // have defining byte
-          if (have_defining_byte && command_code == `I3C_DIRECT_GETCAPS) state_d = RxDefByteOrBusCond;
+          if (have_defining_byte && command_code == CCC_DIRECT_GETCAPS) state_d = RxDefByteOrBusCond;
           else if (have_defining_byte) state_d = RxDefByte;
           else begin
             // ENTDAA is special
-            if (command_code == `I3C_BCAST_ENTDAA) begin
+            if (command_code == CCC_BCAST_ENTDAA) begin
               // ignore ENTDAA if we already have dynamic addresses
               if (~target_dyn_address_valid_i || ~virtual_target_dyn_address_valid_i) begin
                 state_d = HandleENTDAA;
@@ -630,7 +630,7 @@ module ccc
         bus_tx_data[0] = ~direct_addr_ack;
 
         if (bus_tx_rsp_i.done) begin
-          if (command_code == `I3C_DIRECT_SETDASA) begin
+          if (command_code == CCC_DIRECT_SETDASA) begin
             if (is_byte_our_static_addr && target_dyn_address_valid_i) state_d = WaitForBusCond;
             else if (is_byte_our_virtual_static_addr && virtual_target_dyn_address_valid_i) state_d = WaitForBusCond;
             else if (is_byte_our_virtual_static_addr || is_byte_our_static_addr) state_d = RxData;
@@ -640,7 +640,7 @@ module ccc
             if (is_byte_rsvd_addr) state_d = NextCCC;
             else if ((is_byte_our_addr || is_byte_virtual_addr) && command_rnw && supported_direct_command) state_d = TxData;
             else if ((is_byte_our_addr || is_byte_virtual_addr) && ~command_rnw && supported_direct_command) begin
-              if (command_code == `I3C_DIRECT_SETXTIME) state_d = RxSubCmdByte;
+              if (command_code == CCC_DIRECT_SETXTIME) state_d = RxSubCmdByte;
               else state_d = RxData;
             end else state_d = WaitForBusCond;
           end
@@ -736,21 +736,21 @@ module ccc
   always_comb begin : proc_get
     case (command_code)
       // 1 Byte
-      `I3C_DIRECT_GETBCR: begin
+      CCC_DIRECT_GETBCR: begin
         tx_data_id_init = 8'h01;
         if (tx_data_id == 8'h01) begin
           if (is_byte_virtual_addr) tx_data = virtual_get_bcr_i;
           else tx_data = get_bcr_i;
         end else tx_data = '0;
       end
-      `I3C_DIRECT_GETDCR: begin
+      CCC_DIRECT_GETDCR: begin
         tx_data_id_init = 8'h01;
         if (tx_data_id == 8'h01) begin
           if (is_byte_virtual_addr) tx_data = virtual_get_dcr_i;
           else tx_data = get_dcr_i;
         end else tx_data = '0;
       end
-      `I3C_DIRECT_RSTACT: begin
+      CCC_DIRECT_RSTACT: begin
         tx_data_id_init = 8'h01;
         if (defining_byte == 8'h81 || defining_byte == 8'h82) begin
             if (tx_data_id == 8'h01 && defining_byte == 8'h81) tx_data = 8'hFF; // Use worst case value for now
@@ -762,27 +762,27 @@ module ccc
         end else tx_data = '0;
       end
       // 2 Bytes
-      `I3C_DIRECT_GETSTATUS: begin
+      CCC_DIRECT_GETSTATUS: begin
         tx_data_id_init = 8'h02;
         if (tx_data_id == 8'h02) tx_data = get_status_fmt1_i[15:8];
         else if (tx_data_id == 8'h01) tx_data = is_byte_virtual_addr ? 8'hC0 : get_status_fmt1_i[7:0];
         else tx_data = '0;
       end
-      `I3C_DIRECT_GETMWL: begin
+      CCC_DIRECT_GETMWL: begin
         tx_data_id_init = 8'h02;
         if (tx_data_id == 8'h02) tx_data = get_mwl_i[15:8];
         else if (tx_data_id == 8'h01) tx_data = get_mwl_i[7:0];
         else tx_data = '0;
       end
       // 3 Bytes
-      `I3C_DIRECT_GETMRL: begin
+      CCC_DIRECT_GETMRL: begin
         tx_data_id_init = 8'h03;
         if (tx_data_id == 8'h03) tx_data = get_mrl_i[15:8];
         else if (tx_data_id == 8'h02) tx_data = get_mrl_i[7:0];
         else if (tx_data_id == 8'h01) tx_data = get_ibil_i;
         else tx_data = '0;
       end
-      `I3C_DIRECT_GETPID: begin
+      CCC_DIRECT_GETPID: begin
         tx_data_id_init = 8'h06;
         if (tx_data_id == 8'h06) begin
           if (is_byte_virtual_addr) tx_data = virtual_get_pid_i[47:40];
@@ -805,7 +805,7 @@ module ccc
         end else tx_data = '0;
       end
       // n Bytes
-      `I3C_DIRECT_GETCAPS: begin
+      CCC_DIRECT_GETCAPS: begin
         if( !valid_defining_byte || defining_byte == 8'h00) begin
           tx_data_id_init = 8'h03;
           if (tx_data_id == 8'h03) tx_data = 8'h00; // We don't support HDR Modes
@@ -851,7 +851,7 @@ module ccc
     end else begin
       case (command_code)
         // setdasa has only one data byte - dynamic address
-        `I3C_DIRECT_SETDASA: begin
+        CCC_DIRECT_SETDASA: begin
           if (state_q == RxDataTbit && bus_rx_rsp_i.done && ~is_byte_rsvd_addr &&
               rx_data_count == 8'd0) begin
             set_dasa_addr  <= rx_data[7:1];
@@ -860,7 +860,7 @@ module ccc
             set_dasa_valid <= 1'b0;
           end
         end
-        `I3C_DIRECT_SETNEWDA: begin
+        CCC_DIRECT_SETNEWDA: begin
           if (state_q == RxDataTbit && bus_rx_rsp_i.done && ~is_byte_rsvd_addr &&
               rx_data_count == 8'd0) begin
             set_newda_addr <= rx_data[7:1];
@@ -908,8 +908,8 @@ module ccc
       disec_hj         <= '0;
       case (command_code)
         // setmwl
-        `I3C_DIRECT_SETMWL, `I3C_BCAST_SETMWL: begin
-          if (state_q == RxDataTbit && bus_rx_rsp_i.done && (~is_byte_rsvd_addr || command_code == `I3C_BCAST_SETMWL)) begin
+        CCC_DIRECT_SETMWL, CCC_BCAST_SETMWL: begin
+          if (state_q == RxDataTbit && bus_rx_rsp_i.done && (~is_byte_rsvd_addr || command_code == CCC_BCAST_SETMWL)) begin
             if (rx_data_count == 8'd0) begin
               mwl_o[15:8] <= rx_data;
               set_mwl_o   <= 1'b0;
@@ -924,8 +924,8 @@ module ccc
           end
         end
         // setmrl
-        `I3C_DIRECT_SETMRL, `I3C_BCAST_SETMRL: begin
-          if (state_q == RxDataTbit && bus_rx_rsp_i.done && (~is_byte_rsvd_addr || command_code == `I3C_BCAST_SETMRL)) begin
+        CCC_DIRECT_SETMRL, CCC_BCAST_SETMRL: begin
+          if (state_q == RxDataTbit && bus_rx_rsp_i.done && (~is_byte_rsvd_addr || command_code == CCC_BCAST_SETMRL)) begin
             if (rx_data_count == 8'd0) begin
               mrl_o[15:8] <= rx_data;
               set_ibil_o   <= 1'b0;
@@ -948,8 +948,8 @@ module ccc
           end
         end
         // enec
-        `I3C_DIRECT_ENEC, `I3C_BCAST_ENEC: begin
-          if (state_q == RxDataTbit && bus_rx_rsp_i.done && (~is_byte_rsvd_addr || command_code == `I3C_BCAST_ENEC)) begin
+        CCC_DIRECT_ENEC, CCC_BCAST_ENEC: begin
+          if (state_q == RxDataTbit && bus_rx_rsp_i.done && (~is_byte_rsvd_addr || command_code == CCC_BCAST_ENEC)) begin
             if (rx_data_count == 8'd0) begin
               enec_ibi <= rx_data[0];
               enec_crr <= rx_data[1];
@@ -958,8 +958,8 @@ module ccc
           end
         end
         // disec
-        `I3C_DIRECT_DISEC, `I3C_BCAST_DISEC: begin
-          if (state_q == RxDataTbit && bus_rx_rsp_i.done && (~is_byte_rsvd_addr || command_code == `I3C_BCAST_DISEC)) begin
+        CCC_DIRECT_DISEC, CCC_BCAST_DISEC: begin
+          if (state_q == RxDataTbit && bus_rx_rsp_i.done && (~is_byte_rsvd_addr || command_code == CCC_BCAST_DISEC)) begin
             if (rx_data_count == 8'd0) begin
               disec_ibi <= rx_data[0];
               disec_crr <= rx_data[1];
@@ -968,7 +968,7 @@ module ccc
           end
         end
         // rstact (direct)
-        `I3C_DIRECT_RSTACT: begin
+        CCC_DIRECT_RSTACT: begin
           if (command_valid && is_byte_our_addr && ~command_rnw) begin
             rst_action_valid <= 1'b1;
           end else begin
@@ -976,7 +976,7 @@ module ccc
           end
         end
         // rstact (broadcast)
-        `I3C_BCAST_RSTACT: begin
+        CCC_BCAST_RSTACT: begin
           if (state_q == RxDefByteTbit && bus_rx_rsp_i.done) begin
             rst_action_valid <= 1'b1;
           end else begin
@@ -997,7 +997,7 @@ module ccc
       set_aasa_virt_valid <= 1'b0;
     end else begin
       case (command_code)
-        `I3C_BCAST_RSTDAA: begin
+        CCC_BCAST_RSTDAA: begin
           if (state_q == RxTbit && bus_rx_rsp_i.done) begin
             rstdaa_o <= '1;
           end else begin
@@ -1007,7 +1007,7 @@ module ccc
         // set static address as dynamic
         // we reuse the SETDASA path here, just set static addr as the one to
         // be set
-        `I3C_BCAST_SETAASA: begin
+        CCC_BCAST_SETAASA: begin
           if (state_q == RxTbit && bus_rx_rsp_i.done) begin
             if (~target_dyn_address_valid_i && ~(target_sta_address_i inside {[7'h00:7'h07], 7'h3E, 7'h5E, 7'h6E, 7'h76, [7'h78:7'h7F]})) begin
               set_aasa_valid <= 1'b1;
@@ -1067,7 +1067,7 @@ module ccc
       escalate_reset_o <= '0;
     end else begin
       if (peripheral_reset_done_i) escalate_reset_o <= '1;
-      if (command_code inside {`I3C_DIRECT_RSTACT, `I3C_BCAST_RSTACT, `I3C_DIRECT_GETSTATUS} &
+      if (command_code inside {CCC_DIRECT_RSTACT, CCC_BCAST_RSTACT, CCC_DIRECT_GETSTATUS} &
           ccc_valid_i)
         escalate_reset_o <= '0;
     end
@@ -1147,7 +1147,7 @@ module ccc
 `ifndef VERILATOR
   // Detect each SETDASA CCC targeted to us while we don't have dynamic address set
   property cover_first_both_dyn_setdasa;
-    @(posedge clk_i) ($rose(direct_addr_ack) && (command_code == `I3C_DIRECT_SETDASA)) |=>
+    @(posedge clk_i) ($rose(direct_addr_ack) && (command_code == CCC_DIRECT_SETDASA)) |=>
     ##1 @(posedge bus_rx_rsp_i.done) ##1
     ##1 @(posedge clk_i) ##2
     (
@@ -1161,7 +1161,7 @@ module ccc
   property cover_not_first_both_dyn_setdasa;
     @(posedge clk_i)
     (
-      $rose(bus_rx_rsp_i.done) && (command_code == `I3C_DIRECT_SETDASA) && ccc_valid_i &&
+      $rose(bus_rx_rsp_i.done) && (command_code == CCC_DIRECT_SETDASA) && ccc_valid_i &&
       $stable(bus_rx_req_o.req_byte) && bus_rx_req_o.req_byte ##1
       $rose(is_byte_our_static_addr) || $rose(is_byte_our_virtual_static_addr)
     ) |=>
@@ -1179,7 +1179,7 @@ module ccc
 
   // Detect each SETAASA CCC while we don't have dynamic address set
   property cover_first_both_dyn_setaasa;
-    @(posedge clk_i) $rose(ccc_valid_i) ##1 (command_code == `I3C_BCAST_SETAASA) && ~(virtual_target_dyn_address_valid_i & target_dyn_address_valid_i)|=>
+    @(posedge clk_i) $rose(ccc_valid_i) ##1 (command_code == CCC_BCAST_SETAASA) && ~(virtual_target_dyn_address_valid_i & target_dyn_address_valid_i)|=>
     ##1 @(posedge bus_rx_rsp_i.done)
     ##1 @(posedge clk_i) ##2
     (
@@ -1191,7 +1191,7 @@ module ccc
 
   // Detect each SETAASA CCC while we have dynamic address set
   property cover_not_first_both_dyn_setaasa;
-    @(posedge clk_i) $rose(ccc_valid_i) ##1 (command_code == `I3C_BCAST_SETAASA) && (virtual_target_dyn_address_valid_i & target_dyn_address_valid_i)|=>
+    @(posedge clk_i) $rose(ccc_valid_i) ##1 (command_code == CCC_BCAST_SETAASA) && (virtual_target_dyn_address_valid_i & target_dyn_address_valid_i)|=>
     ##1 @(posedge bus_rx_rsp_i.done)
     ##1 @(posedge clk_i) ##2
     (
@@ -1205,7 +1205,7 @@ module ccc
   property cover_recv_setdasa;
     @(posedge clk_i)
     (
-      ccc_valid_i && (command_code == `I3C_DIRECT_SETDASA) &&
+      ccc_valid_i && (command_code == CCC_DIRECT_SETDASA) &&
       ($rose(is_byte_our_addr) || $rose(is_byte_virtual_addr))
     );
   endproperty : cover_recv_setdasa
@@ -1213,7 +1213,7 @@ module ccc
 
   // Detect each SETAASA CCC
   property cover_recv_setaasa;
-    @(posedge clk_i) ($rose(ccc_valid_i) ##1 (command_code == `I3C_BCAST_SETAASA));
+    @(posedge clk_i) ($rose(ccc_valid_i) ##1 (command_code == CCC_BCAST_SETAASA));
   endproperty : cover_recv_setaasa
   covprop_recv_setaasa: cover property (cover_recv_setaasa);
 `endif
