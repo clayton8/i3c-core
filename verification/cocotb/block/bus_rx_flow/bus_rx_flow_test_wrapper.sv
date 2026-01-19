@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-module bus_rx_flow_test_wrapper (
+module bus_rx_flow_test_wrapper
+  import i3c_pkg::*;
+(
     input logic clk_i,
     input logic rst_ni,
 
@@ -21,5 +23,25 @@ module bus_rx_flow_test_wrapper (
     output logic rx_done_o,
     output logic rx_idle_o
 );
-  bus_rx_flow xbus_rx_flow (.*);
+
+  // Map individual signals to struct
+  bus_rx_req_t rx_req_i;
+  bus_rx_rsp_t rx_rsp_o;
+
+  assign rx_req_i.req_bit  = rx_req_bit_i;
+  assign rx_req_i.req_byte = rx_req_byte_i;
+
+  assign rx_data_o = rx_rsp_o.data;
+  assign rx_done_o = rx_rsp_o.done;
+  assign rx_idle_o = rx_rsp_o.idle;
+
+  bus_rx_flow xbus_rx_flow (
+    .clk_i,
+    .rst_ni,
+    .scl_posedge_i,
+    .scl_stable_high_i,
+    .sda_i,
+    .rx_req_i,
+    .rx_rsp_o
+  );
 endmodule

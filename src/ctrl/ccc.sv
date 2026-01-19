@@ -410,6 +410,7 @@ module ccc
   // ---------------------------------------------------------------------------
   // ENTDAA Handling (Special CCC with its own sub-FSM)
   // ---------------------------------------------------------------------------
+  logic       in_entdaa_mode;
   logic       entdaa_done;
   logic       entdaa_address_valid;
   logic [6:0] entdaa_address;
@@ -557,6 +558,7 @@ module ccc
 
     // Bus condition handling
     WaitForBusCond,          // Wait for STOP or Repeated Start
+    WaitForENTDAAEnd,        // Wait for ENTDAA to end (STOP or new CCC via SR+7'h7E/W)
 
     // CCC completion
     NextCCC,                 // Signal ready for next CCC in chain
@@ -602,9 +604,14 @@ module ccc
   // ===========================================================================
   // ENTDAA STATE TRACKING
   // ===========================================================================
+  // entdaa_o: ENTDAA sub-FSM is actively processing (used for bus mux and sub-FSM start)
   assign entdaa_o = (state_q == HandleTargetENTDAA || 
                      state_q == HandleVirtualTargetENTDAA);
   assign entdaa_process_virtual = (state_q == HandleVirtualTargetENTDAA);
+  
+  // in_entdaa_mode: We are in ENTDAA mode (including waiting for it to end)
+  // Used to disable TE0 checking since 7'h7E/R is valid during ENTDAA
+  assign in_entdaa_mode = entdaa_o || (state_q == WaitForENTDAAEnd);
 
   // ===========================================================================
   // DEFINING BYTE REGISTRATION
@@ -710,7 +717,8 @@ module ccc
   // TE3/TE4 are detected in ccc_entdaa submodule.
 
   // TE0 helper: Check if reserved address has invalid RnW
-  assign te0_enable_o = !entdaa_o && (target_dyn_address_valid_i || virtual_target_dyn_address_valid_i);
+  // Disabled during ENTDAA mode (including WaitForENTDAAEnd) since 7'h7E/R is valid
+  assign te0_enable_o = !in_entdaa_mode && (target_dyn_address_valid_i || virtual_target_dyn_address_valid_i);
   assign is_te0_err_condition = te0_enable_o && is_te0_rsvd_addr_err(target_addr, target_rnw);
 
   // TE5 helper: Check if direction is wrong for this command
@@ -894,7 +902,7 @@ module ccc
             else if (command_code == CCC_BCAST_ENTDAA) begin
               if (entdaa_needs_main_addr)       state_d = HandleTargetENTDAA;
               else if (entdaa_needs_virt_addr)  state_d = HandleVirtualTargetENTDAA;
-              else                              state_d = WaitCCC;  // Already have addresses
+              else                              state_d = WaitForENTDAAEnd;  // Already have addresses, wait for ENTDAA to end
             end
             else if (is_enthdr_cmd) begin
               // ENTHDR0-7: Enter HDR mode (no defining byte, no data phase)
@@ -921,7 +929,8 @@ module ccc
         
         if (entdaa_done) begin
           // After main target, check if virtual target also needs address
-          state_d = entdaa_needs_virt_addr ? HandleVirtualTargetENTDAA : WaitCCC;
+          // Go to WaitForENTDAAEnd to wait for STOP (ENTDAA may continue for other targets)
+          state_d = entdaa_needs_virt_addr ? HandleVirtualTargetENTDAA : WaitForENTDAAEnd;
         end
       end
       
@@ -931,7 +940,8 @@ module ccc
         entdaa_is_virtual = 1'b1;
         
         if (entdaa_done) begin
-          state_d = WaitCCC;
+          // Go to WaitForENTDAAEnd to wait for STOP (ENTDAA may continue for other targets)
+          state_d = WaitForENTDAAEnd;
         end
       end
       
@@ -1120,6 +1130,18 @@ module ccc
       WaitForBusCond: begin
         // Wait for STOP or repeated start
         if (bus_rstart_det_i) state_d = RxTargetAddr;
+      end
+      
+      WaitForENTDAAEnd: begin
+        // After our target(s) complete ENTDAA, wait for the Controller to finish
+        // assigning addresses to other targets on the bus.
+        // 
+        // The Controller will continue sending SR + 7'h7E/R for other targets.
+        // We must ignore these sequences and only exit on STOP.
+        // ENTDAA always ends with STOP - a new CCC cannot start until after STOP.
+        //
+        // The bus_stop_det_i override at the end of the FSM will handle 
+        // transitioning to DoneCCC when STOP is detected.
       end
       
       // ---------------------------------------------------------------------
