@@ -2043,6 +2043,108 @@
 
     endgroup
 
+    /*----------------------- I3CCSR__I3C_EC__TTI__QUEUE_STATUS COVERGROUPS -----------------------*/
+    covergroup I3CCSR__I3C_EC__TTI__QUEUE_STATUS_bit_cg with function sample(input bit reg_bit);
+        option.per_instance = 1;
+        reg_bit_cp : coverpoint reg_bit {
+            bins value[2] = {0,1};
+        }
+        reg_bit_edge_cp : coverpoint reg_bit {
+            bins rise = (0 => 1);
+            bins fall = (1 => 0);
+        }
+
+    endgroup
+    covergroup I3CCSR__I3C_EC__TTI__QUEUE_STATUS_fld_cg with function sample(
+    input bit [1-1:0] RX_DESC_QUEUE_FULL,
+    input bit [1-1:0] RX_DESC_QUEUE_EMPTY,
+    input bit [1-1:0] TX_DESC_QUEUE_FULL,
+    input bit [1-1:0] TX_DESC_QUEUE_EMPTY,
+    input bit [1-1:0] RX_DATA_QUEUE_FULL,
+    input bit [1-1:0] RX_DATA_QUEUE_EMPTY,
+    input bit [1-1:0] TX_DATA_QUEUE_FULL,
+    input bit [1-1:0] TX_DATA_QUEUE_EMPTY,
+    input bit [1-1:0] IBI_QUEUE_FULL,
+    input bit [1-1:0] IBI_QUEUE_EMPTY
+    );
+        option.per_instance = 1;
+        RX_DESC_QUEUE_FULL_cp : coverpoint RX_DESC_QUEUE_FULL;
+        RX_DESC_QUEUE_EMPTY_cp : coverpoint RX_DESC_QUEUE_EMPTY;
+        TX_DESC_QUEUE_FULL_cp : coverpoint TX_DESC_QUEUE_FULL;
+        TX_DESC_QUEUE_EMPTY_cp : coverpoint TX_DESC_QUEUE_EMPTY;
+        RX_DATA_QUEUE_FULL_cp : coverpoint RX_DATA_QUEUE_FULL;
+        RX_DATA_QUEUE_EMPTY_cp : coverpoint RX_DATA_QUEUE_EMPTY;
+        TX_DATA_QUEUE_FULL_cp : coverpoint TX_DATA_QUEUE_FULL;
+        TX_DATA_QUEUE_EMPTY_cp : coverpoint TX_DATA_QUEUE_EMPTY;
+        IBI_QUEUE_FULL_cp : coverpoint IBI_QUEUE_FULL;
+        IBI_QUEUE_EMPTY_cp : coverpoint IBI_QUEUE_EMPTY;
+
+    endgroup
+
+    /*----------------------- I3CCSR__I3C_EC__TTI__DESC_QUEUE_DEPTH COVERGROUPS -----------------------*/
+    covergroup I3CCSR__I3C_EC__TTI__DESC_QUEUE_DEPTH_bit_cg with function sample(input bit reg_bit);
+        option.per_instance = 1;
+        reg_bit_cp : coverpoint reg_bit {
+            bins value[2] = {0,1};
+        }
+        reg_bit_edge_cp : coverpoint reg_bit {
+            bins rise = (0 => 1);
+            bins fall = (1 => 0);
+        }
+
+    endgroup
+    covergroup I3CCSR__I3C_EC__TTI__DESC_QUEUE_DEPTH_fld_cg with function sample(
+    input bit [8-1:0] RX_DESC_QUEUE_DEPTH,
+    input bit [8-1:0] TX_DESC_QUEUE_DEPTH
+    );
+        option.per_instance = 1;
+        RX_DESC_QUEUE_DEPTH_cp : coverpoint RX_DESC_QUEUE_DEPTH;
+        TX_DESC_QUEUE_DEPTH_cp : coverpoint TX_DESC_QUEUE_DEPTH;
+
+    endgroup
+
+    /*----------------------- I3CCSR__I3C_EC__TTI__DATA_QUEUE_DEPTH COVERGROUPS -----------------------*/
+    covergroup I3CCSR__I3C_EC__TTI__DATA_QUEUE_DEPTH_bit_cg with function sample(input bit reg_bit);
+        option.per_instance = 1;
+        reg_bit_cp : coverpoint reg_bit {
+            bins value[2] = {0,1};
+        }
+        reg_bit_edge_cp : coverpoint reg_bit {
+            bins rise = (0 => 1);
+            bins fall = (1 => 0);
+        }
+
+    endgroup
+    covergroup I3CCSR__I3C_EC__TTI__DATA_QUEUE_DEPTH_fld_cg with function sample(
+    input bit [8-1:0] RX_DATA_QUEUE_DEPTH,
+    input bit [8-1:0] TX_DATA_QUEUE_DEPTH
+    );
+        option.per_instance = 1;
+        RX_DATA_QUEUE_DEPTH_cp : coverpoint RX_DATA_QUEUE_DEPTH;
+        TX_DATA_QUEUE_DEPTH_cp : coverpoint TX_DATA_QUEUE_DEPTH;
+
+    endgroup
+
+    /*----------------------- I3CCSR__I3C_EC__TTI__IBI_QUEUE_DEPTH COVERGROUPS -----------------------*/
+    covergroup I3CCSR__I3C_EC__TTI__IBI_QUEUE_DEPTH_bit_cg with function sample(input bit reg_bit);
+        option.per_instance = 1;
+        reg_bit_cp : coverpoint reg_bit {
+            bins value[2] = {0,1};
+        }
+        reg_bit_edge_cp : coverpoint reg_bit {
+            bins rise = (0 => 1);
+            bins fall = (1 => 0);
+        }
+
+    endgroup
+    covergroup I3CCSR__I3C_EC__TTI__IBI_QUEUE_DEPTH_fld_cg with function sample(
+    input bit [8-1:0] IBI_QUEUE_DEPTH
+    );
+        option.per_instance = 1;
+        IBI_QUEUE_DEPTH_cp : coverpoint IBI_QUEUE_DEPTH;
+
+    endgroup
+
     /*----------------------- I3CCSR__I3C_EC__TTI__INTERRUPT_STATUS COVERGROUPS -----------------------*/
     covergroup I3CCSR__I3C_EC__TTI__INTERRUPT_STATUS_bit_cg with function sample(input bit reg_bit);
         option.per_instance = 1;

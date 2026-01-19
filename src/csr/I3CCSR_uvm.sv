@@ -2882,7 +2882,7 @@ package I3CCSR_uvm;
             this.CAP_ID = new("CAP_ID");
             this.CAP_ID.configure(this, 8, 0, "RO", 0, 'h12, 1, 1, 0);
             this.CAP_LENGTH = new("CAP_LENGTH");
-            this.CAP_LENGTH.configure(this, 16, 8, "RO", 0, 'h10, 1, 1, 0);
+            this.CAP_LENGTH.configure(this, 16, 8, "RO", 0, 'h20, 1, 1, 0);
             if (has_coverage(UVM_CVR_REG_BITS)) begin
                 foreach(CAP_ID_bit_cg[bt]) CAP_ID_bit_cg[bt] = new();
                 foreach(CAP_LENGTH_bit_cg[bt]) CAP_LENGTH_bit_cg[bt] = new();
@@ -3805,7 +3805,7 @@ package I3CCSR_uvm;
             this.CAP_ID = new("CAP_ID");
             this.CAP_ID.configure(this, 8, 0, "RO", 0, 'hc4, 1, 1, 0);
             this.CAP_LENGTH = new("CAP_LENGTH");
-            this.CAP_LENGTH.configure(this, 16, 8, "RO", 0, 'h10, 1, 1, 0);
+            this.CAP_LENGTH.configure(this, 16, 8, "RO", 0, 'h20, 1, 1, 0);
             if (has_coverage(UVM_CVR_REG_BITS)) begin
                 foreach(CAP_ID_bit_cg[bt]) CAP_ID_bit_cg[bt] = new();
                 foreach(CAP_LENGTH_bit_cg[bt]) CAP_LENGTH_bit_cg[bt] = new();
@@ -3949,6 +3949,181 @@ package I3CCSR_uvm;
                 fld_cg = new();
         endfunction : build
     endclass : I3CCSR__I3C_EC__TTI__RESET_CONTROL
+
+    // Reg - I3CCSR.I3C_EC.TTI.QUEUE_STATUS
+    class I3CCSR__I3C_EC__TTI__QUEUE_STATUS extends uvm_reg;
+        protected uvm_reg_data_t m_current;
+        protected uvm_reg_data_t m_data;
+        protected bit            m_is_read;
+
+        I3CCSR__I3C_EC__TTI__QUEUE_STATUS_bit_cg RX_DESC_QUEUE_FULL_bit_cg[1];
+        I3CCSR__I3C_EC__TTI__QUEUE_STATUS_bit_cg RX_DESC_QUEUE_EMPTY_bit_cg[1];
+        I3CCSR__I3C_EC__TTI__QUEUE_STATUS_bit_cg TX_DESC_QUEUE_FULL_bit_cg[1];
+        I3CCSR__I3C_EC__TTI__QUEUE_STATUS_bit_cg TX_DESC_QUEUE_EMPTY_bit_cg[1];
+        I3CCSR__I3C_EC__TTI__QUEUE_STATUS_bit_cg RX_DATA_QUEUE_FULL_bit_cg[1];
+        I3CCSR__I3C_EC__TTI__QUEUE_STATUS_bit_cg RX_DATA_QUEUE_EMPTY_bit_cg[1];
+        I3CCSR__I3C_EC__TTI__QUEUE_STATUS_bit_cg TX_DATA_QUEUE_FULL_bit_cg[1];
+        I3CCSR__I3C_EC__TTI__QUEUE_STATUS_bit_cg TX_DATA_QUEUE_EMPTY_bit_cg[1];
+        I3CCSR__I3C_EC__TTI__QUEUE_STATUS_bit_cg IBI_QUEUE_FULL_bit_cg[1];
+        I3CCSR__I3C_EC__TTI__QUEUE_STATUS_bit_cg IBI_QUEUE_EMPTY_bit_cg[1];
+        I3CCSR__I3C_EC__TTI__QUEUE_STATUS_fld_cg fld_cg;
+        rand uvm_reg_field RX_DESC_QUEUE_FULL;
+        rand uvm_reg_field RX_DESC_QUEUE_EMPTY;
+        rand uvm_reg_field TX_DESC_QUEUE_FULL;
+        rand uvm_reg_field TX_DESC_QUEUE_EMPTY;
+        rand uvm_reg_field RX_DATA_QUEUE_FULL;
+        rand uvm_reg_field RX_DATA_QUEUE_EMPTY;
+        rand uvm_reg_field TX_DATA_QUEUE_FULL;
+        rand uvm_reg_field TX_DATA_QUEUE_EMPTY;
+        rand uvm_reg_field IBI_QUEUE_FULL;
+        rand uvm_reg_field IBI_QUEUE_EMPTY;
+
+        function new(string name = "I3CCSR__I3C_EC__TTI__QUEUE_STATUS");
+            super.new(name, 32, build_coverage(UVM_CVR_ALL));
+        endfunction : new
+        extern virtual function void sample_values();
+        extern protected virtual function void sample(uvm_reg_data_t  data,
+                                                      uvm_reg_data_t  byte_en,
+                                                      bit             is_read,
+                                                      uvm_reg_map     map);
+
+        virtual function void build();
+            this.RX_DESC_QUEUE_FULL = new("RX_DESC_QUEUE_FULL");
+            this.RX_DESC_QUEUE_FULL.configure(this, 1, 0, "RO", 1, 'h0, 1, 1, 0);
+            this.RX_DESC_QUEUE_EMPTY = new("RX_DESC_QUEUE_EMPTY");
+            this.RX_DESC_QUEUE_EMPTY.configure(this, 1, 1, "RO", 1, 'h1, 1, 1, 0);
+            this.TX_DESC_QUEUE_FULL = new("TX_DESC_QUEUE_FULL");
+            this.TX_DESC_QUEUE_FULL.configure(this, 1, 2, "RO", 1, 'h0, 1, 1, 0);
+            this.TX_DESC_QUEUE_EMPTY = new("TX_DESC_QUEUE_EMPTY");
+            this.TX_DESC_QUEUE_EMPTY.configure(this, 1, 3, "RO", 1, 'h1, 1, 1, 0);
+            this.RX_DATA_QUEUE_FULL = new("RX_DATA_QUEUE_FULL");
+            this.RX_DATA_QUEUE_FULL.configure(this, 1, 4, "RO", 1, 'h0, 1, 1, 0);
+            this.RX_DATA_QUEUE_EMPTY = new("RX_DATA_QUEUE_EMPTY");
+            this.RX_DATA_QUEUE_EMPTY.configure(this, 1, 5, "RO", 1, 'h1, 1, 1, 0);
+            this.TX_DATA_QUEUE_FULL = new("TX_DATA_QUEUE_FULL");
+            this.TX_DATA_QUEUE_FULL.configure(this, 1, 6, "RO", 1, 'h0, 1, 1, 0);
+            this.TX_DATA_QUEUE_EMPTY = new("TX_DATA_QUEUE_EMPTY");
+            this.TX_DATA_QUEUE_EMPTY.configure(this, 1, 7, "RO", 1, 'h1, 1, 1, 0);
+            this.IBI_QUEUE_FULL = new("IBI_QUEUE_FULL");
+            this.IBI_QUEUE_FULL.configure(this, 1, 8, "RO", 1, 'h0, 1, 1, 0);
+            this.IBI_QUEUE_EMPTY = new("IBI_QUEUE_EMPTY");
+            this.IBI_QUEUE_EMPTY.configure(this, 1, 9, "RO", 1, 'h1, 1, 1, 0);
+            if (has_coverage(UVM_CVR_REG_BITS)) begin
+                foreach(RX_DESC_QUEUE_FULL_bit_cg[bt]) RX_DESC_QUEUE_FULL_bit_cg[bt] = new();
+                foreach(RX_DESC_QUEUE_EMPTY_bit_cg[bt]) RX_DESC_QUEUE_EMPTY_bit_cg[bt] = new();
+                foreach(TX_DESC_QUEUE_FULL_bit_cg[bt]) TX_DESC_QUEUE_FULL_bit_cg[bt] = new();
+                foreach(TX_DESC_QUEUE_EMPTY_bit_cg[bt]) TX_DESC_QUEUE_EMPTY_bit_cg[bt] = new();
+                foreach(RX_DATA_QUEUE_FULL_bit_cg[bt]) RX_DATA_QUEUE_FULL_bit_cg[bt] = new();
+                foreach(RX_DATA_QUEUE_EMPTY_bit_cg[bt]) RX_DATA_QUEUE_EMPTY_bit_cg[bt] = new();
+                foreach(TX_DATA_QUEUE_FULL_bit_cg[bt]) TX_DATA_QUEUE_FULL_bit_cg[bt] = new();
+                foreach(TX_DATA_QUEUE_EMPTY_bit_cg[bt]) TX_DATA_QUEUE_EMPTY_bit_cg[bt] = new();
+                foreach(IBI_QUEUE_FULL_bit_cg[bt]) IBI_QUEUE_FULL_bit_cg[bt] = new();
+                foreach(IBI_QUEUE_EMPTY_bit_cg[bt]) IBI_QUEUE_EMPTY_bit_cg[bt] = new();
+            end
+            if (has_coverage(UVM_CVR_FIELD_VALS))
+                fld_cg = new();
+        endfunction : build
+    endclass : I3CCSR__I3C_EC__TTI__QUEUE_STATUS
+
+    // Reg - I3CCSR.I3C_EC.TTI.DESC_QUEUE_DEPTH
+    class I3CCSR__I3C_EC__TTI__DESC_QUEUE_DEPTH extends uvm_reg;
+        protected uvm_reg_data_t m_current;
+        protected uvm_reg_data_t m_data;
+        protected bit            m_is_read;
+
+        I3CCSR__I3C_EC__TTI__DESC_QUEUE_DEPTH_bit_cg RX_DESC_QUEUE_DEPTH_bit_cg[8];
+        I3CCSR__I3C_EC__TTI__DESC_QUEUE_DEPTH_bit_cg TX_DESC_QUEUE_DEPTH_bit_cg[8];
+        I3CCSR__I3C_EC__TTI__DESC_QUEUE_DEPTH_fld_cg fld_cg;
+        rand uvm_reg_field RX_DESC_QUEUE_DEPTH;
+        rand uvm_reg_field TX_DESC_QUEUE_DEPTH;
+
+        function new(string name = "I3CCSR__I3C_EC__TTI__DESC_QUEUE_DEPTH");
+            super.new(name, 32, build_coverage(UVM_CVR_ALL));
+        endfunction : new
+        extern virtual function void sample_values();
+        extern protected virtual function void sample(uvm_reg_data_t  data,
+                                                      uvm_reg_data_t  byte_en,
+                                                      bit             is_read,
+                                                      uvm_reg_map     map);
+
+        virtual function void build();
+            this.RX_DESC_QUEUE_DEPTH = new("RX_DESC_QUEUE_DEPTH");
+            this.RX_DESC_QUEUE_DEPTH.configure(this, 8, 0, "RO", 1, 'h0, 1, 1, 0);
+            this.TX_DESC_QUEUE_DEPTH = new("TX_DESC_QUEUE_DEPTH");
+            this.TX_DESC_QUEUE_DEPTH.configure(this, 8, 8, "RO", 1, 'h0, 1, 1, 0);
+            if (has_coverage(UVM_CVR_REG_BITS)) begin
+                foreach(RX_DESC_QUEUE_DEPTH_bit_cg[bt]) RX_DESC_QUEUE_DEPTH_bit_cg[bt] = new();
+                foreach(TX_DESC_QUEUE_DEPTH_bit_cg[bt]) TX_DESC_QUEUE_DEPTH_bit_cg[bt] = new();
+            end
+            if (has_coverage(UVM_CVR_FIELD_VALS))
+                fld_cg = new();
+        endfunction : build
+    endclass : I3CCSR__I3C_EC__TTI__DESC_QUEUE_DEPTH
+
+    // Reg - I3CCSR.I3C_EC.TTI.DATA_QUEUE_DEPTH
+    class I3CCSR__I3C_EC__TTI__DATA_QUEUE_DEPTH extends uvm_reg;
+        protected uvm_reg_data_t m_current;
+        protected uvm_reg_data_t m_data;
+        protected bit            m_is_read;
+
+        I3CCSR__I3C_EC__TTI__DATA_QUEUE_DEPTH_bit_cg RX_DATA_QUEUE_DEPTH_bit_cg[8];
+        I3CCSR__I3C_EC__TTI__DATA_QUEUE_DEPTH_bit_cg TX_DATA_QUEUE_DEPTH_bit_cg[8];
+        I3CCSR__I3C_EC__TTI__DATA_QUEUE_DEPTH_fld_cg fld_cg;
+        rand uvm_reg_field RX_DATA_QUEUE_DEPTH;
+        rand uvm_reg_field TX_DATA_QUEUE_DEPTH;
+
+        function new(string name = "I3CCSR__I3C_EC__TTI__DATA_QUEUE_DEPTH");
+            super.new(name, 32, build_coverage(UVM_CVR_ALL));
+        endfunction : new
+        extern virtual function void sample_values();
+        extern protected virtual function void sample(uvm_reg_data_t  data,
+                                                      uvm_reg_data_t  byte_en,
+                                                      bit             is_read,
+                                                      uvm_reg_map     map);
+
+        virtual function void build();
+            this.RX_DATA_QUEUE_DEPTH = new("RX_DATA_QUEUE_DEPTH");
+            this.RX_DATA_QUEUE_DEPTH.configure(this, 8, 0, "RO", 1, 'h0, 1, 1, 0);
+            this.TX_DATA_QUEUE_DEPTH = new("TX_DATA_QUEUE_DEPTH");
+            this.TX_DATA_QUEUE_DEPTH.configure(this, 8, 8, "RO", 1, 'h0, 1, 1, 0);
+            if (has_coverage(UVM_CVR_REG_BITS)) begin
+                foreach(RX_DATA_QUEUE_DEPTH_bit_cg[bt]) RX_DATA_QUEUE_DEPTH_bit_cg[bt] = new();
+                foreach(TX_DATA_QUEUE_DEPTH_bit_cg[bt]) TX_DATA_QUEUE_DEPTH_bit_cg[bt] = new();
+            end
+            if (has_coverage(UVM_CVR_FIELD_VALS))
+                fld_cg = new();
+        endfunction : build
+    endclass : I3CCSR__I3C_EC__TTI__DATA_QUEUE_DEPTH
+
+    // Reg - I3CCSR.I3C_EC.TTI.IBI_QUEUE_DEPTH
+    class I3CCSR__I3C_EC__TTI__IBI_QUEUE_DEPTH extends uvm_reg;
+        protected uvm_reg_data_t m_current;
+        protected uvm_reg_data_t m_data;
+        protected bit            m_is_read;
+
+        I3CCSR__I3C_EC__TTI__IBI_QUEUE_DEPTH_bit_cg IBI_QUEUE_DEPTH_bit_cg[8];
+        I3CCSR__I3C_EC__TTI__IBI_QUEUE_DEPTH_fld_cg fld_cg;
+        rand uvm_reg_field IBI_QUEUE_DEPTH;
+
+        function new(string name = "I3CCSR__I3C_EC__TTI__IBI_QUEUE_DEPTH");
+            super.new(name, 32, build_coverage(UVM_CVR_ALL));
+        endfunction : new
+        extern virtual function void sample_values();
+        extern protected virtual function void sample(uvm_reg_data_t  data,
+                                                      uvm_reg_data_t  byte_en,
+                                                      bit             is_read,
+                                                      uvm_reg_map     map);
+
+        virtual function void build();
+            this.IBI_QUEUE_DEPTH = new("IBI_QUEUE_DEPTH");
+            this.IBI_QUEUE_DEPTH.configure(this, 8, 0, "RO", 1, 'h0, 1, 1, 0);
+            if (has_coverage(UVM_CVR_REG_BITS)) begin
+                foreach(IBI_QUEUE_DEPTH_bit_cg[bt]) IBI_QUEUE_DEPTH_bit_cg[bt] = new();
+            end
+            if (has_coverage(UVM_CVR_FIELD_VALS))
+                fld_cg = new();
+        endfunction : build
+    endclass : I3CCSR__I3C_EC__TTI__IBI_QUEUE_DEPTH
 
     // Reg - I3CCSR.I3C_EC.TTI.INTERRUPT_STATUS
     class I3CCSR__I3C_EC__TTI__INTERRUPT_STATUS extends uvm_reg;
@@ -4541,6 +4716,10 @@ package I3CCSR_uvm;
         rand I3CCSR__I3C_EC__TTI__CONTROL CONTROL;
         rand I3CCSR__I3C_EC__TTI__STATUS STATUS;
         rand I3CCSR__I3C_EC__TTI__RESET_CONTROL RESET_CONTROL;
+        rand I3CCSR__I3C_EC__TTI__QUEUE_STATUS QUEUE_STATUS;
+        rand I3CCSR__I3C_EC__TTI__DESC_QUEUE_DEPTH DESC_QUEUE_DEPTH;
+        rand I3CCSR__I3C_EC__TTI__DATA_QUEUE_DEPTH DATA_QUEUE_DEPTH;
+        rand I3CCSR__I3C_EC__TTI__IBI_QUEUE_DEPTH IBI_QUEUE_DEPTH;
         rand I3CCSR__I3C_EC__TTI__INTERRUPT_STATUS INTERRUPT_STATUS;
         rand I3CCSR__I3C_EC__TTI__INTERRUPT_ENABLE INTERRUPT_ENABLE;
         rand I3CCSR__I3C_EC__TTI__INTERRUPT_FORCE INTERRUPT_FORCE;
@@ -4580,66 +4759,86 @@ package I3CCSR_uvm;
 
             this.RESET_CONTROL.build();
             this.default_map.add_reg(this.RESET_CONTROL, 'hc);
+            this.QUEUE_STATUS = new("QUEUE_STATUS");
+            this.QUEUE_STATUS.configure(this);
+
+            this.QUEUE_STATUS.build();
+            this.default_map.add_reg(this.QUEUE_STATUS, 'h10);
+            this.DESC_QUEUE_DEPTH = new("DESC_QUEUE_DEPTH");
+            this.DESC_QUEUE_DEPTH.configure(this);
+
+            this.DESC_QUEUE_DEPTH.build();
+            this.default_map.add_reg(this.DESC_QUEUE_DEPTH, 'h14);
+            this.DATA_QUEUE_DEPTH = new("DATA_QUEUE_DEPTH");
+            this.DATA_QUEUE_DEPTH.configure(this);
+
+            this.DATA_QUEUE_DEPTH.build();
+            this.default_map.add_reg(this.DATA_QUEUE_DEPTH, 'h18);
+            this.IBI_QUEUE_DEPTH = new("IBI_QUEUE_DEPTH");
+            this.IBI_QUEUE_DEPTH.configure(this);
+
+            this.IBI_QUEUE_DEPTH.build();
+            this.default_map.add_reg(this.IBI_QUEUE_DEPTH, 'h1c);
             this.INTERRUPT_STATUS = new("INTERRUPT_STATUS");
             this.INTERRUPT_STATUS.configure(this);
 
             this.INTERRUPT_STATUS.build();
-            this.default_map.add_reg(this.INTERRUPT_STATUS, 'h10);
+            this.default_map.add_reg(this.INTERRUPT_STATUS, 'h20);
             this.INTERRUPT_ENABLE = new("INTERRUPT_ENABLE");
             this.INTERRUPT_ENABLE.configure(this);
 
             this.INTERRUPT_ENABLE.build();
-            this.default_map.add_reg(this.INTERRUPT_ENABLE, 'h14);
+            this.default_map.add_reg(this.INTERRUPT_ENABLE, 'h24);
             this.INTERRUPT_FORCE = new("INTERRUPT_FORCE");
             this.INTERRUPT_FORCE.configure(this);
 
             this.INTERRUPT_FORCE.build();
-            this.default_map.add_reg(this.INTERRUPT_FORCE, 'h18);
+            this.default_map.add_reg(this.INTERRUPT_FORCE, 'h28);
             this.RX_DESC_QUEUE_PORT = new("RX_DESC_QUEUE_PORT");
             this.RX_DESC_QUEUE_PORT.configure(this);
 
             this.RX_DESC_QUEUE_PORT.build();
-            this.default_map.add_reg(this.RX_DESC_QUEUE_PORT, 'h1c);
+            this.default_map.add_reg(this.RX_DESC_QUEUE_PORT, 'h2c);
             this.RX_DATA_PORT = new("RX_DATA_PORT");
             this.RX_DATA_PORT.configure(this);
 
             this.RX_DATA_PORT.build();
-            this.default_map.add_reg(this.RX_DATA_PORT, 'h20);
+            this.default_map.add_reg(this.RX_DATA_PORT, 'h30);
             this.TX_DESC_QUEUE_PORT = new("TX_DESC_QUEUE_PORT");
             this.TX_DESC_QUEUE_PORT.configure(this);
 
             this.TX_DESC_QUEUE_PORT.build();
-            this.default_map.add_reg(this.TX_DESC_QUEUE_PORT, 'h24);
+            this.default_map.add_reg(this.TX_DESC_QUEUE_PORT, 'h34);
             this.TX_DATA_PORT = new("TX_DATA_PORT");
             this.TX_DATA_PORT.configure(this);
 
             this.TX_DATA_PORT.build();
-            this.default_map.add_reg(this.TX_DATA_PORT, 'h28);
+            this.default_map.add_reg(this.TX_DATA_PORT, 'h38);
             this.IBI_PORT = new("IBI_PORT");
             this.IBI_PORT.configure(this);
 
             this.IBI_PORT.build();
-            this.default_map.add_reg(this.IBI_PORT, 'h2c);
+            this.default_map.add_reg(this.IBI_PORT, 'h3c);
             this.QUEUE_SIZE = new("QUEUE_SIZE");
             this.QUEUE_SIZE.configure(this);
 
             this.QUEUE_SIZE.build();
-            this.default_map.add_reg(this.QUEUE_SIZE, 'h30);
+            this.default_map.add_reg(this.QUEUE_SIZE, 'h40);
             this.IBI_QUEUE_SIZE = new("IBI_QUEUE_SIZE");
             this.IBI_QUEUE_SIZE.configure(this);
 
             this.IBI_QUEUE_SIZE.build();
-            this.default_map.add_reg(this.IBI_QUEUE_SIZE, 'h34);
+            this.default_map.add_reg(this.IBI_QUEUE_SIZE, 'h44);
             this.QUEUE_THLD_CTRL = new("QUEUE_THLD_CTRL");
             this.QUEUE_THLD_CTRL.configure(this);
 
             this.QUEUE_THLD_CTRL.build();
-            this.default_map.add_reg(this.QUEUE_THLD_CTRL, 'h38);
+            this.default_map.add_reg(this.QUEUE_THLD_CTRL, 'h48);
             this.DATA_BUFFER_THLD_CTRL = new("DATA_BUFFER_THLD_CTRL");
             this.DATA_BUFFER_THLD_CTRL.configure(this);
 
             this.DATA_BUFFER_THLD_CTRL.build();
-            this.default_map.add_reg(this.DATA_BUFFER_THLD_CTRL, 'h3c);
+            this.default_map.add_reg(this.DATA_BUFFER_THLD_CTRL, 'h4c);
         endfunction : build
     endclass : I3CCSR__I3C_EC__TTI
 
@@ -5698,20 +5897,20 @@ package I3CCSR_uvm;
             this.TTI = new("TTI");
             this.TTI.configure(this);
             this.TTI.build();
-            this.default_map.add_submap(this.TTI.default_map, 'hc0);
+            this.default_map.add_submap(this.TTI.default_map, 'h100);
             this.SoCMgmtIf = new("SoCMgmtIf");
             this.SoCMgmtIf.configure(this);
             this.SoCMgmtIf.build();
-            this.default_map.add_submap(this.SoCMgmtIf.default_map, 'h100);
+            this.default_map.add_submap(this.SoCMgmtIf.default_map, 'h180);
             this.CtrlCfg = new("CtrlCfg");
             this.CtrlCfg.configure(this);
             this.CtrlCfg.build();
-            this.default_map.add_submap(this.CtrlCfg.default_map, 'h160);
+            this.default_map.add_submap(this.CtrlCfg.default_map, 'h1e0);
             this.TERMINATION_EXTCAP_HEADER = new("TERMINATION_EXTCAP_HEADER");
             this.TERMINATION_EXTCAP_HEADER.configure(this);
 
             this.TERMINATION_EXTCAP_HEADER.build();
-            this.default_map.add_reg(this.TERMINATION_EXTCAP_HEADER, 'h168);
+            this.default_map.add_reg(this.TERMINATION_EXTCAP_HEADER, 'h1e8);
         endfunction : build
     endclass : I3CCSR__I3C_EC
 

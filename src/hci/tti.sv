@@ -79,6 +79,7 @@ module tti
 
     // In-band Interrupt queue
     input  logic                    ibi_queue_full_i,
+    input  logic                    ibi_queue_empty_i,
     output logic                    ibi_queue_req_o,
     input  logic                    ibi_queue_ack_i,
     output logic [CsrDataWidth-1:0] ibi_queue_data_o,
@@ -86,6 +87,15 @@ module tti
     output logic                    ibi_queue_reg_rst_o,
     input  logic                    ibi_queue_reg_rst_we_i,
     input  logic                    ibi_queue_reg_rst_data_i,
+
+    // Queue depth inputs for status registers
+    input  logic [7:0] rx_desc_queue_depth_i,
+    input  logic [7:0] tx_desc_queue_depth_i,
+    input  logic [7:0] rx_data_queue_depth_i,
+    input  logic [7:0] tx_data_queue_depth_i,
+    input  logic [7:0] ibi_queue_depth_i,
+    input  logic       tx_desc_queue_empty_i,
+    input  logic       tx_data_queue_empty_i,
 
     input logic bypass_i3c_core_i,
 
@@ -262,6 +272,32 @@ module tti
 
     hwif_tti_o.QUEUE_THLD_CTRL.IBI_THLD.we = '0;
     hwif_tti_o.QUEUE_THLD_CTRL.IBI_THLD.we = '0;
+  end
+
+  // Wire queue status and depth registers
+  always_comb begin : wire_queue_status
+    // QUEUE_STATUS - full/empty flags
+    hwif_tti_o.QUEUE_STATUS.RX_DESC_QUEUE_FULL.next  = rx_desc_queue_full_i;
+    hwif_tti_o.QUEUE_STATUS.RX_DESC_QUEUE_EMPTY.next = rx_desc_queue_empty_i;
+    hwif_tti_o.QUEUE_STATUS.TX_DESC_QUEUE_FULL.next  = tx_desc_queue_full_i;
+    hwif_tti_o.QUEUE_STATUS.TX_DESC_QUEUE_EMPTY.next = tx_desc_queue_empty_i;
+    hwif_tti_o.QUEUE_STATUS.RX_DATA_QUEUE_FULL.next  = rx_data_queue_full_i;
+    hwif_tti_o.QUEUE_STATUS.RX_DATA_QUEUE_EMPTY.next = rx_data_queue_empty_i;
+    hwif_tti_o.QUEUE_STATUS.TX_DATA_QUEUE_FULL.next  = tx_data_queue_full_i;
+    hwif_tti_o.QUEUE_STATUS.TX_DATA_QUEUE_EMPTY.next = tx_data_queue_empty_i;
+    hwif_tti_o.QUEUE_STATUS.IBI_QUEUE_FULL.next      = ibi_queue_full_i;
+    hwif_tti_o.QUEUE_STATUS.IBI_QUEUE_EMPTY.next     = ibi_queue_empty_i;
+
+    // DESC_QUEUE_DEPTH
+    hwif_tti_o.DESC_QUEUE_DEPTH.RX_DESC_QUEUE_DEPTH.next = rx_desc_queue_depth_i;
+    hwif_tti_o.DESC_QUEUE_DEPTH.TX_DESC_QUEUE_DEPTH.next = tx_desc_queue_depth_i;
+
+    // DATA_QUEUE_DEPTH
+    hwif_tti_o.DATA_QUEUE_DEPTH.RX_DATA_QUEUE_DEPTH.next = rx_data_queue_depth_i;
+    hwif_tti_o.DATA_QUEUE_DEPTH.TX_DATA_QUEUE_DEPTH.next = tx_data_queue_depth_i;
+
+    // IBI_QUEUE_DEPTH
+    hwif_tti_o.IBI_QUEUE_DEPTH.IBI_QUEUE_DEPTH.next = ibi_queue_depth_i;
   end
 
   assign hwif_tti_o.STATUS.PROTOCOL_ERROR.next = err_i;

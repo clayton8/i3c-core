@@ -220,7 +220,7 @@ module controller_standby_i3c
   logic ibi_begin;
   logic ibi_done;
 
-  i3c_byte_t ccc_data;
+  ccc_cmd_e  ccc_data;
   logic      ccc_valid;
   logic      ccc_done;
   logic      ccc_next;
@@ -241,6 +241,18 @@ module controller_standby_i3c
   // CCCs
   logic get_acccr;
   logic get_mxds;
+
+  // TE0 error signals
+  logic te0_enable;
+  logic te0_err;
+
+  // CCC parity error signals (for Protocol Error Report)
+  logic te1_err_ccc;      // CCC command parity error (TE1)
+  logic te2_err_ccc;      // CCC data parity error (TE2)
+  logic framing_err_ccc;  // DA padding errors from CCC (for Protocol Error Report)
+
+  // Private write parity error (from target FSM)
+  logic te2_err_priv_wr;
 
   logic escalate_reset;
   logic rstact_armed;
@@ -393,7 +405,7 @@ module controller_standby_i3c
     .target_reset_detect_i      (target_reset_detect),
 
     .hdr_exit_detect_i          (hdr_exit_detect),
-    .is_in_hdr_mode_o           (is_in_hdr_mode),
+    .in_hdr_mode_i              (is_in_hdr_mode),
 
     .ibi_enable_i               (ibi_enable_i),
     .ibi_pending_i              (ibi_pending),
@@ -405,13 +417,16 @@ module controller_standby_i3c
     .is_ccc_done_i              (ccc_done),
     .is_next_ccc_i              (ccc_next),
 
+    .te0_enable_i               (te0_enable),
+    .te0_err_o                  (te0_err),
+
     .is_hotjoin_done_i          (hotjoin_done),
 
     .last_addr_o                (bus_addr_o),
     .last_addr_valid_o          (bus_addr_valid_o),
 
     .rx_overflow_err_o          (rx_overflow_err),
-    .parity_err_o,
+    .te2_err_priv_wr            (te2_err_priv_wr),
     .virtual_device_sel_o,
     .xfer_in_progress_o
   );
@@ -426,6 +441,12 @@ module controller_standby_i3c
     .ccc_valid_i(ccc_valid),
     .done_fsm_o (ccc_done),
     .next_ccc_o (ccc_next),
+
+    .te0_enable_o(te0_enable),
+    .te0_err_i   (te0_err),
+    .te1_err_o   (te1_err_ccc),
+    .te2_err_ccc_o(te2_err_ccc),
+    .framing_err_o(framing_err_ccc),
 
     .bus_start_det_i (ctrl_bus_i.start_det),
     .bus_rstart_det_i(ctrl_bus_i.rstart_det),
@@ -476,14 +497,8 @@ module controller_standby_i3c
     .ent_tm_o(/* unused */),
     .tm_o    (/* unused */),
 
-    .ent_hdr_0_o(/* unused */),
-    .ent_hdr_1_o(/* unused */),
-    .ent_hdr_2_o(/* unused */),
-    .ent_hdr_3_o(/* unused */),
-    .ent_hdr_4_o(/* unused */),
-    .ent_hdr_5_o(/* unused */),
-    .ent_hdr_6_o(/* unused */),
-    .ent_hdr_7_o(/* unused */),
+    .exit_hdr_i    (hdr_exit_detect),
+    .in_hdr_mode_o (is_in_hdr_mode),
 
     .dasa_o,
     .set_dasa_o,
@@ -624,6 +639,13 @@ module controller_standby_i3c
     .bus_idle_o       (bus_idle),
     .bus_available_o  (bus_available)
   );
+
+  // Protocol Error Report (GETSTATUS Format 1): errors Controller cannot detect
+  // - te1_err_ccc: CCC command parity error (TE1)
+  // - te2_err_ccc: CCC data parity error (TE2)
+  // - te2_err_priv_wr: Private write parity error (TE2)
+  // - framing_err_ccc: SETDASA/SETNEWDA padding bit error (Bit[0] != 0)
+  assign parity_err_o = te1_err_ccc | te2_err_ccc | te2_err_priv_wr | framing_err_ccc;
 
   logic rx_error;
 

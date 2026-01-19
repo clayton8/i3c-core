@@ -2064,7 +2064,7 @@ reg_map = Munch.fromDict({
                 "CAP_LENGTH": {
                     "low": 8,
                     "mask": 16776960,
-                    "reset": 16,
+                    "reset": 32,
                     "sw": "r",
                     "hw": "r",
                     "woclr": 0,
@@ -2901,10 +2901,10 @@ reg_map = Munch.fromDict({
             }
         },
         "TTI": {
-            "start_addr": 448,
+            "start_addr": 512,
             "EXTCAP_HEADER": {
-                "base_addr": 448,
-                "offset": 448,
+                "base_addr": 512,
+                "offset": 512,
                 "CAP_ID": {
                     "low": 0,
                     "mask": 255,
@@ -2918,7 +2918,7 @@ reg_map = Munch.fromDict({
                 "CAP_LENGTH": {
                     "low": 8,
                     "mask": 16776960,
-                    "reset": 16,
+                    "reset": 32,
                     "sw": "r",
                     "hw": "r",
                     "woclr": 0,
@@ -2927,8 +2927,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "CONTROL": {
-                "base_addr": 452,
-                "offset": 452,
+                "base_addr": 516,
+                "offset": 516,
                 "HJ_EN": {
                     "low": 10,
                     "mask": 1024,
@@ -2971,8 +2971,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "STATUS": {
-                "base_addr": 456,
-                "offset": 456,
+                "base_addr": 520,
+                "offset": 520,
                 "PROTOCOL_ERROR": {
                     "low": 13,
                     "mask": 8192,
@@ -2995,8 +2995,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "RESET_CONTROL": {
-                "base_addr": 460,
-                "offset": 460,
+                "base_addr": 524,
+                "offset": 524,
                 "SOFT_RST": {
                     "low": 0,
                     "mask": 1,
@@ -3058,9 +3058,175 @@ reg_map = Munch.fromDict({
                     "hwclr": 0
                 }
             },
+            "QUEUE_STATUS": {
+                "base_addr": 528,
+                "offset": 528,
+                "RX_DESC_QUEUE_FULL": {
+                    "low": 0,
+                    "mask": 1,
+                    "reset": 0,
+                    "sw": "r",
+                    "hw": "w",
+                    "woclr": 0,
+                    "rclr": 0,
+                    "hwclr": 0
+                },
+                "RX_DESC_QUEUE_EMPTY": {
+                    "low": 1,
+                    "mask": 2,
+                    "reset": 1,
+                    "sw": "r",
+                    "hw": "w",
+                    "woclr": 0,
+                    "rclr": 0,
+                    "hwclr": 0
+                },
+                "TX_DESC_QUEUE_FULL": {
+                    "low": 2,
+                    "mask": 4,
+                    "reset": 0,
+                    "sw": "r",
+                    "hw": "w",
+                    "woclr": 0,
+                    "rclr": 0,
+                    "hwclr": 0
+                },
+                "TX_DESC_QUEUE_EMPTY": {
+                    "low": 3,
+                    "mask": 8,
+                    "reset": 1,
+                    "sw": "r",
+                    "hw": "w",
+                    "woclr": 0,
+                    "rclr": 0,
+                    "hwclr": 0
+                },
+                "RX_DATA_QUEUE_FULL": {
+                    "low": 4,
+                    "mask": 16,
+                    "reset": 0,
+                    "sw": "r",
+                    "hw": "w",
+                    "woclr": 0,
+                    "rclr": 0,
+                    "hwclr": 0
+                },
+                "RX_DATA_QUEUE_EMPTY": {
+                    "low": 5,
+                    "mask": 32,
+                    "reset": 1,
+                    "sw": "r",
+                    "hw": "w",
+                    "woclr": 0,
+                    "rclr": 0,
+                    "hwclr": 0
+                },
+                "TX_DATA_QUEUE_FULL": {
+                    "low": 6,
+                    "mask": 64,
+                    "reset": 0,
+                    "sw": "r",
+                    "hw": "w",
+                    "woclr": 0,
+                    "rclr": 0,
+                    "hwclr": 0
+                },
+                "TX_DATA_QUEUE_EMPTY": {
+                    "low": 7,
+                    "mask": 128,
+                    "reset": 1,
+                    "sw": "r",
+                    "hw": "w",
+                    "woclr": 0,
+                    "rclr": 0,
+                    "hwclr": 0
+                },
+                "IBI_QUEUE_FULL": {
+                    "low": 8,
+                    "mask": 256,
+                    "reset": 0,
+                    "sw": "r",
+                    "hw": "w",
+                    "woclr": 0,
+                    "rclr": 0,
+                    "hwclr": 0
+                },
+                "IBI_QUEUE_EMPTY": {
+                    "low": 9,
+                    "mask": 512,
+                    "reset": 1,
+                    "sw": "r",
+                    "hw": "w",
+                    "woclr": 0,
+                    "rclr": 0,
+                    "hwclr": 0
+                }
+            },
+            "DESC_QUEUE_DEPTH": {
+                "base_addr": 532,
+                "offset": 532,
+                "RX_DESC_QUEUE_DEPTH": {
+                    "low": 0,
+                    "mask": 255,
+                    "reset": 0,
+                    "sw": "r",
+                    "hw": "w",
+                    "woclr": 0,
+                    "rclr": 0,
+                    "hwclr": 0
+                },
+                "TX_DESC_QUEUE_DEPTH": {
+                    "low": 8,
+                    "mask": 65280,
+                    "reset": 0,
+                    "sw": "r",
+                    "hw": "w",
+                    "woclr": 0,
+                    "rclr": 0,
+                    "hwclr": 0
+                }
+            },
+            "DATA_QUEUE_DEPTH": {
+                "base_addr": 536,
+                "offset": 536,
+                "RX_DATA_QUEUE_DEPTH": {
+                    "low": 0,
+                    "mask": 255,
+                    "reset": 0,
+                    "sw": "r",
+                    "hw": "w",
+                    "woclr": 0,
+                    "rclr": 0,
+                    "hwclr": 0
+                },
+                "TX_DATA_QUEUE_DEPTH": {
+                    "low": 8,
+                    "mask": 65280,
+                    "reset": 0,
+                    "sw": "r",
+                    "hw": "w",
+                    "woclr": 0,
+                    "rclr": 0,
+                    "hwclr": 0
+                }
+            },
+            "IBI_QUEUE_DEPTH": {
+                "base_addr": 540,
+                "offset": 540,
+                "IBI_QUEUE_DEPTH": {
+                    "low": 0,
+                    "mask": 255,
+                    "reset": 0,
+                    "sw": "r",
+                    "hw": "w",
+                    "woclr": 0,
+                    "rclr": 0,
+                    "hwclr": 0
+                }
+            },
             "INTERRUPT_STATUS": {
-                "base_addr": 464,
-                "offset": 464,
+                "base_addr": 544,
+                "offset": 544,
                 "RX_DESC_STAT": {
                     "low": 0,
                     "mask": 1,
@@ -3203,8 +3369,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "INTERRUPT_ENABLE": {
-                "base_addr": 468,
-                "offset": 468,
+                "base_addr": 548,
+                "offset": 548,
                 "RX_DESC_STAT_EN": {
                     "low": 0,
                     "mask": 1,
@@ -3337,8 +3503,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "INTERRUPT_FORCE": {
-                "base_addr": 472,
-                "offset": 472,
+                "base_addr": 552,
+                "offset": 552,
                 "RX_DESC_STAT_FORCE": {
                     "low": 0,
                     "mask": 1,
@@ -3471,8 +3637,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "RX_DESC_QUEUE_PORT": {
-                "base_addr": 476,
-                "offset": 476,
+                "base_addr": 556,
+                "offset": 556,
                 "RX_DESC": {
                     "low": 0,
                     "mask": 4294967295,
@@ -3485,8 +3651,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "RX_DATA_PORT": {
-                "base_addr": 480,
-                "offset": 480,
+                "base_addr": 560,
+                "offset": 560,
                 "RX_DATA": {
                     "low": 0,
                     "mask": 4294967295,
@@ -3499,8 +3665,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "TX_DESC_QUEUE_PORT": {
-                "base_addr": 484,
-                "offset": 484,
+                "base_addr": 564,
+                "offset": 564,
                 "TX_DESC": {
                     "low": 0,
                     "mask": 4294967295,
@@ -3513,8 +3679,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "TX_DATA_PORT": {
-                "base_addr": 488,
-                "offset": 488,
+                "base_addr": 568,
+                "offset": 568,
                 "TX_DATA": {
                     "low": 0,
                     "mask": 4294967295,
@@ -3527,8 +3693,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "IBI_PORT": {
-                "base_addr": 492,
-                "offset": 492,
+                "base_addr": 572,
+                "offset": 572,
                 "IBI_DATA": {
                     "low": 0,
                     "mask": 4294967295,
@@ -3541,8 +3707,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "QUEUE_SIZE": {
-                "base_addr": 496,
-                "offset": 496,
+                "base_addr": 576,
+                "offset": 576,
                 "RX_DESC_BUFFER_SIZE": {
                     "low": 0,
                     "mask": 255,
@@ -3585,8 +3751,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "IBI_QUEUE_SIZE": {
-                "base_addr": 500,
-                "offset": 500,
+                "base_addr": 580,
+                "offset": 580,
                 "IBI_QUEUE_SIZE": {
                     "low": 0,
                     "mask": 255,
@@ -3599,8 +3765,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "QUEUE_THLD_CTRL": {
-                "base_addr": 504,
-                "offset": 504,
+                "base_addr": 584,
+                "offset": 584,
                 "TX_DESC_THLD": {
                     "low": 0,
                     "mask": 255,
@@ -3633,8 +3799,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "DATA_BUFFER_THLD_CTRL": {
-                "base_addr": 508,
-                "offset": 508,
+                "base_addr": 588,
+                "offset": 588,
                 "TX_DATA_THLD": {
                     "low": 0,
                     "mask": 7,
@@ -3678,10 +3844,10 @@ reg_map = Munch.fromDict({
             }
         },
         "SOCMGMTIF": {
-            "start_addr": 512,
+            "start_addr": 640,
             "EXTCAP_HEADER": {
-                "base_addr": 512,
-                "offset": 512,
+                "base_addr": 640,
+                "offset": 640,
                 "CAP_ID": {
                     "low": 0,
                     "mask": 255,
@@ -3704,8 +3870,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "SOC_MGMT_CONTROL": {
-                "base_addr": 516,
-                "offset": 516,
+                "base_addr": 644,
+                "offset": 644,
                 "PLACEHOLDER": {
                     "low": 0,
                     "mask": 4294967295,
@@ -3718,8 +3884,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "SOC_MGMT_STATUS": {
-                "base_addr": 520,
-                "offset": 520,
+                "base_addr": 648,
+                "offset": 648,
                 "PLACEHOLDER": {
                     "low": 0,
                     "mask": 4294967295,
@@ -3732,8 +3898,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "REC_INTF_CFG": {
-                "base_addr": 524,
-                "offset": 524,
+                "base_addr": 652,
+                "offset": 652,
                 "REC_INTF_BYPASS": {
                     "low": 0,
                     "mask": 1,
@@ -3756,8 +3922,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "REC_INTF_REG_W1C_ACCESS": {
-                "base_addr": 528,
-                "offset": 528,
+                "base_addr": 656,
+                "offset": 656,
                 "DEVICE_RESET_CTRL": {
                     "low": 0,
                     "mask": 255,
@@ -3790,8 +3956,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "SOC_MGMT_RSVD_2": {
-                "base_addr": 532,
-                "offset": 532,
+                "base_addr": 660,
+                "offset": 660,
                 "PLACEHOLDER": {
                     "low": 0,
                     "mask": 4294967295,
@@ -3804,8 +3970,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "SOC_MGMT_RSVD_3": {
-                "base_addr": 536,
-                "offset": 536,
+                "base_addr": 664,
+                "offset": 664,
                 "PLACEHOLDER": {
                     "low": 0,
                     "mask": 4294967295,
@@ -3818,8 +3984,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "SOC_PAD_CONF": {
-                "base_addr": 540,
-                "offset": 540,
+                "base_addr": 668,
+                "offset": 668,
                 "INPUT_ENABLE": {
                     "low": 0,
                     "mask": 1,
@@ -3912,8 +4078,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "SOC_PAD_ATTR": {
-                "base_addr": 544,
-                "offset": 544,
+                "base_addr": 672,
+                "offset": 672,
                 "DRIVE_SLEW_RATE": {
                     "low": 8,
                     "mask": 65280,
@@ -3936,8 +4102,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "SOC_MGMT_FEATURE_2": {
-                "base_addr": 548,
-                "offset": 548,
+                "base_addr": 676,
+                "offset": 676,
                 "PLACEHOLDER": {
                     "low": 0,
                     "mask": 4294967295,
@@ -3950,8 +4116,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "SOC_MGMT_FEATURE_3": {
-                "base_addr": 552,
-                "offset": 552,
+                "base_addr": 680,
+                "offset": 680,
                 "PLACEHOLDER": {
                     "low": 0,
                     "mask": 4294967295,
@@ -3964,8 +4130,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "T_R_REG": {
-                "base_addr": 556,
-                "offset": 556,
+                "base_addr": 684,
+                "offset": 684,
                 "T_R": {
                     "low": 0,
                     "mask": 1048575,
@@ -3978,8 +4144,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "T_F_REG": {
-                "base_addr": 560,
-                "offset": 560,
+                "base_addr": 688,
+                "offset": 688,
                 "T_F": {
                     "low": 0,
                     "mask": 1048575,
@@ -3992,8 +4158,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "T_SU_DAT_REG": {
-                "base_addr": 564,
-                "offset": 564,
+                "base_addr": 692,
+                "offset": 692,
                 "T_SU_DAT": {
                     "low": 0,
                     "mask": 1048575,
@@ -4006,8 +4172,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "T_HD_DAT_REG": {
-                "base_addr": 568,
-                "offset": 568,
+                "base_addr": 696,
+                "offset": 696,
                 "T_HD_DAT": {
                     "low": 0,
                     "mask": 1048575,
@@ -4020,8 +4186,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "T_HIGH_REG": {
-                "base_addr": 572,
-                "offset": 572,
+                "base_addr": 700,
+                "offset": 700,
                 "T_HIGH": {
                     "low": 0,
                     "mask": 1048575,
@@ -4034,8 +4200,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "T_LOW_REG": {
-                "base_addr": 576,
-                "offset": 576,
+                "base_addr": 704,
+                "offset": 704,
                 "T_LOW": {
                     "low": 0,
                     "mask": 1048575,
@@ -4048,8 +4214,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "T_HD_STA_REG": {
-                "base_addr": 580,
-                "offset": 580,
+                "base_addr": 708,
+                "offset": 708,
                 "T_HD_STA": {
                     "low": 0,
                     "mask": 1048575,
@@ -4062,8 +4228,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "T_SU_STA_REG": {
-                "base_addr": 584,
-                "offset": 584,
+                "base_addr": 712,
+                "offset": 712,
                 "T_SU_STA": {
                     "low": 0,
                     "mask": 1048575,
@@ -4076,8 +4242,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "T_SU_STO_REG": {
-                "base_addr": 588,
-                "offset": 588,
+                "base_addr": 716,
+                "offset": 716,
                 "T_SU_STO": {
                     "low": 0,
                     "mask": 1048575,
@@ -4090,8 +4256,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "T_FREE_REG": {
-                "base_addr": 592,
-                "offset": 592,
+                "base_addr": 720,
+                "offset": 720,
                 "T_FREE": {
                     "low": 0,
                     "mask": 4294967295,
@@ -4104,8 +4270,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "T_AVAL_REG": {
-                "base_addr": 596,
-                "offset": 596,
+                "base_addr": 724,
+                "offset": 724,
                 "T_AVAL": {
                     "low": 0,
                     "mask": 4294967295,
@@ -4118,8 +4284,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "T_IDLE_REG": {
-                "base_addr": 600,
-                "offset": 600,
+                "base_addr": 728,
+                "offset": 728,
                 "T_IDLE": {
                     "low": 0,
                     "mask": 4294967295,
@@ -4133,10 +4299,10 @@ reg_map = Munch.fromDict({
             }
         },
         "CTRLCFG": {
-            "start_addr": 608,
+            "start_addr": 736,
             "EXTCAP_HEADER": {
-                "base_addr": 608,
-                "offset": 608,
+                "base_addr": 736,
+                "offset": 736,
                 "CAP_ID": {
                     "low": 0,
                     "mask": 255,
@@ -4159,8 +4325,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "CONTROLLER_CONFIG": {
-                "base_addr": 612,
-                "offset": 612,
+                "base_addr": 740,
+                "offset": 740,
                 "OPERATION_MODE": {
                     "low": 4,
                     "mask": 48,
@@ -4174,8 +4340,8 @@ reg_map = Munch.fromDict({
             }
         },
         "TERMINATION_EXTCAP_HEADER": {
-            "base_addr": 616,
-            "offset": 616,
+            "base_addr": 744,
+            "offset": 744,
             "CAP_ID": {
                 "low": 0,
                 "mask": 255,
