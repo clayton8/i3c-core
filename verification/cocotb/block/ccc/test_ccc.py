@@ -13,6 +13,69 @@ from cocotb.triggers import ClockCycles, RisingEdge, with_timeout
 _STATUS = 0xC64B
 
 
+# Detect if we're running on Verilator (packed struct access) or VCS (hierarchical struct access)
+def is_verilator():
+    return cocotb.SIM_NAME.lower().startswith("verilator")
+
+
+# Helper functions for struct access (works with both VCS and Verilator)
+# bus_tx_rsp_t = {error[2], idle[1], done[0]}
+def set_bus_tx_rsp(dut, done=0, idle=0, error=0):
+    if is_verilator():
+        dut.bus_tx_rsp_i.value = (error << 2) | (idle << 1) | done
+    else:
+        dut.bus_tx_rsp_i.error.value = error
+        dut.bus_tx_rsp_i.idle.value = idle
+        dut.bus_tx_rsp_i.done.value = done
+
+
+# bus_rx_rsp_t = {idle[9], done[8], data[7:0]}
+def set_bus_rx_rsp(dut, data=0, done=0, idle=0):
+    if is_verilator():
+        dut.bus_rx_rsp_i.value = (idle << 9) | (done << 8) | (data & 0xFF)
+    else:
+        dut.bus_rx_rsp_i.idle.value = idle
+        dut.bus_rx_rsp_i.done.value = done
+        dut.bus_rx_rsp_i.data.value = data & 0xFF
+
+
+# bus_rx_req_t = {req_byte[1], req_bit[0]}
+def get_rx_req_bit(dut):
+    if is_verilator():
+        return int(dut.bus_rx_req_o.value) & 0x1
+    else:
+        return int(dut.bus_rx_req_o.req_bit.value)
+
+
+def get_rx_req_byte(dut):
+    if is_verilator():
+        return (int(dut.bus_rx_req_o.value) >> 1) & 0x1
+    else:
+        return int(dut.bus_rx_req_o.req_byte.value)
+
+
+# bus_tx_req_t = {drive_type[10], req_byte[9], req_bit[8], data[7:0]}
+def get_tx_req_bit(dut):
+    if is_verilator():
+        return (int(dut.bus_tx_req_o.value) >> 8) & 0x1
+    else:
+        return int(dut.bus_tx_req_o.req_bit.value)
+
+
+def get_tx_req_byte(dut):
+    if is_verilator():
+        return (int(dut.bus_tx_req_o.value) >> 9) & 0x1
+    else:
+        return int(dut.bus_tx_req_o.req_byte.value)
+
+
+def get_tx_req_data(dut):
+    if is_verilator():
+        return int(dut.bus_tx_req_o.value) & 0xFF
+    else:
+        return int(dut.bus_tx_req_o.data.value)
+
+
 def initialize_inputs(dut):
     dut.ccc_data_i.value = 0
     dut.ccc_valid_i.value = 0
@@ -22,15 +85,9 @@ def initialize_inputs(dut):
     dut.arbitration_lost_i.value = 0
     dut.te0_err_i.value = 0
     
-    # Bus TX response (struct: {error, idle, done})
-    dut.bus_tx_rsp_i.error.value = 0
-    dut.bus_tx_rsp_i.idle.value = 0
-    dut.bus_tx_rsp_i.done.value = 0
-    
-    # Bus RX response (struct: {idle, done, data[7:0]})
-    dut.bus_rx_rsp_i.idle.value = 0
-    dut.bus_rx_rsp_i.done.value = 0
-    dut.bus_rx_rsp_i.data.value = 0
+    # Bus TX/RX response - use helper for simulator compatibility
+    set_bus_tx_rsp(dut, done=0, idle=0, error=0)
+    set_bus_rx_rsp(dut, data=0, done=0, idle=0)
     
     dut.target_sta_address_i.value = 0
     dut.target_sta_address_valid_i.value = 0
@@ -82,13 +139,12 @@ async def rx_bit(dut, value):
     bus_rx_rsp_t = {idle, done, data[7:0]}
     """
     # Wait for req_bit to go high
-    while not dut.bus_rx_req_o.req_bit.value:
+    while not get_rx_req_bit(dut):
         await RisingEdge(dut.clk_i)
     await ClockCycles(dut.clk_i, 3)
-    dut.bus_rx_rsp_i.data.value = value & 0xFF
-    dut.bus_rx_rsp_i.done.value = 1
+    set_bus_rx_rsp(dut, data=value & 0xFF, done=1)
     await ClockCycles(dut.clk_i, 1)
-    dut.bus_rx_rsp_i.done.value = 0
+    set_bus_rx_rsp(dut, data=0, done=0)
 
 
 async def rx_byte(dut, value):
@@ -97,13 +153,12 @@ async def rx_byte(dut, value):
     bus_rx_rsp_t = {idle, done, data[7:0]}
     """
     # Wait for req_byte to go high
-    while not dut.bus_rx_req_o.req_byte.value:
+    while not get_rx_req_byte(dut):
         await RisingEdge(dut.clk_i)
     await ClockCycles(dut.clk_i, 3)
-    dut.bus_rx_rsp_i.data.value = value & 0xFF
-    dut.bus_rx_rsp_i.done.value = 1
+    set_bus_rx_rsp(dut, data=value & 0xFF, done=1)
     await ClockCycles(dut.clk_i, 1)
-    dut.bus_rx_rsp_i.done.value = 0
+    set_bus_rx_rsp(dut, data=0, done=0)
 
 
 async def tx_bit(dut):
@@ -112,13 +167,13 @@ async def tx_bit(dut):
     bus_tx_req_t = {drive_type, req_byte, req_bit, data[7:0]}
     """
     # Wait for req_bit to go high
-    while not dut.bus_tx_req_o.req_bit.value:
+    while not get_tx_req_bit(dut):
         await RisingEdge(dut.clk_i)
-    val = int(dut.bus_tx_req_o.data.value)  # Get the data from the request
+    val = get_tx_req_data(dut)  # Get the data from the request
     await ClockCycles(dut.clk_i, 3)
-    dut.bus_tx_rsp_i.done.value = 1
+    set_bus_tx_rsp(dut, done=1)
     await ClockCycles(dut.clk_i, 1)
-    dut.bus_tx_rsp_i.done.value = 0
+    set_bus_tx_rsp(dut, done=0)
     return val & 0xFF
 
 
@@ -128,13 +183,13 @@ async def tx_byte(dut):
     bus_tx_req_t = {drive_type, req_byte, req_bit, data[7:0]}
     """
     # Wait for req_byte to go high
-    while not dut.bus_tx_req_o.req_byte.value:
+    while not get_tx_req_byte(dut):
         await RisingEdge(dut.clk_i)
-    val = int(dut.bus_tx_req_o.data.value)  # Get the data from the request
+    val = get_tx_req_data(dut)  # Get the data from the request
     await ClockCycles(dut.clk_i, 10)
-    dut.bus_tx_rsp_i.done.value = 1
+    set_bus_tx_rsp(dut, done=1)
     await ClockCycles(dut.clk_i, 1)
-    dut.bus_tx_rsp_i.done.value = 0
+    set_bus_tx_rsp(dut, done=0)
     return val & 0xFF
 
 
