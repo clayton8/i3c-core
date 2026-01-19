@@ -1053,6 +1053,93 @@ package I3CCSR_pkg;
 
     typedef struct packed{
         logic next;
+    } I3CCSR__I3C_EC__TTI__QUEUE_STATUS__RX_DESC_QUEUE_FULL__in_t;
+
+    typedef struct packed{
+        logic next;
+    } I3CCSR__I3C_EC__TTI__QUEUE_STATUS__RX_DESC_QUEUE_EMPTY__in_t;
+
+    typedef struct packed{
+        logic next;
+    } I3CCSR__I3C_EC__TTI__QUEUE_STATUS__TX_DESC_QUEUE_FULL__in_t;
+
+    typedef struct packed{
+        logic next;
+    } I3CCSR__I3C_EC__TTI__QUEUE_STATUS__TX_DESC_QUEUE_EMPTY__in_t;
+
+    typedef struct packed{
+        logic next;
+    } I3CCSR__I3C_EC__TTI__QUEUE_STATUS__RX_DATA_QUEUE_FULL__in_t;
+
+    typedef struct packed{
+        logic next;
+    } I3CCSR__I3C_EC__TTI__QUEUE_STATUS__RX_DATA_QUEUE_EMPTY__in_t;
+
+    typedef struct packed{
+        logic next;
+    } I3CCSR__I3C_EC__TTI__QUEUE_STATUS__TX_DATA_QUEUE_FULL__in_t;
+
+    typedef struct packed{
+        logic next;
+    } I3CCSR__I3C_EC__TTI__QUEUE_STATUS__TX_DATA_QUEUE_EMPTY__in_t;
+
+    typedef struct packed{
+        logic next;
+    } I3CCSR__I3C_EC__TTI__QUEUE_STATUS__IBI_QUEUE_FULL__in_t;
+
+    typedef struct packed{
+        logic next;
+    } I3CCSR__I3C_EC__TTI__QUEUE_STATUS__IBI_QUEUE_EMPTY__in_t;
+
+    typedef struct packed{
+        I3CCSR__I3C_EC__TTI__QUEUE_STATUS__RX_DESC_QUEUE_FULL__in_t RX_DESC_QUEUE_FULL;
+        I3CCSR__I3C_EC__TTI__QUEUE_STATUS__RX_DESC_QUEUE_EMPTY__in_t RX_DESC_QUEUE_EMPTY;
+        I3CCSR__I3C_EC__TTI__QUEUE_STATUS__TX_DESC_QUEUE_FULL__in_t TX_DESC_QUEUE_FULL;
+        I3CCSR__I3C_EC__TTI__QUEUE_STATUS__TX_DESC_QUEUE_EMPTY__in_t TX_DESC_QUEUE_EMPTY;
+        I3CCSR__I3C_EC__TTI__QUEUE_STATUS__RX_DATA_QUEUE_FULL__in_t RX_DATA_QUEUE_FULL;
+        I3CCSR__I3C_EC__TTI__QUEUE_STATUS__RX_DATA_QUEUE_EMPTY__in_t RX_DATA_QUEUE_EMPTY;
+        I3CCSR__I3C_EC__TTI__QUEUE_STATUS__TX_DATA_QUEUE_FULL__in_t TX_DATA_QUEUE_FULL;
+        I3CCSR__I3C_EC__TTI__QUEUE_STATUS__TX_DATA_QUEUE_EMPTY__in_t TX_DATA_QUEUE_EMPTY;
+        I3CCSR__I3C_EC__TTI__QUEUE_STATUS__IBI_QUEUE_FULL__in_t IBI_QUEUE_FULL;
+        I3CCSR__I3C_EC__TTI__QUEUE_STATUS__IBI_QUEUE_EMPTY__in_t IBI_QUEUE_EMPTY;
+    } I3CCSR__I3C_EC__TTI__QUEUE_STATUS__in_t;
+
+    typedef struct packed{
+        logic [7:0] next;
+    } I3CCSR__I3C_EC__TTI__DESC_QUEUE_DEPTH__RX_DESC_QUEUE_DEPTH__in_t;
+
+    typedef struct packed{
+        logic [7:0] next;
+    } I3CCSR__I3C_EC__TTI__DESC_QUEUE_DEPTH__TX_DESC_QUEUE_DEPTH__in_t;
+
+    typedef struct packed{
+        I3CCSR__I3C_EC__TTI__DESC_QUEUE_DEPTH__RX_DESC_QUEUE_DEPTH__in_t RX_DESC_QUEUE_DEPTH;
+        I3CCSR__I3C_EC__TTI__DESC_QUEUE_DEPTH__TX_DESC_QUEUE_DEPTH__in_t TX_DESC_QUEUE_DEPTH;
+    } I3CCSR__I3C_EC__TTI__DESC_QUEUE_DEPTH__in_t;
+
+    typedef struct packed{
+        logic [7:0] next;
+    } I3CCSR__I3C_EC__TTI__DATA_QUEUE_DEPTH__RX_DATA_QUEUE_DEPTH__in_t;
+
+    typedef struct packed{
+        logic [7:0] next;
+    } I3CCSR__I3C_EC__TTI__DATA_QUEUE_DEPTH__TX_DATA_QUEUE_DEPTH__in_t;
+
+    typedef struct packed{
+        I3CCSR__I3C_EC__TTI__DATA_QUEUE_DEPTH__RX_DATA_QUEUE_DEPTH__in_t RX_DATA_QUEUE_DEPTH;
+        I3CCSR__I3C_EC__TTI__DATA_QUEUE_DEPTH__TX_DATA_QUEUE_DEPTH__in_t TX_DATA_QUEUE_DEPTH;
+    } I3CCSR__I3C_EC__TTI__DATA_QUEUE_DEPTH__in_t;
+
+    typedef struct packed{
+        logic [7:0] next;
+    } I3CCSR__I3C_EC__TTI__IBI_QUEUE_DEPTH__IBI_QUEUE_DEPTH__in_t;
+
+    typedef struct packed{
+        I3CCSR__I3C_EC__TTI__IBI_QUEUE_DEPTH__IBI_QUEUE_DEPTH__in_t IBI_QUEUE_DEPTH;
+    } I3CCSR__I3C_EC__TTI__IBI_QUEUE_DEPTH__in_t;
+
+    typedef struct packed{
+        logic next;
         logic we;
     } I3CCSR__I3C_EC__TTI__INTERRUPT_STATUS__RX_DESC_STAT__in_t;
 
@@ -1193,6 +1280,10 @@ package I3CCSR_pkg;
         I3CCSR__I3C_EC__TTI__CONTROL__in_t CONTROL;
         I3CCSR__I3C_EC__TTI__STATUS__in_t STATUS;
         I3CCSR__I3C_EC__TTI__RESET_CONTROL__in_t RESET_CONTROL;
+        I3CCSR__I3C_EC__TTI__QUEUE_STATUS__in_t QUEUE_STATUS;
+        I3CCSR__I3C_EC__TTI__DESC_QUEUE_DEPTH__in_t DESC_QUEUE_DEPTH;
+        I3CCSR__I3C_EC__TTI__DATA_QUEUE_DEPTH__in_t DATA_QUEUE_DEPTH;
+        I3CCSR__I3C_EC__TTI__IBI_QUEUE_DEPTH__in_t IBI_QUEUE_DEPTH;
         I3CCSR__I3C_EC__TTI__INTERRUPT_STATUS__in_t INTERRUPT_STATUS;
         I3CCSR__I3C_EC__TTI__RX_DESC_QUEUE_PORT__in_t RX_DESC_QUEUE_PORT;
         I3CCSR__I3C_EC__TTI__RX_DATA_PORT__in_t RX_DATA_PORT;

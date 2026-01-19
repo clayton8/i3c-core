@@ -534,6 +534,7 @@ module i3c
   logic ibi_status_we;
 
   logic controller_error;
+  logic recovery_protocol_err;
 
   logic recovery_mode_enter;
   logic recovery_mode_enabled;
@@ -750,6 +751,7 @@ module i3c
 
       .err_o(controller_error),
       .recovery_mode_enter_i(recovery_mode_enter),
+      .recovery_protocol_err_i(recovery_protocol_err),
       .virtual_device_sel_o(virtual_device_sel),
       .xfer_in_progress_o(xfer_in_progress)
   );
@@ -1009,6 +1011,7 @@ module i3c
 
       // TTI In-band Interrupt (IBI) queue
       .ibi_queue_full_i        (tti_ibi_full),
+      .ibi_queue_empty_i       (tti_ibi_empty),
       .ibi_queue_req_o         (csr_tti_ibi_req),
       .ibi_queue_ack_i         (csr_tti_ibi_ack),
       .ibi_queue_data_o        (csr_tti_ibi_data),
@@ -1016,6 +1019,15 @@ module i3c
       .ibi_queue_reg_rst_o     (csr_tti_ibi_reg_rst),
       .ibi_queue_reg_rst_we_i  (csr_tti_ibi_reg_rst_we),
       .ibi_queue_reg_rst_data_i(csr_tti_ibi_reg_rst_data),
+
+      // Queue depth and status for CSR registers
+      .rx_desc_queue_depth_i   (8'(tti_rx_desc_depth)),
+      .tx_desc_queue_depth_i   (8'(tti_tx_desc_depth)),
+      .rx_data_queue_depth_i   (8'(tti_rx_depth)),
+      .tx_data_queue_depth_i   (8'(tti_tx_depth)),
+      .ibi_queue_depth_i       (8'(tti_ibi_depth)),
+      .tx_desc_queue_empty_i   (tti_tx_desc_empty),
+      .tx_data_queue_empty_i   (tti_tx_empty),
 
       .bypass_i3c_core_i(bypass_i3c_core),
 
@@ -1198,7 +1210,8 @@ module i3c
       .recovery_mode_enter_o(recovery_mode_enter),
       .recovery_mode_enabled_o(recovery_mode_enabled),
       .virtual_device_sel_i(virtual_device_sel),
-      .xfer_in_progress_i(xfer_in_progress)
+      .xfer_in_progress_i(xfer_in_progress),
+      .protocol_err_o(recovery_protocol_err)
   );
 
   // I3C PHY

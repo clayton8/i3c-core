@@ -1076,16 +1076,16 @@ When set to 0, it holds execution of enqueued commands and runs current command 
 
 - Absolute Address: 0x100
 - Base Offset: 0x100
-- Size: 0x16C
+- Size: 0x1EC
 
 |Offset|        Identifier       |               Name               |
 |------|-------------------------|----------------------------------|
 | 0x000|     SecFwRecoveryIf     |Secure Firmware Recovery Interface|
 | 0x080|      StdbyCtrlMode      |      Standby Controller Mode     |
-| 0x0C0|           TTI           |   Target Transaction Interface   |
-| 0x100|        SoCMgmtIf        |     SoC Management Interface     |
-| 0x160|         CtrlCfg         |         Controller Config        |
-| 0x168|TERMINATION_EXTCAP_HEADER|                 —                |
+| 0x100|           TTI           |   Target Transaction Interface   |
+| 0x180|        SoCMgmtIf        |     SoC Management Interface     |
+| 0x1E0|         CtrlCfg         |         Controller Config        |
+| 0x1E8|TERMINATION_EXTCAP_HEADER|                 —                |
 
 ## SecFwRecoveryIf register file
 
@@ -1969,7 +1969,7 @@ Component Memory Space (CMS):</p>
 |Bits|Identifier|Access|Reset|   Name   |
 |----|----------|------|-----|----------|
 | 7:0|  CAP_ID  |   r  | 0x12|  CAP_ID  |
-|23:8|CAP_LENGTH|   r  | 0x10|CAP_LENGTH|
+|23:8|CAP_LENGTH|   r  | 0x20|CAP_LENGTH|
 
 #### CAP_ID field
 
@@ -2646,9 +2646,9 @@ shall be revoked) with this Target Reset Pattern.</p>
 
 ## TTI register file
 
-- Absolute Address: 0x1C0
-- Base Offset: 0xC0
-- Size: 0x40
+- Absolute Address: 0x200
+- Base Offset: 0x100
+- Size: 0x50
 
 |Offset|      Identifier     |              Name             |
 |------|---------------------|-------------------------------|
@@ -2656,29 +2656,33 @@ shall be revoked) with this Target Reset Pattern.</p>
 | 0x04 |       CONTROL       |          TTI Control          |
 | 0x08 |        STATUS       |           TTI Status          |
 | 0x0C |    RESET_CONTROL    |    TTI Queue Reset Control    |
-| 0x10 |   INTERRUPT_STATUS  |      TTI Interrupt Status     |
-| 0x14 |   INTERRUPT_ENABLE  |      TTI Interrupt Enable     |
-| 0x18 |   INTERRUPT_FORCE   |      TTI Interrupt Force      |
-| 0x1C |  RX_DESC_QUEUE_PORT |  TTI RX Descriptor Queue Port |
-| 0x20 |     RX_DATA_PORT    |        TTI RX Data Port       |
-| 0x24 |  TX_DESC_QUEUE_PORT |  TTI TX Descriptor Queue Port |
-| 0x28 |     TX_DATA_PORT    |        TTI TX Data Port       |
-| 0x2C |       IBI_PORT      |       TTI IBI Data Port       |
-| 0x30 |      QUEUE_SIZE     |         TTI Queue Size        |
-| 0x34 |    IBI_QUEUE_SIZE   |       TTI IBI Queue Size      |
-| 0x38 |   QUEUE_THLD_CTRL   |  TTI Queue Threshold Control  |
-| 0x3C |DATA_BUFFER_THLD_CTRL|TTI IBI Queue Threshold Control|
+| 0x10 |     QUEUE_STATUS    |        TTI Queue Status       |
+| 0x14 |   DESC_QUEUE_DEPTH  |   TTI Descriptor Queue Depth  |
+| 0x18 |   DATA_QUEUE_DEPTH  |      TTI Data Queue Depth     |
+| 0x1C |   IBI_QUEUE_DEPTH   |      TTI IBI Queue Depth      |
+| 0x20 |   INTERRUPT_STATUS  |      TTI Interrupt Status     |
+| 0x24 |   INTERRUPT_ENABLE  |      TTI Interrupt Enable     |
+| 0x28 |   INTERRUPT_FORCE   |      TTI Interrupt Force      |
+| 0x2C |  RX_DESC_QUEUE_PORT |  TTI RX Descriptor Queue Port |
+| 0x30 |     RX_DATA_PORT    |        TTI RX Data Port       |
+| 0x34 |  TX_DESC_QUEUE_PORT |  TTI TX Descriptor Queue Port |
+| 0x38 |     TX_DATA_PORT    |        TTI TX Data Port       |
+| 0x3C |       IBI_PORT      |       TTI IBI Data Port       |
+| 0x40 |      QUEUE_SIZE     |         TTI Queue Size        |
+| 0x44 |    IBI_QUEUE_SIZE   |       TTI IBI Queue Size      |
+| 0x48 |   QUEUE_THLD_CTRL   |  TTI Queue Threshold Control  |
+| 0x4C |DATA_BUFFER_THLD_CTRL|TTI IBI Queue Threshold Control|
 
 ### EXTCAP_HEADER register
 
-- Absolute Address: 0x1C0
+- Absolute Address: 0x200
 - Base Offset: 0x0
 - Size: 0x4
 
 |Bits|Identifier|Access|Reset|   Name   |
 |----|----------|------|-----|----------|
 | 7:0|  CAP_ID  |   r  | 0xC4|  CAP_ID  |
-|23:8|CAP_LENGTH|   r  | 0x10|CAP_LENGTH|
+|23:8|CAP_LENGTH|   r  | 0x20|CAP_LENGTH|
 
 #### CAP_ID field
 
@@ -2690,7 +2694,7 @@ shall be revoked) with this Target Reset Pattern.</p>
 
 ### CONTROL register
 
-- Absolute Address: 0x1C4
+- Absolute Address: 0x204
 - Base Offset: 0x4
 - Size: 0x4
 
@@ -2735,7 +2739,7 @@ DISINT bit in the DISEC command.</p>
 
 ### STATUS register
 
-- Absolute Address: 0x1C8
+- Absolute Address: 0x208
 - Base Offset: 0x8
 - Size: 0x4
 
@@ -2768,7 +2772,7 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### RESET_CONTROL register
 
-- Absolute Address: 0x1CC
+- Absolute Address: 0x20C
 - Base Offset: 0xC
 - Size: 0x4
 
@@ -2807,10 +2811,129 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 <p>TTI IBI Queue Buffer Software Reset</p>
 
+### QUEUE_STATUS register
+
+- Absolute Address: 0x210
+- Base Offset: 0x10
+- Size: 0x4
+
+<p>Dynamic queue full/empty status for debug and monitoring</p>
+
+|Bits|     Identifier    |Access|Reset|        Name       |
+|----|-------------------|------|-----|-------------------|
+|  0 | RX_DESC_QUEUE_FULL|   r  | 0x0 | RX_DESC_QUEUE_FULL|
+|  1 |RX_DESC_QUEUE_EMPTY|   r  | 0x1 |RX_DESC_QUEUE_EMPTY|
+|  2 | TX_DESC_QUEUE_FULL|   r  | 0x0 | TX_DESC_QUEUE_FULL|
+|  3 |TX_DESC_QUEUE_EMPTY|   r  | 0x1 |TX_DESC_QUEUE_EMPTY|
+|  4 | RX_DATA_QUEUE_FULL|   r  | 0x0 | RX_DATA_QUEUE_FULL|
+|  5 |RX_DATA_QUEUE_EMPTY|   r  | 0x1 |RX_DATA_QUEUE_EMPTY|
+|  6 | TX_DATA_QUEUE_FULL|   r  | 0x0 | TX_DATA_QUEUE_FULL|
+|  7 |TX_DATA_QUEUE_EMPTY|   r  | 0x1 |TX_DATA_QUEUE_EMPTY|
+|  8 |   IBI_QUEUE_FULL  |   r  | 0x0 |   IBI_QUEUE_FULL  |
+|  9 |  IBI_QUEUE_EMPTY  |   r  | 0x1 |  IBI_QUEUE_EMPTY  |
+
+#### RX_DESC_QUEUE_FULL field
+
+<p>RX Descriptor Queue is full</p>
+
+#### RX_DESC_QUEUE_EMPTY field
+
+<p>RX Descriptor Queue is empty</p>
+
+#### TX_DESC_QUEUE_FULL field
+
+<p>TX Descriptor Queue is full</p>
+
+#### TX_DESC_QUEUE_EMPTY field
+
+<p>TX Descriptor Queue is empty</p>
+
+#### RX_DATA_QUEUE_FULL field
+
+<p>RX Data Queue is full</p>
+
+#### RX_DATA_QUEUE_EMPTY field
+
+<p>RX Data Queue is empty</p>
+
+#### TX_DATA_QUEUE_FULL field
+
+<p>TX Data Queue is full</p>
+
+#### TX_DATA_QUEUE_EMPTY field
+
+<p>TX Data Queue is empty</p>
+
+#### IBI_QUEUE_FULL field
+
+<p>IBI Queue is full</p>
+
+#### IBI_QUEUE_EMPTY field
+
+<p>IBI Queue is empty</p>
+
+### DESC_QUEUE_DEPTH register
+
+- Absolute Address: 0x214
+- Base Offset: 0x14
+- Size: 0x4
+
+<p>Current number of entries in descriptor queues</p>
+
+|Bits|     Identifier    |Access|Reset|        Name       |
+|----|-------------------|------|-----|-------------------|
+| 7:0|RX_DESC_QUEUE_DEPTH|   r  | 0x0 |RX_DESC_QUEUE_DEPTH|
+|15:8|TX_DESC_QUEUE_DEPTH|   r  | 0x0 |TX_DESC_QUEUE_DEPTH|
+
+#### RX_DESC_QUEUE_DEPTH field
+
+<p>Number of entries in RX Descriptor Queue</p>
+
+#### TX_DESC_QUEUE_DEPTH field
+
+<p>Number of entries in TX Descriptor Queue</p>
+
+### DATA_QUEUE_DEPTH register
+
+- Absolute Address: 0x218
+- Base Offset: 0x18
+- Size: 0x4
+
+<p>Current number of DWORD entries in data queues</p>
+
+|Bits|     Identifier    |Access|Reset|        Name       |
+|----|-------------------|------|-----|-------------------|
+| 7:0|RX_DATA_QUEUE_DEPTH|   r  | 0x0 |RX_DATA_QUEUE_DEPTH|
+|15:8|TX_DATA_QUEUE_DEPTH|   r  | 0x0 |TX_DATA_QUEUE_DEPTH|
+
+#### RX_DATA_QUEUE_DEPTH field
+
+<p>Number of DWORD entries in RX Data Queue</p>
+
+#### TX_DATA_QUEUE_DEPTH field
+
+<p>Number of DWORD entries in TX Data Queue</p>
+
+### IBI_QUEUE_DEPTH register
+
+- Absolute Address: 0x21C
+- Base Offset: 0x1C
+- Size: 0x4
+
+<p>Current number of entries in IBI queue</p>
+
+|Bits|   Identifier  |Access|Reset|      Name     |
+|----|---------------|------|-----|---------------|
+| 7:0|IBI_QUEUE_DEPTH|   r  | 0x0 |IBI_QUEUE_DEPTH|
+
+#### IBI_QUEUE_DEPTH field
+
+<p>Number of entries in IBI Queue</p>
+
 ### INTERRUPT_STATUS register
 
-- Absolute Address: 0x1D0
-- Base Offset: 0x10
+- Absolute Address: 0x220
+- Base Offset: 0x20
 - Size: 0x4
 
 <p>Interrupt Status</p>
@@ -2890,8 +3013,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### INTERRUPT_ENABLE register
 
-- Absolute Address: 0x1D4
-- Base Offset: 0x14
+- Absolute Address: 0x224
+- Base Offset: 0x24
 - Size: 0x4
 
 <p>Interrupt Enable</p>
@@ -2966,8 +3089,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### INTERRUPT_FORCE register
 
-- Absolute Address: 0x1D8
-- Base Offset: 0x18
+- Absolute Address: 0x228
+- Base Offset: 0x28
 - Size: 0x4
 
 <p>Interrupt Force</p>
@@ -3042,8 +3165,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### RX_DESC_QUEUE_PORT register
 
-- Absolute Address: 0x1DC
-- Base Offset: 0x1C
+- Absolute Address: 0x22C
+- Base Offset: 0x2C
 - Size: 0x4
 
 <p>RX Descriptor Queue Port</p>
@@ -3058,8 +3181,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### RX_DATA_PORT register
 
-- Absolute Address: 0x1E0
-- Base Offset: 0x20
+- Absolute Address: 0x230
+- Base Offset: 0x30
 - Size: 0x4
 
 <p>RX Data Port</p>
@@ -3074,8 +3197,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### TX_DESC_QUEUE_PORT register
 
-- Absolute Address: 0x1E4
-- Base Offset: 0x24
+- Absolute Address: 0x234
+- Base Offset: 0x34
 - Size: 0x4
 
 <p>TX Descriptor Queue Port</p>
@@ -3090,8 +3213,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### TX_DATA_PORT register
 
-- Absolute Address: 0x1E8
-- Base Offset: 0x28
+- Absolute Address: 0x238
+- Base Offset: 0x38
 - Size: 0x4
 
 <p>TX Data Port</p>
@@ -3106,8 +3229,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### IBI_PORT register
 
-- Absolute Address: 0x1EC
-- Base Offset: 0x2C
+- Absolute Address: 0x23C
+- Base Offset: 0x3C
 - Size: 0x4
 
 <p>IBI Data Port</p>
@@ -3122,8 +3245,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### QUEUE_SIZE register
 
-- Absolute Address: 0x1F0
-- Base Offset: 0x30
+- Absolute Address: 0x240
+- Base Offset: 0x40
 - Size: 0x4
 
 <p>Queue Size</p>
@@ -3153,8 +3276,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### IBI_QUEUE_SIZE register
 
-- Absolute Address: 0x1F4
-- Base Offset: 0x34
+- Absolute Address: 0x244
+- Base Offset: 0x44
 - Size: 0x4
 
 <p>IBI Queue Size</p>
@@ -3169,8 +3292,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### QUEUE_THLD_CTRL register
 
-- Absolute Address: 0x1F8
-- Base Offset: 0x38
+- Absolute Address: 0x248
+- Base Offset: 0x48
 - Size: 0x4
 
 <p>Queue Threshold Control</p>
@@ -3195,8 +3318,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### DATA_BUFFER_THLD_CTRL register
 
-- Absolute Address: 0x1FC
-- Base Offset: 0x3C
+- Absolute Address: 0x24C
+- Base Offset: 0x4C
 - Size: 0x4
 
 <p>IBI Queue Threshold Control</p>
@@ -3226,8 +3349,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ## SoCMgmtIf register file
 
-- Absolute Address: 0x200
-- Base Offset: 0x100
+- Absolute Address: 0x280
+- Base Offset: 0x180
 - Size: 0x5C
 
 |Offset|       Identifier      |                  Name                  |
@@ -3258,7 +3381,7 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### EXTCAP_HEADER register
 
-- Absolute Address: 0x200
+- Absolute Address: 0x280
 - Base Offset: 0x0
 - Size: 0x4
 
@@ -3277,7 +3400,7 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### SOC_MGMT_CONTROL register
 
-- Absolute Address: 0x204
+- Absolute Address: 0x284
 - Base Offset: 0x4
 - Size: 0x4
 
@@ -3291,7 +3414,7 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### SOC_MGMT_STATUS register
 
-- Absolute Address: 0x208
+- Absolute Address: 0x288
 - Base Offset: 0x8
 - Size: 0x4
 
@@ -3305,7 +3428,7 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### REC_INTF_CFG register
 
-- Absolute Address: 0x20C
+- Absolute Address: 0x28C
 - Base Offset: 0xC
 - Size: 0x4
 
@@ -3332,7 +3455,7 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### REC_INTF_REG_W1C_ACCESS register
 
-- Absolute Address: 0x210
+- Absolute Address: 0x290
 - Base Offset: 0x10
 - Size: 0x4
 
@@ -3356,7 +3479,7 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### SOC_MGMT_RSVD_2 register
 
-- Absolute Address: 0x214
+- Absolute Address: 0x294
 - Base Offset: 0x14
 - Size: 0x4
 
@@ -3370,7 +3493,7 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### SOC_MGMT_RSVD_3 register
 
-- Absolute Address: 0x218
+- Absolute Address: 0x298
 - Base Offset: 0x18
 - Size: 0x4
 
@@ -3384,7 +3507,7 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### SOC_PAD_CONF register
 
-- Absolute Address: 0x21C
+- Absolute Address: 0x29C
 - Base Offset: 0x1C
 - Size: 0x4
 
@@ -3458,7 +3581,7 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### SOC_PAD_ATTR register
 
-- Absolute Address: 0x220
+- Absolute Address: 0x2A0
 - Base Offset: 0x20
 - Size: 0x4
 
@@ -3481,7 +3604,7 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### SOC_MGMT_FEATURE_2 register
 
-- Absolute Address: 0x224
+- Absolute Address: 0x2A4
 - Base Offset: 0x24
 - Size: 0x4
 
@@ -3495,7 +3618,7 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### SOC_MGMT_FEATURE_3 register
 
-- Absolute Address: 0x228
+- Absolute Address: 0x2A8
 - Base Offset: 0x28
 - Size: 0x4
 
@@ -3509,7 +3632,7 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### T_R_REG register
 
-- Absolute Address: 0x22C
+- Absolute Address: 0x2AC
 - Base Offset: 0x2C
 - Size: 0x4
 
@@ -3523,7 +3646,7 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### T_F_REG register
 
-- Absolute Address: 0x230
+- Absolute Address: 0x2B0
 - Base Offset: 0x30
 - Size: 0x4
 
@@ -3537,7 +3660,7 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### T_SU_DAT_REG register
 
-- Absolute Address: 0x234
+- Absolute Address: 0x2B4
 - Base Offset: 0x34
 - Size: 0x4
 
@@ -3551,7 +3674,7 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### T_HD_DAT_REG register
 
-- Absolute Address: 0x238
+- Absolute Address: 0x2B8
 - Base Offset: 0x38
 - Size: 0x4
 
@@ -3565,7 +3688,7 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### T_HIGH_REG register
 
-- Absolute Address: 0x23C
+- Absolute Address: 0x2BC
 - Base Offset: 0x3C
 - Size: 0x4
 
@@ -3579,7 +3702,7 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### T_LOW_REG register
 
-- Absolute Address: 0x240
+- Absolute Address: 0x2C0
 - Base Offset: 0x40
 - Size: 0x4
 
@@ -3593,7 +3716,7 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### T_HD_STA_REG register
 
-- Absolute Address: 0x244
+- Absolute Address: 0x2C4
 - Base Offset: 0x44
 - Size: 0x4
 
@@ -3607,7 +3730,7 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### T_SU_STA_REG register
 
-- Absolute Address: 0x248
+- Absolute Address: 0x2C8
 - Base Offset: 0x48
 - Size: 0x4
 
@@ -3621,7 +3744,7 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### T_SU_STO_REG register
 
-- Absolute Address: 0x24C
+- Absolute Address: 0x2CC
 - Base Offset: 0x4C
 - Size: 0x4
 
@@ -3635,7 +3758,7 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### T_FREE_REG register
 
-- Absolute Address: 0x250
+- Absolute Address: 0x2D0
 - Base Offset: 0x50
 - Size: 0x4
 
@@ -3649,7 +3772,7 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### T_AVAL_REG register
 
-- Absolute Address: 0x254
+- Absolute Address: 0x2D4
 - Base Offset: 0x54
 - Size: 0x4
 
@@ -3663,7 +3786,7 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### T_IDLE_REG register
 
-- Absolute Address: 0x258
+- Absolute Address: 0x2D8
 - Base Offset: 0x58
 - Size: 0x4
 
@@ -3677,8 +3800,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ## CtrlCfg register file
 
-- Absolute Address: 0x260
-- Base Offset: 0x160
+- Absolute Address: 0x2E0
+- Base Offset: 0x1E0
 - Size: 0x8
 
 |Offset|    Identifier   |       Name      |
@@ -3688,7 +3811,7 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### EXTCAP_HEADER register
 
-- Absolute Address: 0x260
+- Absolute Address: 0x2E0
 - Base Offset: 0x0
 - Size: 0x4
 
@@ -3707,7 +3830,7 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### CONTROLLER_CONFIG register
 
-- Absolute Address: 0x264
+- Absolute Address: 0x2E4
 - Base Offset: 0x4
 - Size: 0x4
 
@@ -3721,8 +3844,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### TERMINATION_EXTCAP_HEADER register
 
-- Absolute Address: 0x268
-- Base Offset: 0x168
+- Absolute Address: 0x2E8
+- Base Offset: 0x1E8
 - Size: 0x4
 
 <p>Register after the last EC must advertise ID == 0.

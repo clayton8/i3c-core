@@ -96,7 +96,7 @@ module i3c_target_fsm import i3c_pkg::*; #(
 
   input  logic target_reset_detect_i,
   input  logic hdr_exit_detect_i,
-  output logic is_in_hdr_mode_o,
+  input  logic in_hdr_mode_i,          // From CCC module: currently in HDR mode
   input  logic ibi_enable_i,           // TTI.CONTROL.IBI_EN
 
   // Interfacing with IBI subFSMs
@@ -105,14 +105,18 @@ module i3c_target_fsm import i3c_pkg::*; #(
   input  logic ibi_done_i,
 
   // Interfacing with CCC subFSMs
-  output i3c_byte_t ccc_data_o,
+  output ccc_cmd_e  ccc_data_o,
   output logic      ccc_valid_o,
   input  logic      is_ccc_done_i,
   input  logic      is_next_ccc_i,
 
+  // TE0 Error Interface (HDR Exit condition)
+  input  logic      te0_enable_i,
+  output logic      te0_err_o,
+
   input  logic is_hotjoin_done_i,
 
-  output logic parity_err_o,
+  output logic te2_err_priv_wr,
   output logic rx_overflow_err_o,
   output logic virtual_device_sel_o,
   output logic xfer_in_progress_o,
@@ -151,7 +155,7 @@ module i3c_target_fsm import i3c_pkg::*; #(
 
   logic is_our_addr_match, is_virtual_addr_match, is_any_addr_match, is_rsvd_byte_match;
 
-  i3c_byte_t ccc_data;
+  ccc_cmd_e  ccc_data;
   logic      ccc_data_valid;
 
   // State definitions
@@ -206,16 +210,15 @@ module i3c_target_fsm import i3c_pkg::*; #(
     // Reset pattern causes reset of the core
     // so "Done" return state is not needed.
     DoRstAction,
-    DoHdrExit
+
+    // HDR Mode: ignore all bus activity until HDR exit pattern detected
+    InHDRMode
   } primary_state_e;
 
   primary_state_e state_q, state_d;
 
   // Either Start or RStart condition
   assign bus_start_det = bus_start_det_i | bus_rstart_det_i;
-
-  // TODO HDR mode tracking
-  assign is_in_hdr_mode_o = 1'b0;
 
   // TODO
   assign tx_host_nack_o = 1'b0;
@@ -249,6 +252,10 @@ module i3c_target_fsm import i3c_pkg::*; #(
   assign is_any_addr_match = is_our_addr_match || is_virtual_addr_match;
 
   assign is_rsvd_byte_match = ({bus_addr_q, bus_rnw_q} == 8'hFC); // `I3C_RSVD_BYTE
+
+  // TE0 error: Invalid reserved address + RnW combinations
+  // Uses shared function from i3c_pkg to ensure consistency with ccc.sv
+  assign te0_err_o = te0_enable_i && is_te0_rsvd_addr_err(bus_addr_q, bus_rnw_q);
 
   // Latch whether this transaction is to be NACK'd.
   always_ff @(posedge clk_i or negedge rst_ni) begin : clk_nack_transaction
@@ -299,7 +306,7 @@ module i3c_target_fsm import i3c_pkg::*; #(
     if (~rst_ni) begin
       parity_err <= 1'b0;
     end else begin
-      if (parity_err_o) begin
+      if (te2_err_priv_wr) begin
         parity_err <= 1'b1;
       end else if (target_idle_o) begin
         parity_err <= 1'b0;
@@ -364,7 +371,7 @@ module i3c_target_fsm import i3c_pkg::*; #(
   // Logic for latching CCC code
   always_ff @(posedge clk_i or negedge rst_ni) begin : latch_ccc_data
     if (~rst_ni) begin
-      ccc_data_o <= '0;
+      ccc_data_o <= ccc_cmd_e'('0);
     end else if (ccc_data_valid) begin
       ccc_data_o <= ccc_data;
     end
@@ -375,11 +382,11 @@ module i3c_target_fsm import i3c_pkg::*; #(
     ibi_begin_o   = 1'b0;
     tx_pr_start_o = 1'b0;
     tx_pr_abort_o = 1'b0;
-    parity_err_o  = 1'b0;
+    te2_err_priv_wr  = 1'b0;
 
     nack_transaction_d = 1'b0;
 
-    ccc_data       = '0;
+    ccc_data       = ccc_cmd_e'('0);
     ccc_data_valid = 1'b0;
     ccc_valid_o    = 1'b0;
 
@@ -462,7 +469,7 @@ module i3c_target_fsm import i3c_pkg::*; #(
           bus_rnw_d      = bus_rx_rsp_i.data[0];
           // If we got CCC, this is the Command Code, we need to latch it for the CCC FSM
           ccc_data_valid = 1'b1;
-          ccc_data       = bus_rx_rsp_i.data;
+          ccc_data       = ccc_cmd_e'(bus_rx_rsp_i.data);
 
           state_d = DoCCC;
         end
@@ -525,7 +532,7 @@ module i3c_target_fsm import i3c_pkg::*; #(
         bus_rx_req_bit = !bus_start_det;
 
         if (bus_rx_rsp_i.done) begin
-          parity_err_o = (parity_bit != bus_rx_rsp_i.data[0]);
+          te2_err_priv_wr = (parity_bit != bus_rx_rsp_i.data[0]);
           state_d = RxPWriteData;
         end
       end
@@ -586,7 +593,12 @@ module i3c_target_fsm import i3c_pkg::*; #(
         end
       end
       DoneCCC: begin
-        state_d = Idle;
+        // After CCC completes, check if we entered HDR mode
+        if (in_hdr_mode_i) begin
+          state_d = InHDRMode;
+        end else begin
+          state_d = Idle;
+        end
       end
 
       DoRstAction: begin
@@ -594,9 +606,13 @@ module i3c_target_fsm import i3c_pkg::*; #(
         // The transition should be explicit to avoid undefined behavior
         state_d = Idle;
       end
-      DoHdrExit: begin
-        state_d = Idle;
+
+      InHDRMode: begin
+        // Stay in HDR mode, ignoring all bus activity.
+        // Only hdr_exit_detect_i (handled below) can exit this state.
+        state_d = InHDRMode;
       end
+
       DoHotJoin: begin
         if (is_hotjoin_done_i) begin
           state_d = Idle;
@@ -605,12 +621,17 @@ module i3c_target_fsm import i3c_pkg::*; #(
       default: ;
     endcase
 
-    if (bus_stop_det_i) begin
-      // Bypass any state transition when a stop is received
+    // Priority overrides for bus conditions and HDR mode
+    // Order matters: HDR exit has highest priority, then HDR mode entry, then STOP
+    if (hdr_exit_detect_i) begin
+      // HDR Exit Pattern detected - exit HDR mode
       state_d = Idle;
-    end else if (hdr_exit_detect_i) begin
-      // Bypass state transition for HDR Exit Pattern
-      state_d = DoHdrExit;
+    end else if (in_hdr_mode_i) begin
+      // Enter InHDRMode immediately when in_hdr_mode_i asserts
+      state_d = InHDRMode;
+    end else if (bus_stop_det_i) begin
+      // STOP received in SDR mode - return to Idle
+      state_d = Idle;
     end
   end
 
@@ -705,7 +726,7 @@ module i3c_target_fsm import i3c_pkg::*; #(
       bins valid_stop_trans =
         (RxFByte, CheckFByte, TxAckFByte, RxSByte, RxSByteRepeated, CheckSByte, TxAckSByte,
          RxPWriteData, RxPWriteTbit, TxPReadData, TxPReadTbit, WaitStart, DoIBI, DoneIBI, DoCCC,
-         DoneCCC, DoHotJoin, DoRstAction, DoHdrExit => Idle);
+         DoneCCC, DoHotJoin, DoRstAction, InHDRMode => Idle);
     }
     BusStartEvent: coverpoint bus_start_det_i {
       bins start_detected = {1'b1};

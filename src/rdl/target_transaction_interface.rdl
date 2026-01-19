@@ -17,7 +17,7 @@ regfile TargetTransactionInterfaceRegisters #(
             desc = "Capability Structure Length in DWORDs";
             sw = r;
             hw = r;
-            reset = 16'h0010;
+            reset = 16'h0020;
         } CAP_LENGTH[23:8];
         field {
             name = "CAP_ID";
@@ -184,6 +184,127 @@ regfile TargetTransactionInterfaceRegisters #(
             reset = 1'b0;
         } SOFT_RST[0:0];
     } RESET_CONTROL;
+    reg {
+        name = "TTI Queue Status";
+        desc = "Dynamic queue full/empty status for debug and monitoring";
+        field {
+            name = "IBI_QUEUE_EMPTY";
+            desc = "IBI Queue is empty";
+            sw = r;
+            hw = w;
+            reset = 1'b1;
+        } IBI_QUEUE_EMPTY[9:9];
+        field {
+            name = "IBI_QUEUE_FULL";
+            desc = "IBI Queue is full";
+            sw = r;
+            hw = w;
+            reset = 1'b0;
+        } IBI_QUEUE_FULL[8:8];
+        field {
+            name = "TX_DATA_QUEUE_EMPTY";
+            desc = "TX Data Queue is empty";
+            sw = r;
+            hw = w;
+            reset = 1'b1;
+        } TX_DATA_QUEUE_EMPTY[7:7];
+        field {
+            name = "TX_DATA_QUEUE_FULL";
+            desc = "TX Data Queue is full";
+            sw = r;
+            hw = w;
+            reset = 1'b0;
+        } TX_DATA_QUEUE_FULL[6:6];
+        field {
+            name = "RX_DATA_QUEUE_EMPTY";
+            desc = "RX Data Queue is empty";
+            sw = r;
+            hw = w;
+            reset = 1'b1;
+        } RX_DATA_QUEUE_EMPTY[5:5];
+        field {
+            name = "RX_DATA_QUEUE_FULL";
+            desc = "RX Data Queue is full";
+            sw = r;
+            hw = w;
+            reset = 1'b0;
+        } RX_DATA_QUEUE_FULL[4:4];
+        field {
+            name = "TX_DESC_QUEUE_EMPTY";
+            desc = "TX Descriptor Queue is empty";
+            sw = r;
+            hw = w;
+            reset = 1'b1;
+        } TX_DESC_QUEUE_EMPTY[3:3];
+        field {
+            name = "TX_DESC_QUEUE_FULL";
+            desc = "TX Descriptor Queue is full";
+            sw = r;
+            hw = w;
+            reset = 1'b0;
+        } TX_DESC_QUEUE_FULL[2:2];
+        field {
+            name = "RX_DESC_QUEUE_EMPTY";
+            desc = "RX Descriptor Queue is empty";
+            sw = r;
+            hw = w;
+            reset = 1'b1;
+        } RX_DESC_QUEUE_EMPTY[1:1];
+        field {
+            name = "RX_DESC_QUEUE_FULL";
+            desc = "RX Descriptor Queue is full";
+            sw = r;
+            hw = w;
+            reset = 1'b0;
+        } RX_DESC_QUEUE_FULL[0:0];
+    } QUEUE_STATUS;
+    reg {
+        name = "TTI Descriptor Queue Depth";
+        desc = "Current number of entries in descriptor queues";
+        field {
+            name = "TX_DESC_QUEUE_DEPTH";
+            desc = "Number of entries in TX Descriptor Queue";
+            sw = r;
+            hw = w;
+            reset = 8'h00;
+        } TX_DESC_QUEUE_DEPTH[15:8];
+        field {
+            name = "RX_DESC_QUEUE_DEPTH";
+            desc = "Number of entries in RX Descriptor Queue";
+            sw = r;
+            hw = w;
+            reset = 8'h00;
+        } RX_DESC_QUEUE_DEPTH[7:0];
+    } DESC_QUEUE_DEPTH;
+    reg {
+        name = "TTI Data Queue Depth";
+        desc = "Current number of DWORD entries in data queues";
+        field {
+            name = "TX_DATA_QUEUE_DEPTH";
+            desc = "Number of DWORD entries in TX Data Queue";
+            sw = r;
+            hw = w;
+            reset = 8'h00;
+        } TX_DATA_QUEUE_DEPTH[15:8];
+        field {
+            name = "RX_DATA_QUEUE_DEPTH";
+            desc = "Number of DWORD entries in RX Data Queue";
+            sw = r;
+            hw = w;
+            reset = 8'h00;
+        } RX_DATA_QUEUE_DEPTH[7:0];
+    } DATA_QUEUE_DEPTH;
+    reg {
+        name = "TTI IBI Queue Depth";
+        desc = "Current number of entries in IBI queue";
+        field {
+            name = "IBI_QUEUE_DEPTH";
+            desc = "Number of entries in IBI Queue";
+            sw = r;
+            hw = w;
+            reset = 8'h00;
+        } IBI_QUEUE_DEPTH[7:0];
+    } IBI_QUEUE_DEPTH;
     reg {
         name = "TTI Interrupt Status";
         desc = "Interrupt Status";

@@ -1,28 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /*
-  This module is responsible for taking actions based on incoming CCC.
+  This module handles CCC (Common Command Codes) processing for an I3C Target.
 
-  This module implements an FSM which is secondary to the target_fsm.
-  The handoff occurs as soon as the target_fsm detected the Command Code.
-  All CCC transfers begin with {S|SR, Rsvd Byte, ACK, Command Code}.
+  This FSM is secondary to the target_fsm. The handoff occurs after target_fsm
+  detects {S|SR, 7'h7E, W, ACK} and receives the Command Code byte.
 
-  In this context there are references to a "not SR" bus state.
-  Between I3C bytes, there is a short period when the Target Device
-  does not know if the next symbol will be a Repeated Start or a first
-  bit in the next data byte. More specifically, this occurs just after
-  ACK/NACK bit or the T-bit transmission.
-  In the CCC processing flow, there are a few decisions, which
-  depend on whether the next symbol is the SR or the data bit.
-  Appearance of the data bit is sometimes referred to as the "not SR"
-  bus condition. Signal `det_first_bit` represents this condition.
+  Between I3C bytes, there is a short period when the Target does not know if
+  the next symbol will be a Repeated Start or a data bit. This occurs after
+  ACK/NACK or T-bit transmission. In the CCC flow, some decisions depend on
+  whether the next symbol is SR or data.
 
-  Most of the functions of the CCCs can be divided into:
-  - retrieve value from CSRs
-  - set values in CSRs
-
-  On the lists below, the maximum number of bytes is written down,
-  some CCCs are configurable.
+  CCCs are categorized as:
+  - Retrieve values from CSRs (GET commands)
+  - Set values in CSRs (SET commands)
 
   CCCs without additional data:
     - I3C_BCAST_RSTDAA
@@ -48,7 +39,6 @@
     - I3C_DIRECT_GETDCR
     - I3C_DIRECT_GETACCCR
     - I3C_DIRECT_ENDXFER
-    - I3C_DIRECT_SETXTIME
     - I3C_DIRECT_RSTACT
     - I3C_DIRECT_SETGRPA
 
@@ -90,29 +80,56 @@ module ccc
     input  logic clk_i,  // Clock
     input  logic rst_ni, // Async reset, active low
 
-    // CCC data is extracted from the frame by the main FSM
-    input  i3c_byte_t ccc_data_i,
-    // Assert valid when you want to give control to this FSM
+    // =========================================================================
+    // CCC Command Input Interface
+    // =========================================================================
+    // CCC data is extracted from the frame by the main FSM (target_fsm)
+    // The target_fsm detects {S|SR, 7'h7E, W, ACK} and then receives the
+    // command code byte before handing off to this module.
+    input  ccc_cmd_e ccc_data_i,
+    // Level signal giving control to CCC FSM
     input  logic ccc_valid_i,
 
+    // =========================================================================
+    // FSM Control Outputs
+    // =========================================================================
+    // Asserted when CCC processing is complete (on STOP condition)
     output logic done_fsm_o,
+    // Asserted when ready to process next CCC in a chained sequence
     output logic next_ccc_o,
+  
+    // =========================================================================
+    // Target Error Signals 
+    // =========================================================================
+    output logic te0_enable_o,
+    input  logic te0_err_i,
+    output logic te1_err_o,      // CCC command parity error (for Protocol Error Report)
+    output logic te2_err_ccc_o,  // CCC data parity error (for Protocol Error Report)
+    output logic framing_err_o,  // DA padding errors (for Protocol Error Report)
 
-    // Bus Monitor interface
+    // =========================================================================
+    // Bus Monitor Interface
+    // =========================================================================
     input  logic bus_start_det_i,
     input  logic bus_rstart_det_i,
     input  logic bus_stop_det_i,
     input  logic arbitration_lost_i,
 
-    // Bus Tx interface
+    // =========================================================================
+    // Bus Tx/Rx Interface
+    // =========================================================================
+    // bus_rx_rsp_i.done is asserted on the positive edge of SCL after the
+    // stable SDA value has been captured. It indicates that a complete bit
+    // or byte has been received and the data in bus_rx_rsp_i.data is valid.
     output bus_tx_req_t bus_tx_req_o,
     input  bus_tx_rsp_t bus_tx_rsp_i,
 
-    // Bus Rx interface
     output bus_rx_req_t bus_rx_req_o,
     input  bus_rx_rsp_t bus_rx_rsp_i,
 
-    // Addr match interface
+    // =========================================================================
+    // Address Match Interface
+    // =========================================================================
     input logic [6:0] target_sta_address_i,
     input logic target_sta_address_valid_i,
     input logic [6:0] target_dyn_address_i,
@@ -122,177 +139,138 @@ module ccc
     input logic [6:0] virtual_target_dyn_address_i,
     input logic virtual_target_dyn_address_valid_i,
 
-    // Configuration and status interface
+    // =========================================================================
+    // Configuration and Status Interface - CSR Reads/Writes
+    // =========================================================================
     // Reads from CSRs (inputs) are continuous assignments
-    //
-    // Writes to CSRs (outputs) need generation of WE signal
-    // outside of this module
-    //
+    // Writes to CSRs (outputs) need generation of WE signal outside this module
 
-    // Enable Target event driven interrupts
+    // -------------------------------------------------------------------------
+    // ENEC/DISEC: Enable/Disable Target Event-Driven Interrupts
+    // -------------------------------------------------------------------------
     output logic enec_ibi_o,
     output logic enec_crr_o,
     output logic enec_hj_o,
 
-    // Disable Target event driven interrupts
     output logic disec_ibi_o,
     output logic disec_crr_o,
     output logic disec_hj_o,
 
-    // Set Activity state 0-3
+    // -------------------------------------------------------------------------
+    // ENTAS0-3: Set Activity State
+    // -------------------------------------------------------------------------
     output logic entas0_o,
     output logic entas1_o,
     output logic entas2_o,
     output logic entas3_o,
 
+    // -------------------------------------------------------------------------
+    // RSTDAA: Reset Dynamic Address Assignment
+    // -------------------------------------------------------------------------
     // Forget current Dynamic Address and wait for new assignment
     output logic rstdaa_o,
 
-    // Controller has started the Dynamic Address Assignment procedure.
+    // -------------------------------------------------------------------------
+    // ENTDAA: Enter Dynamic Address Assignment
+    // -------------------------------------------------------------------------
+    // Controller has started the Dynamic Address Assignment procedure
     output logic entdaa_o,
 
-    // Define List of Targets
-    // I3C_BCAST_DEFTGTS
-
-    // Set Max Write Length
+    // -------------------------------------------------------------------------
+    // SETMWL/SETMRL: Set Max Write/Read Length
+    // -------------------------------------------------------------------------
     output logic set_mwl_o,
     output logic [15:0] mwl_o,
 
-    // Set Max Read Length
     output logic set_mrl_o,
     output logic [15:0] mrl_o,
 
-    // Set Max Read Length
     output logic set_ibil_o,
     output logic [7:0] ibil_o,
 
-    // Enter Test Mode
+    // -------------------------------------------------------------------------
+    // ENTTM: Enter Test Mode
+    // -------------------------------------------------------------------------
     output logic ent_tm_o,
     output logic [7:0] tm_o,
 
-    // Set Bus Context
-    // I3C_BCAST_SETBUSCON
+    // -------------------------------------------------------------------------
+    // ENTHDR0-7: Enter HDR Mode
+    // -------------------------------------------------------------------------
+    input  logic exit_hdr_i,       // Asserted when exit HDR pattern detected
+    output logic in_hdr_mode_o,    // Asserted while in HDR mode
 
-    // Data Transfer Ending Procedure Control
-    // I3C_BCAST_ENDXFER
-
-    // Enter HDR Mode 0-7
-    output logic ent_hdr_0_o,
-    output logic ent_hdr_1_o,
-    output logic ent_hdr_2_o,
-    output logic ent_hdr_3_o,
-    output logic ent_hdr_4_o,
-    output logic ent_hdr_5_o,
-    output logic ent_hdr_6_o,
-    output logic ent_hdr_7_o,
-
-    // Exchange Timing Information
-    // I3C_BCAST_SETXTIME
-
-    // Set Dynamic Address from Static Address
+    // -------------------------------------------------------------------------
+    // SETDASA/SETAASA: Set Dynamic Address from Static Address
+    // -------------------------------------------------------------------------
     output logic [6:0] dasa_o,
     output logic set_dasa_o,
     output logic set_dasa_virtual_device_o,
     output logic set_aasa_o,
     output logic set_aasa_virt_o,
 
-    // Target Reset Action
-    // I3C_BCAST_RSTACT
-    // I3C_DIRECT_RSTACT
+    // -------------------------------------------------------------------------
+    // RSTACT: Target Reset Action
+    // -------------------------------------------------------------------------
     output logic [7:0] rst_action_o,
     output logic       rst_action_valid_o,
 
-    // Define List of Group Address
-    // I3C_BCAST_DEFGRPA
-
-    // Reset Group Address
-    // I3C_BCAST_RSTGRPA
-
-    // Set Group Address
-    // I3C_DIRECT_SETGRPA 8'h9B
-
-    // Multi-Lane Data Transfer Control
-    // I3C_BCAST_MLANE
-
-    // Set New Dynamic Address
-    // I3C_DIRECT_SETNEWDA
-    // those ouptuts are also used by ENTDAA
+    // -------------------------------------------------------------------------
+    // SETNEWDA: Set New Dynamic Address (also used by ENTDAA)
+    // -------------------------------------------------------------------------
     output logic set_newda_o,
     output logic set_newda_virtual_device_o,
     output logic [6:0] newda_o,
 
-    // Get Max Write Length
-    // I3C_DIRECT_GETMWL
+    // -------------------------------------------------------------------------
+    // GETMWL/GETMRL: Get Max Write/Read Length
+    // -------------------------------------------------------------------------
     input logic [15:0] get_mwl_i,
-
-    // Get Max Read Length
-    // I3C_DIRECT_GETMRL
     input logic [15:0] get_mrl_i,
-
-    // Get Max IBI Length
-    // I3C_DIRECT_GETMRL
     input logic [7:0] get_ibil_i,
 
-    // Get Provisioned ID
-    // I3C_DIRECT_GETPID
+    // -------------------------------------------------------------------------
+    // GETPID/GETBCR/GETDCR: Get Device Identification
+    // -------------------------------------------------------------------------
     input logic [47:0] get_pid_i,
-
-    // Get Bus Characteristics Register
-    // I3C_DIRECT_GETBCR
     input logic [7:0] get_bcr_i,
-
-    // Get Device Characteristics Register
-    // I3C_DIRECT_GETDCR
     input logic [7:0] get_dcr_i,
 
-    // Get virtual device Provisioned ID
-    // I3C_DIRECT_GETPID
+    // Virtual device identification
     input logic [47:0] virtual_get_pid_i,
-
-    // Get virtual device Bus Characteristics Register
-    // I3C_DIRECT_GETBCR
     input logic [7:0] virtual_get_bcr_i,
-
-    // Get virtual Device Characteristics Register
-    // I3C_DIRECT_GETDCR
     input logic [7:0] virtual_get_dcr_i,
 
-    // Get Device Status
-    // [15:8] Reserved for vendor-specific meaning, expected to be unused.
-    // TODO: Bits 7:6 are tied to '11 until the Handoff procedure is fully implemented.
-    // TODO: Bit 5: connect to protocol error
-    // TODO: Bits 3:0: connect to number of pending interrupts
+    // -------------------------------------------------------------------------
+    // GETSTATUS: Get Device Status
+    // -------------------------------------------------------------------------
+    // Format 1 status word:
+    //   [15:8] Vendor-specific
+    //   [7:6]  Activity Mode (00=Normal, 11=Handoff not supported)
+    //   [5]    Protocol Error
+    //   [4]    Reserved
+    //   [3:0]  Pending Interrupt count
     input logic [15:0] get_status_fmt1_i,
     output logic get_status_done_o,
-    // TODO: GETSTATUS: Format 2
 
-    // Get Accept Controller Role
-    // I3C_DIRECT_GETACCCR
+    // -------------------------------------------------------------------------
+    // GETACCCR: Get Accept Controller Role
+    // -------------------------------------------------------------------------
     input logic get_acccr_i,
 
-    // Set Bridge Targets
-    // I3C_DIRECT_SETBRGTGT
+    // -------------------------------------------------------------------------
+    // SETBRGTGT: Set Bridge Targets (not supported - not a bridging device)
+    // -------------------------------------------------------------------------
     output logic set_brgtgt_o,
 
-    // Get Max Data Speed
-    // I3C_DIRECT_GETMXDS
+    // -------------------------------------------------------------------------
+    // GETMXDS: Get Max Data Speed
+    // -------------------------------------------------------------------------
     input logic get_mxds_i,
 
-    // (formerly GETHDRCAPS) Get Optional Feature Capabilities
-    // I3C_DIRECT_GETCAPS
-
-    // Set Route
-    // I3C_DIRECT_SETROUTE
-
-    // Device to Device(s) Tunneling Control
-    // I3C_DIRECT_D2DXFER
-
-    // Set Exchange Timing Information
-    // I3C_DIRECT_SETXTIME
-
-    // Get Exchange Timing Information
-    // I3C_DIRECT_GETXTIME
-
+    // -------------------------------------------------------------------------
+    // Reset Control Interface
+    // -------------------------------------------------------------------------
     input  logic target_reset_detect_i,
     input  logic peripheral_reset_done_i,
     output logic rstact_armed_o,
@@ -300,177 +278,396 @@ module ccc
 );
 
 
-  logic [7:0] rst_action;
-  logic       rst_action_valid;
+  // ===========================================================================
+  // INTERNAL SIGNAL DECLARATIONS
+  // ===========================================================================
+  // Organized by CCC frame structure:
+  //
+  // Broadcast CCC Frame:
+  //   [Command Code (8b)] [T-Bit (1b)] [Defining Byte (8b)?] [T-Bit (1b)?]
+  //   [Data (8b+)?] [STOP | Repeated Start]
+  //
+  // Direct CCC Frame:
+  //   [Command Code (8b)] [T-Bit (1b)] [Defining Byte (8b)?] [T-Bit (1b)?]
+  //   [Repeated Start] [Target Addr (7b)] [RnW (1b)] [ACK/NACK (1b)]
+  //   [Data (8b+)?] [T-Bit per byte]
+  //   [STOP | Repeated Start -> 7'h7E ends CCC | Repeated Start -> next target]
+  // ===========================================================================
 
-  // Data structure for any CCC
+  // ---------------------------------------------------------------------------
+  // Frame 1: Command Code (8 bits)
+  // ---------------------------------------------------------------------------
+  // The command code determines broadcast vs direct and the specific CCC action
   ccc_cmd_e command_code;
-  // logic [7:0] defining_byte;
-  // logic       defining_byte_valid;
-  // logic [7:0] subcommand_byte;
-  // logic       subcommand_byte_valid;
-  // logic [7:0] command_data[6];
-  // logic       command_data_valid[6];
-  logic [6:0] command_addr;
-  logic       command_rnw;
-  logic       command_valid;
+  logic     command_code_valid;  // Asserted when command_code is valid
 
-  logic [7:0] tx_data;
-  logic [7:0] tx_data_id;  // This register must hold the maximum number of bytes used by a CCC
-  logic [7:0] tx_data_id_init;
-  logic       tx_data_done;
+  // ---------------------------------------------------------------------------
+  // Frame 2: T-Bit after Command Code (1 bit - odd parity)
+  // ---------------------------------------------------------------------------
+  logic       tbit_rx_state;              // FSM is in any T-bit receiving state
+  logic       tbit_cmd_rx_state;          // FSM is specifically in command code T-bit state
+  logic       tbit_data_rx_state;         // FSM is in data T-bit state (defining byte, data bytes)
+  logic       capture_tbit_data;          // Trigger to capture data byte for T-bit check
+  logic       tbit_rx_value;              // The received T-bit value
+  logic       tbit_rx_expected_value;     // Expected T-bit value (odd parity of preceding data byte)
+  logic       tbit_parity_err;            // Parity error flag
+  logic       tbit_check_en;              // Enable for parity checking
+  logic       cmd_tbit_valid;             // Command code T-bit complete (set by FSM)
+  logic       def_byte_tbit_valid;        // Defining byte T-bit complete (set by FSM)
 
-  logic [7:0] rx_data;
+  // ---------------------------------------------------------------------------
+  // Frame 3: Defining Byte (8 bits, optional based on command)
+  // ---------------------------------------------------------------------------
+  logic [7:0] defining_byte;
+  logic       defining_byte_valid;   // Asserted when defining_byte contains valid data
+  logic       have_defining_byte;    // This command requires a defining byte
+  logic       capture_defining_byte; // Trigger to capture defining byte (set by FSM)
+  logic       clear_defining_byte;   // Trigger to clear defining byte (set by FSM)
 
-  logic       last_tbit;
-  logic       last_tbit_valid;
+  // ---------------------------------------------------------------------------
+  // Frame 5: Target Address + RnW (Direct CCC only, 7+1 bits)
+  // ---------------------------------------------------------------------------
+  logic [6:0] target_addr;           // 7-bit target address from direct CCC
+  logic       target_rnw;            // Read (1) / Write (0) bit
+  logic       target_addr_captured;  // Pulses for one cycle when address is captured
+  logic       capture_target_addr;   // Trigger to capture target address (set by FSM)
 
+  // ---------------------------------------------------------------------------
+  // Frame 6: ACK/NACK Response (1 bit, Direct CCC only)
+  // ---------------------------------------------------------------------------
+  logic       addr_ack;              // We should ACK this address (it matches us)
+  logic       addr_ack_setdasa;      // SETDASA ACKs if static address matches
+  logic       addr_ack_target;       // Other CCCs ACK if address matches, cmd supported, dir valid
+  logic       addr_ack_rsvd;         // Reserved address (7'h7E) always ACKed to end CCC frame
+  logic       target_addr_ack_done;  // Pulses when ACK/NACK transmitted (set by FSM)
+
+  // ---------------------------------------------------------------------------
+  // Frame 7+: Data Bytes (8 bits each, with T-bit after each)
+  // ---------------------------------------------------------------------------
+  logic [7:0] rx_data;               // Last received data byte
+  logic [1:0] rx_byte_num;           // Current RX byte number (0-indexed, counts up)
+  logic [1:0] rx_byte_total;         // Total bytes to receive for this command
+  logic       rx_data_last_byte;     // This is the last byte to receive
+  logic       capture_rx_data;       // Trigger to capture rx data byte (set by FSM)
+  logic       clear_rx_byte_num;     // Reset rx_byte_num to 0 (set by FSM)
+  logic       inc_rx_byte_num;       // Increment rx_byte_num (set by FSM)
+  logic       rx_data_valid;         // RX data byte with T-bit complete (set by FSM)
+
+  logic [7:0] tx_data;               // Data byte to transmit
+  logic [2:0] tx_byte_num;           // Current TX byte number (0-indexed, counts up)
+  logic [2:0] tx_byte_total;         // Total bytes to transmit for this command
+  logic       tx_data_last_byte;     // This is the last byte to transmit
+  logic       tx_data_complete;      // All TX bytes sent successfully (for GET completion)
+  logic       clear_tx_byte_num;     // Reset tx_byte_num to 0 (set by FSM)
+  logic       inc_tx_byte_num;       // Increment tx_byte_num (set by FSM)
+  logic       set_tx_data_complete;  // Mark TX complete (set by FSM when last byte T-bit done)
+
+  // ---------------------------------------------------------------------------
+  // Command Type Classification
+  // ---------------------------------------------------------------------------
+  logic is_direct_cmd;                    // 1 = Direct CCC, 0 = Broadcast CCC
+  logic is_enthdr_cmd;                    // 1 = ENTHDR0-7 command (enter HDR mode)
+  logic supported_direct_command_code;    // Command code is in our supported list
+  logic unsupported_defining_byte;        // Defining byte value is not supported
+  logic supported_direct_command;         // Command is supported (code valid, defining byte valid)
+
+  // ---------------------------------------------------------------------------
+  // CCC Direction Requirements (for TE5 detection)
+  // ---------------------------------------------------------------------------
+  logic is_rstact;            // Command is RSTACT (special: both directions valid)
+  logic ccc_requires_read;    // Command requires Read direction (R/W = 1)
+  logic ccc_requires_write;   // Command requires Write direction (R/W = 0)
+  logic ccc_direction_valid;  // Received R/W matches command's required direction
+
+  // ---------------------------------------------------------------------------
+  // Address Matching Logic
+  // ---------------------------------------------------------------------------
+  logic target_addr_matches_rsvd;      // Address is reserved (7'h7E)
+  logic target_addr_matches_main_dyn;  // Address matches main target dynamic address
+  logic target_addr_matches_main_sta;  // Address matches main target static address
+  logic target_addr_matches_main;      // Address matches main target (dyn or sta)
+  logic target_addr_matches_virt_dyn;  // Address matches virtual target dynamic address
+  logic target_addr_matches_virt_sta;  // Address matches virtual target static address
+  logic target_addr_matches_virt;      // Address matches virtual target (dyn or sta)
+  logic target_addr_matches_any;       // Address matches main OR virtual target
+
+  // ---------------------------------------------------------------------------
+  // FSM Next-State Helper Signals (pre-computed for cleaner FSM logic)
+  // ---------------------------------------------------------------------------
+  logic entdaa_needs_main_addr;        // Main target needs dynamic address assignment
+  logic entdaa_needs_virt_addr;        // Virtual target needs dynamic address assignment
+  logic target_addr_matches_any_get_cmd;   // Address matches and this is a GET command (or RSTACT read)
+
+  // ---------------------------------------------------------------------------
+  // Bus TX/RX Interface (CCC vs ENTDAA mux)
+  // ---------------------------------------------------------------------------
+  bus_tx_req_t tx_req_ccc;
+  bus_tx_req_t tx_req_entdaa;
+  bus_rx_req_t rx_req_ccc;
+  bus_rx_req_t rx_req_entdaa;
+  i3c_byte_t   bus_tx_data;
+
+  // ---------------------------------------------------------------------------
+  // ENTDAA Handling (Special CCC with its own sub-FSM)
+  // ---------------------------------------------------------------------------
+  logic       entdaa_done;
+  logic       entdaa_address_valid;
+  logic [6:0] entdaa_address;
+  logic       entdaa_process_virtual;
+  logic       entdaa_set_newda;       // FSM signal: ENTDAA completed with valid address
+  logic       entdaa_is_virtual;      // FSM signal: ENTDAA was for virtual target
+
+  // ---------------------------------------------------------------------------
+  // SETDASA/SETNEWDA Handling
+  // ---------------------------------------------------------------------------
   logic       set_dasa_valid;
   logic [6:0] set_dasa_addr;
   logic       set_aasa_valid;
   logic       set_aasa_virt_valid;
-
   logic       set_newda_valid;
   logic [6:0] set_newda_addr;
-  logic       entdaa_addres_valid;
-  logic [6:0] entdaa_address;
-  logic entdaa_process_virtual;
 
-  logic       get_status_in_progress;
+  // ---------------------------------------------------------------------------
+  // RSTACT Handling
+  // ---------------------------------------------------------------------------
+  logic [7:0] rst_action;
+  logic       rst_action_valid;
+  logic       rstact_armed;
 
-  always_ff @(posedge clk_i or negedge rst_ni) begin : report_get_status_done
-    if (~rst_ni) begin
-      get_status_in_progress <= '0;
-      get_status_done_o <= '0;
-    end else begin
-      if (done_fsm_o) get_status_in_progress <= 1'b0;
-      else if ((command_code == CCC_DIRECT_GETSTATUS) && ccc_valid_i)
-        get_status_in_progress <= 1'b1;
+  // ---------------------------------------------------------------------------
+  // HDR Mode Handling
+  // ---------------------------------------------------------------------------
+  logic       in_hdr_mode;           // Currently in HDR mode
+  logic       enter_hdr_mode;        // Trigger to enter HDR mode (set when valid ENTHDR received)
 
-      if (get_status_in_progress & done_fsm_o) get_status_done_o <= 1'b1;
-      else get_status_done_o <= 1'b0;
-    end
-  end
+  // ---------------------------------------------------------------------------
+  // ENEC/DISEC Handling
+  // ---------------------------------------------------------------------------
+  logic enec_ibi;
+  logic enec_crr;
+  logic enec_hj;
+  logic disec_ibi;
+  logic disec_crr;
+  logic disec_hj;
 
-  always_ff @(posedge clk_i or negedge rst_ni) begin : register_ccc
+  // ---------------------------------------------------------------------------
+  // I3C TE0-5 Error Pulses (asserted in FSM for one cycle when error detected)
+  // ---------------------------------------------------------------------------
+  // TE0: Invalid reserved address + RnW combination (asserted in TxTargetAddrAck)
+  logic       te0_err_ccc;  // TE0 from CCC module (direct CCC target address)
+  logic       te0_err;      // Combined: te0_err_ccc || te0_err_i (from target FSM)
+  logic       is_te0_err_condition;  // Helper: reserved address has invalid RnW
+  // TE1: Parity error on CCC command code T-bit (asserted in RxCmdTbit)
+  logic       te1_err;
+  // TE2: Parity error on CCC data byte T-bit (asserted in RxDefByteTbit, RxDirectDefByteTbit, RxDataTbit)
+  logic       te2_err;
+  // TE3/TE4: Detected in ccc_entdaa submodule
+  logic       te3_err;
+  logic       te4_err;
+  // TE5: Wrong R/W direction for Direct CCC (asserted in TxTargetAddrAck)
+  logic       te5_err;
+  logic       is_te5_err_condition;  // Helper: addressed with supported cmd but wrong direction
+
+  // ---------------------------------------------------------------------------
+  // Framing Error Signals
+  // ---------------------------------------------------------------------------
+  // Command sequence error: SETDASA to target that already has dynamic address
+  // (detected when Controller addresses us with SETDASA using our dynamic address)
+  logic       cmd_seq_err;
+  // Dynamic Address padding error: Bit[0] must be 0 for SETDASA/SETNEWDA/SETGRPA
+  // Per I3C spec: incorrect padding (Bit[0] = 1) is a protocol error
+  logic       da_padding_err;
+
+  // ===========================================================================
+  // COMMAND CODE REGISTRATION
+  // ===========================================================================
+  always_ff @(posedge clk_i or negedge rst_ni) begin : register_command_code
     if (~rst_ni) begin
       command_code <= ccc_cmd_e'('0);
+      command_code_valid <= 1'b0;
     end else begin
       if (ccc_valid_i) begin
-        command_code <= ccc_cmd_e'(ccc_data_i);
+        command_code <= ccc_data_i;
+        command_code_valid <= 1'b1;
+      end else if (done_fsm_o) begin
+        command_code <= ccc_cmd_e'('0);
+        command_code_valid <= 1'b0;
       end
     end
   end
 
-  // Mux TX access between regular CCC and ENTDAA
-  bus_tx_req_t tx_req_ccc;
-  bus_tx_req_t tx_req_entdaa;
-  
-  bus_rx_req_t rx_req_ccc;
-  bus_rx_req_t rx_req_entdaa;
+  // Determine if this is a direct (vs broadcast) command
+  // Bit[7] = 1 means Direct CCC, Bit[7] = 0 means Broadcast CCC
+  assign is_direct_cmd = command_code[7];
 
+  // Determine if this is an ENTHDR command (enter HDR mode)
+  // ENTHDR0-7 are broadcast CCCs: 0x20-0x27
+  assign is_enthdr_cmd = command_code inside {
+    CCC_BCAST_ENTHDR0, CCC_BCAST_ENTHDR1, CCC_BCAST_ENTHDR2, CCC_BCAST_ENTHDR3,
+    CCC_BCAST_ENTHDR4, CCC_BCAST_ENTHDR5, CCC_BCAST_ENTHDR6, CCC_BCAST_ENTHDR7
+  };
+
+  // ===========================================================================
+  // BUS TX/RX MUX: Regular CCC vs ENTDAA
+  // ===========================================================================
+  // ENTDAA has its own sub-FSM that takes over the bus interface
   assign bus_tx_req_o = entdaa_o ? tx_req_entdaa : tx_req_ccc;
   assign bus_rx_req_o = entdaa_o ? rx_req_entdaa : rx_req_ccc;
 
-  assign have_defining_byte = command_code inside {CCC_BCAST_ENDXFER, CCC_BCAST_RSTACT,
-                                                   CCC_BCAST_MLANE, CCC_DIRECT_GETCAPS,
-                                                   CCC_DIRECT_ENDXFER, CCC_DIRECT_RSTACT};
-
+  // ===========================================================================
+  // DEFINING BYTE DETERMINATION (used by FSM)
+  // ===========================================================================
+  // Certain CCCs require a defining byte after the command code T-bit
+  assign have_defining_byte = command_code inside {
+    CCC_BCAST_ENDXFER, CCC_BCAST_RSTACT, CCC_BCAST_MLANE,
+    CCC_DIRECT_GETCAPS, CCC_DIRECT_ENDXFER, CCC_DIRECT_RSTACT
+  };
+  // ===========================================================================
+  // FSM STATE DEFINITIONS
+  // ===========================================================================
+  // States organized by CCC frame processing sequence
   typedef enum logic [7:0] {
-    Idle,
-    WaitCCC,
-    RxTbit,
-    RxDefByte,
-    RxDefByteOrBusCond,
-    RxDefByteTbit,
-    RxByte,
-    RxDirectDefByteTbit,
-    RxDirectAddr,
-    TxDirectAddrAck,
-    RxSubCmdByte,
-    RxData,
-    RxDataTbit,
-    TxData,
-    TxDataTbit,
-    WaitForBusCond,
-    NextCCC,
-    DoneCCC,
-    HandleENTDAA,
-    HandleTargetENTDAA,
-    HandleVirtualTargetENTDAA
+    // Initial/Idle state
+    WaitCCC,                 // Ready to receive command code from target_fsm
+
+    // Frame 2: T-bit after command code
+    RxCmdTbit,               // Receive T-bit after command code
+
+    // Frame 3-4: Defining byte handling
+    RxDefByte,               // Receive defining byte (mandatory path)
+    RxDefByteOrBusCond,      // Receive defining byte OR detect repeated start
+    RxDefByteTbit,           // Receive T-bit after defining byte
+
+    // Direct CCC: Wait for repeated start before target address
+    WaitDirectRstart,        // Wait for repeated start (direct CCC)
+    RxDirectDefByteTbit,     // Receive T-bit in direct mode before address phase
+
+    // Frame 5-6: Target address handling (Direct CCC)
+    RxTargetAddr,            // Receive 7-bit address + RnW bit
+    TxTargetAddrAck,         // Transmit ACK/NACK response
+
+    // Sub-command byte
+    RxSubCmdByte,            // Receive sub-command byte - unused today
+
+    // Frame 7+: Data phase
+    RxData,                  // Receive data byte
+    RxDataTbit,              // Receive T-bit after data byte
+    TxData,                  // Transmit data byte (GET commands)
+    TxDataTbit,              // Transmit T-bit after data byte
+
+    // Bus condition handling
+    WaitForBusCond,          // Wait for STOP or Repeated Start
+
+    // CCC completion
+    NextCCC,                 // Signal ready for next CCC in chain
+    DoneCCC,                 // CCC processing complete
+
+    // ENTDAA special handling
+    HandleTargetENTDAA,      // Process ENTDAA for primary target
+    HandleVirtualTargetENTDAA // Process ENTDAA for virtual target
   } state_e;
 
   state_e state_q, state_d;
 
-  assign last_tbit_valid = (state_q == RxTbit || state_q == RxDataTbit) && bus_rx_rsp_i.done;
-  assign entdaa_o = (state_q == HandleENTDAA || state_q == HandleTargetENTDAA || state_q == HandleVirtualTargetENTDAA);
-  assign entdaa_process_virtual = (state_q == HandleVirtualTargetENTDAA);
+  // ===========================================================================
+  // T-BIT PARITY CHECKING
+  // ===========================================================================
+  // T-bit is odd parity over preceding data byte. Used for TE1/TE2 error detection.
 
-  always_ff @(posedge clk_i or negedge rst_ni) begin : register_tbit
+  assign tbit_rx_state = state_q inside {RxCmdTbit, RxDataTbit, 
+                                         RxDirectDefByteTbit, RxDefByteTbit};
+  assign tbit_cmd_rx_state = state_q == RxCmdTbit;
+  assign tbit_data_rx_state = state_q inside {RxDefByteTbit, RxDataTbit, RxDirectDefByteTbit};
+
+  // Capture data bytes for parity calculation (fires when byte received, not T-bit)
+  assign capture_tbit_data = bus_rx_rsp_i.done && !tbit_rx_state;
+
+  // Compute expected T-bit (odd parity)
+  always_ff @(posedge clk_i or negedge rst_ni) begin
     if (~rst_ni) begin
-      last_tbit <= '0;
+      tbit_rx_expected_value <= '0;
     end else begin
-      if (last_tbit_valid) begin
-        last_tbit <= rx_data[7];
+      if (tbit_cmd_rx_state) begin
+        tbit_rx_expected_value <= ~^ccc_data_i;
+      end else if (capture_tbit_data) begin
+        tbit_rx_expected_value <= ~^bus_rx_rsp_i.data;
       end
     end
   end
 
-  logic [7:0] defining_byte;
-  logic       valid_defining_byte;
+  assign tbit_rx_value = (tbit_rx_state && bus_rx_rsp_i.done) ? bus_rx_rsp_i.data[0] : 1'b0;
+  assign tbit_check_en = tbit_rx_state && bus_rx_rsp_i.done;
+  assign tbit_parity_err = tbit_check_en && (tbit_rx_expected_value != tbit_rx_value);
+
+  // ===========================================================================
+  // ENTDAA STATE TRACKING
+  // ===========================================================================
+  assign entdaa_o = (state_q == HandleTargetENTDAA || 
+                     state_q == HandleVirtualTargetENTDAA);
+  assign entdaa_process_virtual = (state_q == HandleVirtualTargetENTDAA);
+
+  // ===========================================================================
+  // DEFINING BYTE REGISTRATION
+  // ===========================================================================
   always_ff @(posedge clk_i or negedge rst_ni) begin : register_defining_byte
     if (~rst_ni) begin
       defining_byte <= '0;
-      valid_defining_byte <= '0;
-    end else if ((state_q == RxDefByte || state_q == RxDefByteOrBusCond) && bus_rx_rsp_i.done) begin
+      defining_byte_valid <= '0;
+    end else if (capture_defining_byte) begin
       defining_byte <= bus_rx_rsp_i.data;
-      valid_defining_byte <= '1;
-    end else if (state_q == RxDefByteOrBusCond && bus_rstart_det_i) begin
+      defining_byte_valid <= 1'b1;
+    end else if (clear_defining_byte || done_fsm_o) begin
       defining_byte <= '0;
-      valid_defining_byte <= '0;
+      defining_byte_valid <= 1'b0;
     end
   end
 
-  logic is_direct_cmd;
-  assign is_direct_cmd = command_code[7];  // 0 - BCast, 1 - Direct
+  // ===========================================================================
+  // COMMAND TYPE AND ADDRESS MATCHING
+  // ===========================================================================
 
-  logic is_byte_rsvd_addr;
-  assign is_byte_rsvd_addr = (rx_data == {7'h7E, 1'b0}) || (command_addr == 7'h7E);
+  // Reserved address detection (7'h7E used for broadcast and CCC termination)
+  assign target_addr_matches_rsvd = target_addr == 7'h7E;
 
-  logic is_byte_our_dynamic_addr;
-  logic is_byte_our_virtual_dynamic_addr;
-  logic is_byte_our_static_addr;
-  logic is_byte_our_virtual_static_addr;
-  logic is_byte_our_addr;
-  logic is_byte_virtual_addr;
+  // Primary target address matching
+  // Per I3C spec: Once a target has a dynamic address, it stops responding to its static address
+  assign target_addr_matches_main_dyn = ((target_addr == target_dyn_address_i) && target_dyn_address_valid_i);
+  assign target_addr_matches_main_sta = ((target_addr == target_sta_address_i) && target_sta_address_valid_i && ~target_dyn_address_valid_i);
+  assign target_addr_matches_main = target_addr_matches_main_dyn | target_addr_matches_main_sta;
 
-  logic [7:0] rx_data_count;
+  // Virtual target address matching
+  // Per I3C spec: Once a target has a dynamic address, it stops responding to its static address
+  assign target_addr_matches_virt_dyn = ((target_addr == virtual_target_dyn_address_i) && virtual_target_dyn_address_valid_i);
+  assign target_addr_matches_virt_sta = ((target_addr == virtual_target_sta_address_i) && virtual_target_sta_address_valid_i && ~virtual_target_dyn_address_valid_i);
+  assign target_addr_matches_virt = target_addr_matches_virt_dyn | target_addr_matches_virt_sta;
 
-  logic entdaa_start, entdaa_done;
+  // Combined: Address matches either main target or virtual target
+  assign target_addr_matches_any = target_addr_matches_main | target_addr_matches_virt;
 
-  assign is_byte_our_dynamic_addr = ((command_addr == target_dyn_address_i) && target_dyn_address_valid_i);
-  assign is_byte_our_static_addr = ((command_addr == target_sta_address_i) && target_sta_address_valid_i);
-  assign is_byte_our_addr = is_byte_our_dynamic_addr | is_byte_our_static_addr;
+  // ===========================================================================
+  // FSM NEXT-STATE HELPER SIGNALS
+  // ===========================================================================
+  assign entdaa_needs_main_addr = ~target_dyn_address_valid_i;
+  assign entdaa_needs_virt_addr = ~virtual_target_dyn_address_valid_i;
 
-  assign is_byte_our_virtual_dynamic_addr = ((command_addr == virtual_target_dyn_address_i) && virtual_target_dyn_address_valid_i);
-  assign is_byte_our_virtual_static_addr = ((command_addr == virtual_target_sta_address_i) && virtual_target_sta_address_valid_i);
-  assign is_byte_virtual_addr = is_byte_our_virtual_dynamic_addr | is_byte_our_virtual_static_addr;
+  // Determines if we should enter TxData phase after ACK.
+  // Only used when addr_ack is true, so direction is already validated.
+  // - GET commands (ccc_requires_read): Target transmits data
+  // - RSTACT with R/W=1: Target transmits timing data
+  // All other ACKed commands (SET, SETDASA, RSTACT with R/W=0) go to RxData.
+  assign target_addr_matches_any_get_cmd = target_addr_matches_any && 
+                                           (ccc_requires_read || (is_rstact && target_rnw));
 
-  logic supported_direct_command_code;
+  // ===========================================================================
+  // SUPPORTED COMMAND AND DIRECTION VALIDATION
+  // ===========================================================================
+  // Per I3C spec, each Direct CCC has a required R/W direction.
+  // Wrong direction triggers TE5 error.
 
-  assign supported_direct_command_code = command_code inside {
-    // Setters
-    CCC_DIRECT_SETDASA,
-    CCC_DIRECT_SETNEWDA,
-    CCC_DIRECT_SETXTIME,
-    CCC_DIRECT_SETMWL,
-    CCC_DIRECT_SETMRL,
-    CCC_DIRECT_ENEC,
-    CCC_DIRECT_DISEC,
-    // Getters
+  // CCCs that require Read direction (target transmits, R/W = 1)
+  assign ccc_requires_read = command_code inside {
     CCC_DIRECT_GETBCR,
     CCC_DIRECT_GETDCR,
-    CCC_DIRECT_RSTACT,
     CCC_DIRECT_GETSTATUS,
     CCC_DIRECT_GETMWL,
     CCC_DIRECT_GETMRL,
@@ -478,433 +675,713 @@ module ccc
     CCC_DIRECT_GETCAPS
   };
 
-  logic unsupported_def_byte;
+  // CCCs that require Write direction (target receives, R/W = 0)
+  assign ccc_requires_write = command_code inside {
+    CCC_DIRECT_SETDASA,
+    CCC_DIRECT_SETNEWDA,
+    CCC_DIRECT_SETMWL,
+    CCC_DIRECT_SETMRL,
+    CCC_DIRECT_ENEC,
+    CCC_DIRECT_DISEC
+  };
 
-  assign unsupported_def_byte = have_defining_byte & valid_defining_byte & (
-        (command_code == CCC_DIRECT_RSTACT) & ~(defining_byte inside {8'h00, 8'h01, 8'h02, 8'h81, 8'h82}) // TODO correct parenthesis?
+  // RSTACT: Both directions valid; 0x00-0x7F arms action, 0x80-0xFF returns timing
+  assign is_rstact = (command_code == CCC_DIRECT_RSTACT);
+
+  assign supported_direct_command_code = ccc_requires_read | ccc_requires_write | is_rstact;
+
+  assign unsupported_defining_byte = have_defining_byte & defining_byte_valid & (
+        (command_code == CCC_DIRECT_RSTACT) & ~(defining_byte inside {8'h00, 8'h01, 8'h02, 8'h81, 8'h82})
       | (command_code == CCC_DIRECT_GETCAPS) & ~(defining_byte inside {8'h00, 8'h93}));
 
-  logic supported_direct_command;
-  assign supported_direct_command = supported_direct_command_code & ~unsupported_def_byte;
+  assign supported_direct_command = supported_direct_command_code & ~unsupported_defining_byte;
 
-  logic direct_addr_ack;
+  assign ccc_direction_valid = 
+    (ccc_requires_read && target_rnw) ||
+    (ccc_requires_write && ~target_rnw) ||
+    is_rstact;
 
-  assign direct_addr_ack = (command_code == CCC_DIRECT_SETDASA) ?
-      ((is_byte_our_static_addr && ~target_dyn_address_valid_i) | (is_byte_our_virtual_static_addr && ~virtual_target_dyn_address_valid_i)) :
-      ((is_byte_our_addr | is_byte_virtual_addr) & supported_direct_command  | is_byte_rsvd_addr );
+  // ===========================================================================
+  // TE ERROR DETECTION HELPERS
+  // ===========================================================================
+  // These are helper signals used by the FSM to detect error conditions.
+  // The actual TE error pulses (te0_err_ccc, te1_err, te2_err, te5_err) are
+  // asserted as single-cycle pulses within the FSM (fsm_ccc_main).
+  // TE3/TE4 are detected in ccc_entdaa submodule.
 
-  always_ff @(posedge clk_i or negedge rst_ni) begin : proc_addr
+  // TE0 helper: Check if reserved address has invalid RnW
+  assign te0_enable_o = !entdaa_o && (target_dyn_address_valid_i || virtual_target_dyn_address_valid_i);
+  assign is_te0_err_condition = te0_enable_o && is_te0_rsvd_addr_err(target_addr, target_rnw);
+
+  // TE5 helper: Check if direction is wrong for this command
+  // Since this is checked inside ~addr_ack in the FSM:
+  // - If addressed (target_addr_matches_any) with a supported command (supported_direct_command)
+  //   but still NACKed, the only remaining reason is wrong R/W direction (TE5)
+  assign is_te5_err_condition = target_addr_matches_any && supported_direct_command;
+
+  // Combined TE0 error (CCC module + target FSM)
+  assign te0_err = te0_err_ccc || te0_err_i;
+
+  // Protocol Error outputs (TE1/TE2 parity errors for GETSTATUS Protocol Error bit)
+  assign te1_err_o = te1_err;
+  assign te2_err_ccc_o = te2_err;
+
+  // Framing error for Protocol Error Report (GETSTATUS Format 1):
+  // Per I3C FAQ Q16.10: Incorrect framing for DA assignment CCCs should be reported.
+  // da_padding_err: Bit[0] != 0 in SETDASA/SETNEWDA address byte.
+  // The Target already ACKed the CCC, so Controller has no way of knowing the error.
+  assign framing_err_o = da_padding_err;
+
+  // ===========================================================================
+  // TARGET ADDRESS CAPTURE (Direct CCC Frame 5)
+  // ===========================================================================
+  always_ff @(posedge clk_i or negedge rst_ni) begin : proc_target_addr
     if (~rst_ni) begin
-      command_addr  <= '0;
-      command_rnw   <= '0;
-      command_valid <= '0;
+      target_addr          <= '0;
+      target_rnw           <= '0;
+      target_addr_captured <= '0;
     end else begin
-      if (state_q == RxDirectAddr && bus_rx_rsp_i.done) begin
-        command_addr  <= bus_rx_rsp_i.data[7:1];
-        command_rnw   <= bus_rx_rsp_i.data[0];
-        command_valid <= 1'b1;
+      if (capture_target_addr) begin
+        target_addr          <= bus_rx_rsp_i.data[7:1];
+        target_rnw           <= bus_rx_rsp_i.data[0];
+        target_addr_captured <= 1'b1;
       end else begin
-        command_valid <= 1'b0;
+        target_addr_captured <= 1'b0;
       end
     end
   end
 
+  // ===========================================================================
+  // ADDRESS ACK DETERMINATION
+  // ===========================================================================
+  assign addr_ack_setdasa = (command_code == CCC_DIRECT_SETDASA) &
+                            (target_addr_matches_main_sta | target_addr_matches_virt_sta);
+  assign addr_ack_target  = (command_code != CCC_DIRECT_SETDASA) &
+                            target_addr_matches_any & supported_direct_command & ccc_direction_valid;
+  assign addr_ack_rsvd    = target_addr_matches_rsvd & ~target_rnw;  // Only ACK 7E/W
+
+  assign addr_ack = addr_ack_setdasa | addr_ack_target | addr_ack_rsvd;
+
+  // ===========================================================================
+  // COMMAND SEQUENCE ERROR DETECTION
+  // ===========================================================================
+  // Detects invalid CCC sequences that violate framing rules:
+  // - SETDASA sent to a target using its dynamic address (should use static)
+  // - This indicates Controller is confused about our address state
+  //
+  // Note: This is a level signal indicating the error condition exists.
+  // The actual error pulse should be generated when target_addr_ack_done fires.
+  logic setdasa_to_dyn_addr;
+  assign setdasa_to_dyn_addr = (command_code == CCC_DIRECT_SETDASA) &
+                               (target_addr_matches_main_dyn | target_addr_matches_virt_dyn);
+
+  // ===========================================================================
+  // DATA RECEPTION
+  // ===========================================================================
   always_ff @(posedge clk_i or negedge rst_ni) begin : proc_rx_data
     if (~rst_ni) begin
       rx_data <= '0;
-    end else begin
-      if (state_q == RxData && bus_rx_rsp_i.done) begin
-        rx_data <= bus_rx_rsp_i.data;
-      end
+    end else if (capture_rx_data) begin
+      rx_data <= bus_rx_rsp_i.data;
     end
   end
 
-  i3c_byte_t bus_tx_data;
+  // ===========================================================================
+  // BUS TX/RX REQUEST GENERATION
+  // ===========================================================================
 
-  // Bit/byte requests and drive type are readily derived from state
+  // TX Request: Bit/byte requests and drive type derived from state
   assign tx_req_ccc = '{
-    drive_type: (state_q inside {TxData, TxDataTbit}) ? PushPull : OpenDrain,
+    drive_type: (state_q inside {TxData}) ? PushPull : OpenDrain,
     req_byte:   (state_q == TxData),
-    req_bit:    (state_q inside {TxDirectAddrAck, TxDataTbit}),
+    req_bit:    (state_q inside {TxTargetAddrAck, TxDataTbit}),
     data:       bus_tx_data
   };
 
+  // RX Request: Request bytes or bits based on current state
   assign rx_req_ccc = '{
-    req_byte: (state_q inside {RxDefByte, RxDirectAddr}) ||
-              (state_q inside {RxDefByteOrBusCond, RxByte, RxData} && !bus_rstart_det_i),
-    req_bit:  (state_q inside {RxTbit, RxDefByteTbit, RxDirectDefByteTbit, RxDataTbit})
+    req_byte: (state_q inside {RxDefByte, RxTargetAddr}) ||
+              (state_q inside {RxDefByteOrBusCond, WaitDirectRstart, RxData} && !bus_rstart_det_i),
+    req_bit:  (state_q inside {RxCmdTbit, RxDefByteTbit, RxDirectDefByteTbit, RxDataTbit})
   };
 
+  // ===========================================================================
+  // MAIN FSM: CCC FRAME PROCESSING
+  // ===========================================================================
   always_comb begin : fsm_ccc_main
     done_fsm_o = 1'b0;
     next_ccc_o = 1'b0;
 
     bus_tx_data = '0;
+    
+    // Defining byte capture/clear control
+    capture_defining_byte = 1'b0;
+    clear_defining_byte   = 1'b0;
+
+    // T-bit completion signals
+    cmd_tbit_valid      = 1'b0;
+    def_byte_tbit_valid = 1'b0;
+
+    // Target address capture control
+    capture_target_addr = 1'b0;
+
+    // RX data capture control
+    capture_rx_data = 1'b0;
+    rx_data_valid   = 1'b0;
+
+    // Target address ACK done control
+    target_addr_ack_done = 1'b0;
+
+    // RX byte counter control
+    clear_rx_byte_num = 1'b0;
+    inc_rx_byte_num   = 1'b0;
+
+    // TX byte counter control
+    clear_tx_byte_num = 1'b0;
+    inc_tx_byte_num   = 1'b0;
+    set_tx_data_complete = 1'b0;
+
+    // ENTDAA output control
+    entdaa_set_newda = 1'b0;
+    entdaa_is_virtual = 1'b0;
+
+    // HDR mode control
+    enter_hdr_mode = 1'b0;
+
+    // TE error outputs (single-cycle pulses)
+    te0_err_ccc = 1'b0;
+    te1_err     = 1'b0;
+    te2_err     = 1'b0;
+    te5_err     = 1'b0;
+
+    // Framing/sequence error (single-cycle pulse)
+    cmd_seq_err = 1'b0;
+    // Dynamic Address padding error (single-cycle pulse)
+    da_padding_err = 1'b0;
 
     state_d = state_q;
     unique case (state_q)
-      Idle: begin
-        state_d = WaitCCC;
-      end
+      // ---------------------------------------------------------------------
+      // Initial State
+      // ---------------------------------------------------------------------
       WaitCCC: begin
-        if (ccc_valid_i) state_d = RxTbit;
+        // Only accept new CCC commands when not in HDR mode
+        // In HDR mode, the bus uses a different protocol until exit_hdr_i
+        if (ccc_valid_i && ~in_hdr_mode) begin
+          // Clear byte counters at start of every CCC (broadcast and direct)
+          clear_rx_byte_num = 1'b1;
+          clear_tx_byte_num = 1'b1;
+          state_d = RxCmdTbit;
+        end
       end
-      RxTbit: begin
+      
+      // ---------------------------------------------------------------------
+      // Frame 2: T-bit after Command Code
+      // ---------------------------------------------------------------------
+      RxCmdTbit: begin
         if (bus_rx_rsp_i.done) begin
-          // have defining byte
-          if (have_defining_byte && command_code == CCC_DIRECT_GETCAPS) state_d = RxDefByteOrBusCond;
-          else if (have_defining_byte) state_d = RxDefByte;
+          if (tbit_parity_err) begin
+            // TE1: CCC command parity error - signal done and enter HDR mode (deaf mode)
+            te1_err = 1'b1;  // Assert TE1 error pulse
+            state_d = DoneCCC;
+          end
           else begin
-            // ENTDAA is special
-            if (command_code == CCC_BCAST_ENTDAA) begin
-              // ignore ENTDAA if we already have dynamic addresses
-              if (~target_dyn_address_valid_i || ~virtual_target_dyn_address_valid_i) begin
-                state_d = HandleENTDAA;
-              end else begin
-                state_d = Idle;
-              end
+            cmd_tbit_valid = 1'b1;  // Command T-bit complete (only if no parity error)
+            if (have_defining_byte) begin
+              // GETCAPS: defining byte is optional (may get repeated start instead)
+              state_d = (command_code == CCC_DIRECT_GETCAPS) ? RxDefByteOrBusCond : RxDefByte;
             end
-            // broadcast CCCs
-            else if (~is_direct_cmd) state_d = RxData;
-            // direct CCCs
-            else state_d = RxByte;
+            else if (command_code == CCC_BCAST_ENTDAA) begin
+              if (entdaa_needs_main_addr)       state_d = HandleTargetENTDAA;
+              else if (entdaa_needs_virt_addr)  state_d = HandleVirtualTargetENTDAA;
+              else                              state_d = WaitCCC;  // Already have addresses
+            end
+            else if (is_enthdr_cmd) begin
+              // ENTHDR0-7: Enter HDR mode (no defining byte, no data phase)
+              // HDR mode state machine handles the rest
+              enter_hdr_mode = 1'b1;
+              state_d = DoneCCC;  // Signal done so i3c_target_fsm exits DoCCC -> InHDRMode
+            end
+            else if (~is_direct_cmd) begin
+              state_d = RxData;  // Broadcast CCCs receive data
+            end
+            else begin
+              state_d = WaitDirectRstart;  // Direct CCCs wait for target address
+            end
           end
         end
       end
-      HandleENTDAA: begin
-        // First get target dynamic address
-        if (~target_dyn_address_valid_i) begin
-          state_d = HandleTargetENTDAA;
-        // then vitual device dynamic address
-        end else if (~virtual_target_dyn_address_valid_i) begin
-          state_d = HandleVirtualTargetENTDAA;
-        end else begin
-          state_d = Idle;
-        end
-      end
+      
+      // ---------------------------------------------------------------------
+      // ENTDAA Special Handling
+      // ---------------------------------------------------------------------
       HandleTargetENTDAA: begin
+        // Signal to set new address when ENTDAA sub-FSM provides valid address
+        entdaa_set_newda = entdaa_address_valid;
+        
         if (entdaa_done) begin
-          if (~virtual_target_dyn_address_valid_i) begin
-            state_d = HandleVirtualTargetENTDAA;
-          end else begin
-            state_d = Idle;
-          end
+          // After main target, check if virtual target also needs address
+          state_d = entdaa_needs_virt_addr ? HandleVirtualTargetENTDAA : WaitCCC;
         end
       end
+      
       HandleVirtualTargetENTDAA: begin
+        // Signal to set new address when ENTDAA sub-FSM provides valid address
+        entdaa_set_newda = entdaa_address_valid;
+        entdaa_is_virtual = 1'b1;
+        
         if (entdaa_done) begin
-          state_d = Idle;
+          state_d = WaitCCC;
         end
       end
+      
+      // ---------------------------------------------------------------------
+      // Frame 3-4: Defining Byte Handling
+      // ---------------------------------------------------------------------
       RxDefByte: begin
-        if (bus_rx_rsp_i.done) state_d = RxDefByteTbit;
+        if (bus_rx_rsp_i.done) begin
+          capture_defining_byte = 1'b1;
+          state_d = RxDefByteTbit;
+        end
       end
+      
       RxDefByteOrBusCond: begin
-        if (bus_rstart_det_i) state_d = RxDirectAddr;
-        else if (bus_rx_rsp_i.done) state_d = RxDefByteTbit;
+        // Either receive defining byte OR detect repeated start (for direct CCC)
+        if (bus_rstart_det_i) begin
+          // No defining byte received - clear any stale data
+          clear_defining_byte = 1'b1;
+          state_d = RxTargetAddr;
+        end else if (bus_rx_rsp_i.done) begin
+          capture_defining_byte = 1'b1;
+          state_d = RxDefByteTbit;
+        end
       end
+      
       RxDefByteTbit: begin
         if (bus_rx_rsp_i.done) begin
-          // broadcast CCCs
-          if (~is_direct_cmd) state_d = RxData;
-          // direct CCCs
-          else
-            state_d = RxByte;
+          if (tbit_parity_err) begin
+            // TE2: Defining byte parity error - abort this CCC
+            te2_err = 1'b1;  // Assert TE2 error pulse
+            state_d = DoneCCC;
+          end else begin
+            def_byte_tbit_valid = 1'b1;  // Defining byte T-bit complete (only if no parity error)
+            // broadcast CCCs proceed to data
+            if (~is_direct_cmd) state_d = RxData;
+            // direct CCCs wait for repeated start
+            else state_d = WaitDirectRstart;
+          end
         end
       end
-      RxByte: begin
-        if (bus_rstart_det_i) state_d = RxDirectAddr;
+      
+      // ---------------------------------------------------------------------
+      // Direct CCC: Wait for Target Address
+      // ---------------------------------------------------------------------
+      WaitDirectRstart: begin
+        // Wait for repeated start before target address
+        if (bus_rstart_det_i) state_d = RxTargetAddr;
         else if (bus_rx_rsp_i.done) state_d = RxDirectDefByteTbit;
       end
+      
       RxDirectDefByteTbit: begin
         if (bus_rx_rsp_i.done) begin
-          state_d = RxByte;
+          if (tbit_parity_err) begin
+            // TE2: Parity error on additional data byte before target address
+            te2_err = 1'b1;  // Assert TE2 error pulse
+            state_d = DoneCCC;
+          end else begin
+            state_d = WaitDirectRstart;
+          end
         end
       end
-      RxDirectAddr: begin
+      
+      // ---------------------------------------------------------------------
+      // Frame 5-6: Target Address and ACK
+      // ---------------------------------------------------------------------
+      RxTargetAddr: begin
         if (bus_rx_rsp_i.done) begin
-          state_d = TxDirectAddrAck;
+          capture_target_addr = 1'b1;
+          state_d = TxTargetAddrAck;
         end
       end
-      TxDirectAddrAck: begin
-        bus_tx_data[0] = ~direct_addr_ack;
+      
+      // After sending ACK/NACK, determine next state based on error conditions and addr_ack:
+      //   - TE0: Invalid reserved address - signal done and enter HDR mode
+      //   - TE5: Wrong R/W direction - NACK and wait for recovery
+      //   - Reserved address (7'h7E/W): End of CCC frame, ready for next CCC
+      //   - ACKed: Proceed to appropriate data phase (GET → TxData, SET → RxData)
+      //   - NACKed: Wait for bus condition (not addressed, unsupported cmd)
+      TxTargetAddrAck: begin
+        bus_tx_data[0] = ~addr_ack;  // Send ACK (0) or NACK (1)
 
         if (bus_tx_rsp_i.done) begin
-          if (command_code == CCC_DIRECT_SETDASA) begin
-            if (is_byte_our_static_addr && target_dyn_address_valid_i) state_d = WaitForBusCond;
-            else if (is_byte_our_virtual_static_addr && virtual_target_dyn_address_valid_i) state_d = WaitForBusCond;
-            else if (is_byte_our_virtual_static_addr || is_byte_our_static_addr) state_d = RxData;
-            else state_d = WaitForBusCond;
-          end
-          else begin
-            if (is_byte_rsvd_addr) state_d = NextCCC;
-            else if ((is_byte_our_addr || is_byte_virtual_addr) && command_rnw && supported_direct_command) state_d = TxData;
-            else if ((is_byte_our_addr || is_byte_virtual_addr) && ~command_rnw && supported_direct_command) begin
-              if (command_code == CCC_DIRECT_SETXTIME) state_d = RxSubCmdByte;
-              else state_d = RxData;
-            end else state_d = WaitForBusCond;
+          target_addr_ack_done = 1'b1;
+          clear_rx_byte_num = 1'b1;  // Reset RX byte counter for upcoming data phase
+          clear_tx_byte_num = 1'b1;  // Reset TX byte counter for upcoming data phase
+
+          if (is_te0_err_condition) begin
+            // TE0: Invalid reserved address - enter HDR mode (deaf mode)
+            te0_err_ccc = 1'b1;  // Assert TE0 error pulse
+            state_d = DoneCCC;
+          end else if (target_addr_matches_rsvd) begin
+            // Reserved address (7'h7E/W): End of Direct CCC frame
+            state_d = NextCCC;
+          end else if (~addr_ack) begin
+            if (setdasa_to_dyn_addr) begin
+              // Command sequence error: SETDASA sent using dynamic address
+              // Controller is confused - we already have a dynamic address
+              cmd_seq_err = 1'b1;
+            end else if (is_te5_err_condition) begin
+              // TE5: Wrong R/W direction - already NACKed, wait for recovery
+              te5_err = 1'b1;  // Assert TE5 error pulse
+            end
+            // NACKed: Not addressed to us or unsupported command
+            state_d = WaitForBusCond;
+          end else if (target_addr_matches_any_get_cmd) begin
+            // ACKed GET command: Target transmits data
+            state_d = TxData;
+          end else begin
+            // ACKed SET command (including SETDASA): Target receives data
+            state_d = RxData;
           end
         end
       end
 
-      // TODO: Add support for Sub Cmd Byte
+      // ---------------------------------------------------------------------
+      // Sub-command Byte
+      // ---------------------------------------------------------------------
+      // Unused state because none of our commands utilize Sub Cmd Byte
       RxSubCmdByte: begin
-        state_d = Idle;
+        state_d = WaitCCC;
       end
 
+      // ---------------------------------------------------------------------
+      // Frame 7+: Data Phase
+      // ---------------------------------------------------------------------
       RxData: begin
-        if (bus_rstart_det_i) state_d = RxDirectAddr;
-        else if (bus_rx_rsp_i.done) state_d = RxDataTbit;
+        if (bus_rx_rsp_i.done) begin
+          capture_rx_data = 1'b1;
+          state_d = RxDataTbit;
+        end
       end
       RxDataTbit: begin
-        if (bus_rx_rsp_i.done) state_d = RxData;
+        if (bus_rx_rsp_i.done) begin
+          if (tbit_parity_err) begin
+            // TE2: Data byte parity error - abort this CCC
+            te2_err = 1'b1;  // Assert TE2 error pulse
+            state_d = DoneCCC;
+          end else begin
+            inc_rx_byte_num = 1'b1;   // Move to next byte
+            // Check for DA padding bit error (Bit[0] must be 0 for DA assignment CCCs)
+            if (rx_byte_num == 2'd0 &&
+                (command_code == CCC_DIRECT_SETDASA || command_code == CCC_DIRECT_SETNEWDA) &&
+                rx_data[0] == 1'b1) begin
+              // DA padding bit error: Don't set rx_data_valid - address won't be applied
+              da_padding_err = 1'b1;
+            end else begin
+              rx_data_valid = 1'b1;   // Data byte with T-bit complete
+            end
+            // After last byte, wait for SR/STOP; otherwise receive more bytes
+            if (rx_data_last_byte) begin
+              state_d = WaitForBusCond;
+            end else begin
+              state_d = RxData;
+            end
+          end
+        end
       end
+      
       TxData: begin
         bus_tx_data = tx_data;
 
-        if (bus_rstart_det_i) state_d = RxDirectAddr;
-        else if (bus_tx_rsp_i.done) state_d = TxDataTbit;
+        if (bus_tx_rsp_i.done) state_d = TxDataTbit;
       end
+      
       TxDataTbit: begin
-        bus_tx_data[0] = ~tx_data_done;
+        // T-bit: 1 = more data, 0 = last byte
+        bus_tx_data[0] = ~tx_data_last_byte;
 
-        if (bus_rstart_det_i) begin
-          state_d = RxDirectAddr;
-        end else if (bus_tx_rsp_i.done) begin
-          state_d = tx_data_done ? WaitForBusCond : TxData;
+        if (bus_tx_rsp_i.done) begin
+          inc_tx_byte_num = 1'b1;
+
+          if (arbitration_lost_i || tx_data_last_byte) begin
+            if (!arbitration_lost_i) begin
+              set_tx_data_complete = 1'b1;
+            end
+            state_d = WaitForBusCond;
+          end else begin
+            state_d = TxData;
+          end
         end
       end
+      
+      // ---------------------------------------------------------------------
+      // Bus Condition Handling
+      // ---------------------------------------------------------------------
       WaitForBusCond: begin
-        if (bus_rstart_det_i) state_d = RxDirectAddr;
+        // Wait for STOP or repeated start
+        if (bus_rstart_det_i) state_d = RxTargetAddr;
       end
+      
+      // ---------------------------------------------------------------------
+      // CCC Completion
+      // ---------------------------------------------------------------------
       NextCCC: begin
+        // Ready for next CCC in chain
         next_ccc_o = 1'b1;
         state_d    = WaitCCC;
       end
+      
       DoneCCC: begin
+        // CCC processing complete
         done_fsm_o = 1'b1;
-        state_d    = Idle;
+        state_d    = WaitCCC;
       end
+      
       default: begin
       end
     endcase
 
-    // Overwrite decision on bus stop
+    // Overwrite decision on bus STOP - terminates CCC processing
     if (bus_stop_det_i) begin
       state_d = DoneCCC;
     end
   end
 
-  // Synchronous state transition
+  // ===========================================================================
+  // FSM STATE REGISTER
+  // ===========================================================================
   always_ff @(posedge clk_i or negedge rst_ni) begin : state_transition
     if (!rst_ni) begin
-      state_q <= Idle;
+      state_q <= WaitCCC;
     end else begin
       state_q <= state_d;
     end
   end
 
-  // GET interface handler
-  always_ff @(posedge clk_i or negedge rst_ni) begin : proc_tx_data_id
+  // ===========================================================================
+  // TX BYTE COUNTER (for multi-byte GET responses)
+  // ===========================================================================
+  // Counts up from 0: byte 0 is first byte sent, byte (tx_byte_total-1) is last
+  always_ff @(posedge clk_i or negedge rst_ni) begin : proc_tx_byte_num
     if (~rst_ni) begin
-      tx_data_id <= '0;
+      tx_byte_num <= '0;
     end else begin
-      if (state_q == TxDirectAddrAck) tx_data_id <= tx_data_id_init;
-      else if (state_q == TxData && bus_tx_rsp_i.done) tx_data_id <= tx_data_id - 1'b1;
-      else if (state_q == RxTbit) tx_data_id <= tx_data_id_init;
-      else tx_data_id <= tx_data_id;
+      if (clear_tx_byte_num)    tx_byte_num <= '0;
+      else if (inc_tx_byte_num) tx_byte_num <= tx_byte_num + 1'b1;
     end
   end
 
-  // GET data counter
-  always_ff @(posedge clk_i or negedge rst_ni) begin
+  // Last byte when we've reached (tx_byte_total - 1)
+  assign tx_data_last_byte = (tx_byte_num == tx_byte_total - 1);
+
+  // TX complete tracking: set by FSM when last T-bit completes normally
+  always_ff @(posedge clk_i or negedge rst_ni) begin : proc_tx_data_complete
     if (~rst_ni) begin
-      rx_data_count <= '0;
-    end else if (state_q == WaitCCC && ccc_valid_i) begin
-      rx_data_count <= '0;
-    end else if (state_q == RxDirectAddr && bus_rx_rsp_i.done) begin
-      rx_data_count <= '0;
-    end else if (state_q == RxDataTbit && bus_rx_rsp_i.done) begin
-      rx_data_count <= rx_data_count + 1'b1;
+      tx_data_complete <= 1'b0;
+    end else if (clear_tx_byte_num) begin
+      tx_data_complete <= 1'b0;
+    end else if (set_tx_data_complete) begin
+      tx_data_complete <= 1'b1;
     end
   end
 
-  // Done, no more bytes to send in this CCC
-  assign tx_data_done = tx_data_id == 8'h00;
+  // ===========================================================================
+  // RX BYTE COUNTER (for multi-byte SET commands)
+  // ===========================================================================
+  // Counts up from 0: byte 0 is first byte received, byte 1 is second, etc.
+  always_ff @(posedge clk_i or negedge rst_ni) begin : proc_rx_byte_num
+    if (~rst_ni) begin
+      rx_byte_num <= '0;
+    end else begin
+      if (clear_rx_byte_num)    rx_byte_num <= '0;
+      else if (inc_rx_byte_num) rx_byte_num <= rx_byte_num + 1'b1;
+    end
+  end
 
-  // Handle all DIRECT GET CCCs
-  always_comb begin : proc_get
-    // Put a safe default RIGHT at the beginning, avoids having to repeat it everywhere
-    // Avoids infered flops in case it gets forgotten even once
-    tx_data = '0; 
-    // TODO clean up the code below
+  // Last RX byte when we've reached (rx_byte_total - 1)
+  assign rx_data_last_byte = (rx_byte_num == rx_byte_total - 1);
+
+  // ===========================================================================
+  // CCC HANDLERS
+  // ===========================================================================
+
+  // GETSTATUS completion: pulse when GETSTATUS completes with all bytes sent.
+  assign get_status_done_o = done_fsm_o && command_code_valid && 
+                             (command_code == CCC_DIRECT_GETSTATUS) && tx_data_complete;
+
+  // ---------------------------------------------------------------------------
+  // DIRECT GET CCC HANDLER
+  // ---------------------------------------------------------------------------
+  // Determines TX data and byte count for GET CCCs.
+  // tx_byte_num counts up from 0: byte 0 is first byte sent.
+  always_comb begin : proc_get_ccc_handler
     case (command_code)
-      // 1 Byte
+      // ---------------------------------------------------------------------
+      // 1 Byte Responses
+      // ---------------------------------------------------------------------
       CCC_DIRECT_GETBCR: begin
-        tx_data_id_init = 8'h01;
-        if (tx_data_id == 8'h01) begin
-          if (is_byte_virtual_addr) tx_data = virtual_get_bcr_i;
-          else tx_data = get_bcr_i;
-        end else tx_data = '0;
+        tx_byte_total = 3'd1;
+        tx_data = target_addr_matches_virt ? virtual_get_bcr_i : get_bcr_i;
       end
+      
       CCC_DIRECT_GETDCR: begin
-        tx_data_id_init = 8'h01;
-        if (tx_data_id == 8'h01) begin
-          if (is_byte_virtual_addr) tx_data = virtual_get_dcr_i;
-          else tx_data = get_dcr_i;
-        end else tx_data = '0;
+        tx_byte_total = 3'd1;
+        tx_data = target_addr_matches_virt ? virtual_get_dcr_i : get_dcr_i;
       end
+      
       CCC_DIRECT_RSTACT: begin
-        tx_data_id_init = 8'h01;
+        tx_byte_total = 3'd1;
         if (defining_byte == 8'h81 || defining_byte == 8'h82) begin
-            if (tx_data_id == 8'h01 && defining_byte == 8'h81) tx_data = 8'hFF; // Use worst case value for now
-            else if (tx_data_id == 8'h01 && defining_byte == 8'h82) tx_data = 8'hFF; // Use worst case value for now
-            else tx_data = '0;
-        end else if (defining_byte == 8'h00 || defining_byte == 8'h01 || defining_byte == 8'h02) begin
-            if (tx_data_id == 8'h01) tx_data = rst_action;
-            else tx_data = '0;
-        end else tx_data = '0;
-      end
-      // 2 Bytes
-      CCC_DIRECT_GETSTATUS: begin
-        tx_data_id_init = 8'h02;
-        if (tx_data_id == 8'h02) tx_data = get_status_fmt1_i[15:8];
-        else if (tx_data_id == 8'h01) tx_data = is_byte_virtual_addr ? 8'hC0 : get_status_fmt1_i[7:0];
-        else tx_data = '0;
-      end
-      CCC_DIRECT_GETMWL: begin
-        tx_data_id_init = 8'h02;
-        if (tx_data_id == 8'h02) tx_data = get_mwl_i[15:8];
-        else if (tx_data_id == 8'h01) tx_data = get_mwl_i[7:0];
-        else tx_data = '0;
-      end
-      // 3 Bytes
-      CCC_DIRECT_GETMRL: begin
-        tx_data_id_init = 8'h03;
-        if (tx_data_id == 8'h03) tx_data = get_mrl_i[15:8];
-        else if (tx_data_id == 8'h02) tx_data = get_mrl_i[7:0];
-        else if (tx_data_id == 8'h01) tx_data = get_ibil_i;
-        else tx_data = '0;
-      end
-      CCC_DIRECT_GETPID: begin
-        tx_data_id_init = 8'h06;
-        if (tx_data_id == 8'h06) begin
-          if (is_byte_virtual_addr) tx_data = virtual_get_pid_i[47:40];
-          else tx_data = get_pid_i[47:40];
-        end else if (tx_data_id == 8'h05) begin
-          if (is_byte_virtual_addr) tx_data = virtual_get_pid_i[39:32];
-          else tx_data = get_pid_i[39:32];
-        end else if (tx_data_id == 8'h04) begin
-          if (is_byte_virtual_addr) tx_data = virtual_get_pid_i[31:24];
-          else tx_data = get_pid_i[31:24];
-        end else if (tx_data_id == 8'h03) begin
-          if (is_byte_virtual_addr) tx_data = virtual_get_pid_i[23:16];
-          else tx_data = get_pid_i[23:16];
-        end else if (tx_data_id == 8'h02) begin
-          if (is_byte_virtual_addr) tx_data = virtual_get_pid_i[15:8];
-          else tx_data = get_pid_i[15:8];
-        end else if (tx_data_id == 8'h01) begin
-          if (is_byte_virtual_addr) tx_data = virtual_get_pid_i[7:0];
-          else tx_data = get_pid_i[7:0];
-        end else tx_data = '0;
-      end
-      // n Bytes
-      CCC_DIRECT_GETCAPS: begin
-        if( !valid_defining_byte || defining_byte == 8'h00) begin
-          tx_data_id_init = 8'h03;
-
-          // tx_data_id counts down from 3, so the x in GETCAPx as per the spec is calculated as
-          // x = 3-tx_data_id+1
-          unique case (tx_data_id)
-            8'd3: begin
-              // GETCAP1 - We don't support any HDR Modes
-              tx_data = 8'h00;
-            end
-            8'd2: begin
-              // GETCAP2
-              tx_data[3:0] = 4'h1; // We support I3C Basic v1.1.1
-            end
-            8'd1: begin
-              // GETCAP3
-              tx_data[6] = 1'b1; // We support IBI MDB Support (see Sect. 5.1.6.2.2)
-              tx_data[3] = 1'b1; // We support an optional defining byte for GETCAPS
-            end
-            default: ; // Already covered outside of this case tree
-          endcase
-        end else if (valid_defining_byte && defining_byte == 8'h93) begin
-          tx_data_id_init = 8'h01;
-          if (tx_data_id == 8'h01) tx_data = 8'h35; // We share peripheral logic with side effects
-          else tx_data = '0;
+          // 0x81/0x82: Return reset recovery time (0xFF = worst case ~1s)
+          tx_data = 8'hFF;
+        end else if (defining_byte inside {8'h00, 8'h01, 8'h02}) begin
+          // 0x00-0x02: Return armed action, or 0x80 if not armed
+          tx_data = rstact_armed ? rst_action : 8'h80;
         end else begin
-          tx_data_id_init = '0;
           tx_data = '0;
         end
       end
+      
+      // ---------------------------------------------------------------------
+      // 2 Byte Responses
+      // ---------------------------------------------------------------------
+      CCC_DIRECT_GETSTATUS: begin
+        tx_byte_total = 3'd2;
+        case (tx_byte_num)
+          3'd0:    tx_data = get_status_fmt1_i[15:8];
+          // Virtual target: Activity Mode=3, pass through Protocol Error, no pending interrupts
+          // (virtual target cannot send IBIs, so PENDING_INTERRUPT is always 0)
+          3'd1:    tx_data = target_addr_matches_virt ? 
+                             {2'b11, get_status_fmt1_i[5], 5'b0} : get_status_fmt1_i[7:0];
+          default: tx_data = '0;
+        endcase
+      end
+      
+      CCC_DIRECT_GETMWL: begin
+        tx_byte_total = 3'd2;
+        case (tx_byte_num)
+          3'd0:    tx_data = get_mwl_i[15:8];
+          3'd1:    tx_data = get_mwl_i[7:0];
+          default: tx_data = '0;
+        endcase
+      end
+      
+      // ---------------------------------------------------------------------
+      // 3 Byte Responses
+      // ---------------------------------------------------------------------
+      CCC_DIRECT_GETMRL: begin
+        tx_byte_total = 3'd3;
+        case (tx_byte_num)
+          3'd0:    tx_data = get_mrl_i[15:8];
+          3'd1:    tx_data = get_mrl_i[7:0];
+          // Virtual target cannot send IBIs, so IBI payload length is 0
+          3'd2:    tx_data = target_addr_matches_virt ? 8'h00 : get_ibil_i;
+          default: tx_data = '0;
+        endcase
+      end
+      
+      // ---------------------------------------------------------------------
+      // 6 Byte Responses
+      // ---------------------------------------------------------------------
+      CCC_DIRECT_GETPID: begin
+        tx_byte_total = 3'd6;
+        case (tx_byte_num)
+          3'd0:    tx_data = target_addr_matches_virt ? virtual_get_pid_i[47:40] : get_pid_i[47:40];
+          3'd1:    tx_data = target_addr_matches_virt ? virtual_get_pid_i[39:32] : get_pid_i[39:32];
+          3'd2:    tx_data = target_addr_matches_virt ? virtual_get_pid_i[31:24] : get_pid_i[31:24];
+          3'd3:    tx_data = target_addr_matches_virt ? virtual_get_pid_i[23:16] : get_pid_i[23:16];
+          3'd4:    tx_data = target_addr_matches_virt ? virtual_get_pid_i[15:8]  : get_pid_i[15:8];
+          3'd5:    tx_data = target_addr_matches_virt ? virtual_get_pid_i[7:0]   : get_pid_i[7:0];
+          default: tx_data = '0;
+        endcase
+      end
+      
+      // ---------------------------------------------------------------------
+      // Variable Length Responses
+      // ---------------------------------------------------------------------
+      CCC_DIRECT_GETCAPS: begin
+        if (!defining_byte_valid || defining_byte == 8'h00) begin
+          // Default GETCAPS response (3 bytes)
+          tx_byte_total = 3'd3;
+          case (tx_byte_num)
+            3'd0:    tx_data = 8'h00;  // No HDR Modes supported
+            3'd1:    tx_data = 8'h01;  // I3C Basic v1.1.1
+            // CRCAP1: 0x48 = IBI MDB (bit 6) + IBI Payload (bit 3) + GETCAPS defining bytes
+            // Virtual target cannot send IBIs, so clear IBI-related bits (0x48 -> 0x00)
+            3'd2:    tx_data = target_addr_matches_virt ? 8'h00 : 8'h48;
+            default: tx_data = '0;
+          endcase
+        end else if (defining_byte_valid && defining_byte == 8'h93) begin
+          // GETCAPS 0x93: TESTCAP byte - device test capabilities
+          tx_byte_total = 3'd1;
+          tx_data = 8'h35;  // Share peripheral logic with side effects
+        end else begin
+          tx_byte_total = 3'd0;
+          tx_data = '0;
+        end
+      end
+      
       default: begin
-        tx_data_id_init = 8'h00;
+        tx_byte_total = 3'd0;
         tx_data = '0;
       end
     endcase
   end
 
+  // ---------------------------------------------------------------------------
+  // SET CCC RX BYTE COUNT (Broadcast and Direct)
+  // ---------------------------------------------------------------------------
+  // Determines expected RX byte count for SET CCCs.
+  // rx_byte_num counts up from 0: byte 0 is first byte received.
+  always_comb begin : proc_set_ccc_rx_byte_total
+    case (command_code)
+      // 1 Byte Commands
+      CCC_BCAST_ENEC,
+      CCC_BCAST_DISEC,
+      CCC_DIRECT_ENEC,
+      CCC_DIRECT_DISEC,
+      CCC_DIRECT_SETDASA,
+      CCC_DIRECT_SETNEWDA:   rx_byte_total = 2'd1;
+      // 2 Byte Commands
+      CCC_BCAST_SETMWL,
+      CCC_DIRECT_SETMWL:     rx_byte_total = 2'd2;
+      // 3 Byte Commands
+      CCC_BCAST_SETMRL,
+      CCC_DIRECT_SETMRL:     rx_byte_total = 2'd3;
+      default:               rx_byte_total = 2'd1;
+    endcase
+  end
+
+  // ===========================================================================
+  // SETDASA/SETAASA OUTPUT ASSIGNMENTS
+  // ===========================================================================
   assign dasa_o = set_dasa_addr;
   assign set_dasa_o = set_dasa_valid;
-  assign set_dasa_virtual_device_o = is_byte_virtual_addr ? set_dasa_valid : 1'b0;
+  assign set_dasa_virtual_device_o = target_addr_matches_virt ? set_dasa_valid : 1'b0;
   assign set_aasa_o = set_aasa_valid;
   assign set_aasa_virt_o = set_aasa_virt_valid;
 
-  // connect entdaa/setnewda
-  always_comb begin: entdaa_setnewda_mux
-   set_newda_o = set_newda_valid | (entdaa_addres_valid && ((state_q == HandleTargetENTDAA) || (state_q == HandleVirtualTargetENTDAA)));
-   set_newda_virtual_device_o = set_newda_valid ? is_byte_our_virtual_dynamic_addr : (entdaa_addres_valid && (state_q == HandleVirtualTargetENTDAA));
-   newda_o = set_newda_valid ? set_newda_addr : entdaa_address;
-  end
+  // ===========================================================================
+  // SETNEWDA/ENTDAA OUTPUT MUX
+  // ===========================================================================
+  // Both SETNEWDA (direct CCC) and ENTDAA (broadcast with sub-FSM) set a new dynamic address.
+  // SETNEWDA takes priority since it can't happen simultaneously with ENTDAA.
+  assign set_newda_o              = set_newda_valid | entdaa_set_newda;
+  assign set_newda_virtual_device_o = set_newda_valid ? target_addr_matches_virt_dyn : entdaa_is_virtual;
+  assign newda_o                  = set_newda_valid ? set_newda_addr : entdaa_address;
 
-  // Handle DIRECT SET CCCs
-  always_ff @(posedge clk_i or negedge rst_ni) begin : proc_set_direct
+  // ===========================================================================
+  // SET CCC HANDLERS (Broadcast and Direct)
+  // ===========================================================================
+  // Handles: SETDASA, SETNEWDA, SETMWL, SETMRL, ENEC, DISEC, RSTACT
+  // For broadcast CCCs: always process
+  // For direct CCCs: only process if addressed to us (not reserved byte)
+  always_ff @(posedge clk_i or negedge rst_ni) begin : proc_set_ccc
     if (~rst_ni) begin
-      set_dasa_valid <= 1'b0;
-      set_dasa_addr  <= '0;
-      set_newda_valid <= 1'b0;
-      set_newda_addr <= '0;
-    end else begin
-      case (command_code)
-        // setdasa has only one data byte - dynamic address
-        CCC_DIRECT_SETDASA: begin
-          if (state_q == RxDataTbit && bus_rx_rsp_i.done && ~is_byte_rsvd_addr &&
-              rx_data_count == 8'd0) begin
-            set_dasa_addr  <= rx_data[7:1];
-            set_dasa_valid <= 1'b1;
-          end else begin
-            set_dasa_valid <= 1'b0;
-          end
-        end
-        CCC_DIRECT_SETNEWDA: begin
-          if (state_q == RxDataTbit && bus_rx_rsp_i.done && ~is_byte_rsvd_addr &&
-              rx_data_count == 8'd0) begin
-            set_newda_addr <= rx_data[7:1];
-            set_newda_valid <= 1'b1;
-          end else begin
-            set_newda_valid <= 1'b0;
-          end
-        end
-        default: begin
-        end
-      endcase
-    end
-  end
-
-  logic enec_ibi;
-  logic enec_crr;
-  logic enec_hj;
-
-  logic disec_ibi;
-  logic disec_crr;
-  logic disec_hj;
-
-  // Handle Broadcast/Direct SET CCCs
-  always_ff @(posedge clk_i or negedge rst_ni) begin : proc_set_direct_bcast
-    if (~rst_ni) begin
+      set_dasa_valid   <= 1'b0;
+      set_dasa_addr    <= '0;
+      set_newda_valid  <= 1'b0;
+      set_newda_addr   <= '0;
       set_mrl_o        <= 1'b0;
       mrl_o            <= '0;
       set_ibil_o       <= 1'b0;
@@ -919,97 +1396,170 @@ module ccc
       disec_hj         <= '0;
       rst_action_valid <= 1'b0;
     end else begin
+      // Default: clear all pulse signals
+      set_dasa_valid   <= 1'b0;
+      set_newda_valid  <= 1'b0;
+      set_mwl_o        <= 1'b0;
+      set_mrl_o        <= 1'b0;
+      set_ibil_o       <= 1'b0;
       enec_ibi         <= '0;
       enec_crr         <= '0;
       enec_hj          <= '0;
       disec_ibi        <= '0;
       disec_crr        <= '0;
       disec_hj         <= '0;
+      rst_action_valid <= 1'b0;
+
+      // Process received data bytes
+      // Note: For Direct CCCs, rx_data_valid only fires when target address matched
+      // AND padding bit is valid for DA assignment CCCs.
+      // Reserved address (7'h7E) and non-matching addresses never reach the data phase.
+      if (rx_data_valid) begin
+        case (command_code)
+          // -----------------------------------------------------------------
+          // Direct CCCs (require target address match)
+          // -----------------------------------------------------------------
+          CCC_DIRECT_SETDASA: begin
+            case (rx_byte_num)
+              2'd0: begin
+                // DA is in Bits[7:1] (Bit[0] padding already validated by FSM)
+                set_dasa_addr  <= rx_data[7:1];
+                set_dasa_valid <= 1'b1;
+              end
+              default: ;
+            endcase
+          end
+          CCC_DIRECT_SETNEWDA: begin
+            case (rx_byte_num)
+              2'd0: begin
+                // DA is in Bits[7:1] (Bit[0] padding already validated by FSM)
+                set_newda_addr  <= rx_data[7:1];
+                set_newda_valid <= 1'b1;
+              end
+              default: ;
+            endcase
+          end
+          CCC_DIRECT_SETMWL: begin
+            case (rx_byte_num)
+              2'd0: mwl_o[15:8] <= rx_data;
+              2'd1: begin
+                mwl_o[7:0] <= rx_data;
+                set_mwl_o  <= 1'b1;
+              end
+              default: ;
+            endcase
+          end
+          CCC_DIRECT_SETMRL: begin
+            case (rx_byte_num)
+              2'd0: mrl_o[15:8] <= rx_data;
+              2'd1: begin
+                mrl_o[7:0] <= rx_data;
+                set_mrl_o  <= 1'b1;
+              end
+              2'd2: begin
+                ibil_o     <= rx_data;
+                set_ibil_o <= 1'b1;
+              end
+              default: ;
+            endcase
+          end
+          CCC_DIRECT_ENEC: begin
+            case (rx_byte_num)
+              2'd0: begin
+                enec_ibi <= rx_data[0];
+                enec_crr <= rx_data[1];
+                enec_hj  <= rx_data[3];
+              end
+              default: ;
+            endcase
+          end
+          CCC_DIRECT_DISEC: begin
+            case (rx_byte_num)
+              2'd0: begin
+                disec_ibi <= rx_data[0];
+                disec_crr <= rx_data[1];
+                disec_hj  <= rx_data[3];
+              end
+              default: ;
+            endcase
+          end
+          // -----------------------------------------------------------------
+          // Broadcast CCCs (always process)
+          // -----------------------------------------------------------------
+          CCC_BCAST_SETMWL: begin
+            case (rx_byte_num)
+              2'd0: mwl_o[15:8] <= rx_data;
+              2'd1: begin
+                mwl_o[7:0] <= rx_data;
+                set_mwl_o  <= 1'b1;
+              end
+              default: ;
+            endcase
+          end
+          CCC_BCAST_SETMRL: begin
+            case (rx_byte_num)
+              2'd0: mrl_o[15:8] <= rx_data;
+              2'd1: begin
+                mrl_o[7:0] <= rx_data;
+                set_mrl_o  <= 1'b1;
+              end
+              2'd2: begin
+                ibil_o     <= rx_data;
+                set_ibil_o <= 1'b1;
+              end
+              default: ;
+            endcase
+          end
+          CCC_BCAST_ENEC: begin
+            case (rx_byte_num)
+              2'd0: begin
+                enec_ibi <= rx_data[0];
+                enec_crr <= rx_data[1];
+                enec_hj  <= rx_data[3];
+              end
+              default: ;
+            endcase
+          end
+          CCC_BCAST_DISEC: begin
+            case (rx_byte_num)
+              2'd0: begin
+                disec_ibi <= rx_data[0];
+                disec_crr <= rx_data[1];
+                disec_hj  <= rx_data[3];
+              end
+              default: ;
+            endcase
+          end
+          default: ;
+        endcase
+      end
+
+      // -----------------------------------------------------------------
+      // RSTACT: Arm reset action (triggers on ACK/T-bit, not data bytes)
+      // -----------------------------------------------------------------
       case (command_code)
-        // setmwl
-        CCC_DIRECT_SETMWL, CCC_BCAST_SETMWL: begin
-          if (state_q == RxDataTbit && bus_rx_rsp_i.done && (~is_byte_rsvd_addr || command_code == CCC_BCAST_SETMWL)) begin
-            if (rx_data_count == 8'd0) begin
-              mwl_o[15:8] <= rx_data;
-              set_mwl_o   <= 1'b0;
-            end else if (rx_data_count == 8'd1) begin
-              mwl_o[7:0] <= rx_data;
-              set_mwl_o  <= 1'b1;
-            end else begin
-              set_mwl_o <= 1'b0;
-            end
-          end else begin
-            set_mwl_o <= 1'b0;
-          end
-        end
-        // setmrl
-        CCC_DIRECT_SETMRL, CCC_BCAST_SETMRL: begin
-          if (state_q == RxDataTbit && bus_rx_rsp_i.done && (~is_byte_rsvd_addr || command_code == CCC_BCAST_SETMRL)) begin
-            if (rx_data_count == 8'd0) begin
-              mrl_o[15:8] <= rx_data;
-              set_ibil_o   <= 1'b0;
-              set_mrl_o   <= 1'b0;
-            end else if (rx_data_count == 8'd1) begin
-              mrl_o[7:0] <= rx_data;
-              set_ibil_o  <= 1'b0;
-              set_mrl_o  <= 1'b1;
-            end else if (rx_data_count == 8'd2) begin
-              ibil_o[7:0] <= rx_data;
-              set_ibil_o  <= 1'b1;
-              set_mrl_o  <= 1'b0;
-            end else begin
-              set_ibil_o  <= 1'b0;
-              set_mrl_o <= 1'b0;
-            end
-          end else begin
-            set_ibil_o  <= 1'b0;
-            set_mrl_o <= 1'b0;
-          end
-        end
-        // enec
-        CCC_DIRECT_ENEC, CCC_BCAST_ENEC: begin
-          if (state_q == RxDataTbit && bus_rx_rsp_i.done && (~is_byte_rsvd_addr || command_code == CCC_BCAST_ENEC)) begin
-            if (rx_data_count == 8'd0) begin
-              enec_ibi <= rx_data[0];
-              enec_crr <= rx_data[1];
-              enec_hj  <= rx_data[3];
-            end
-          end
-        end
-        // disec
-        CCC_DIRECT_DISEC, CCC_BCAST_DISEC: begin
-          if (state_q == RxDataTbit && bus_rx_rsp_i.done && (~is_byte_rsvd_addr || command_code == CCC_BCAST_DISEC)) begin
-            if (rx_data_count == 8'd0) begin
-              disec_ibi <= rx_data[0];
-              disec_crr <= rx_data[1];
-              disec_hj  <= rx_data[3];
-            end
-          end
-        end
-        // rstact (direct)
         CCC_DIRECT_RSTACT: begin
-          if (command_valid && is_byte_our_addr && ~command_rnw) begin
+          // Direct RSTACT: Arm after target address ACK for action values (0x00-0x7F)
+          if (target_addr_ack_done && addr_ack_target && ~defining_byte[7]) begin
             rst_action_valid <= 1'b1;
-          end else begin
-            rst_action_valid <= 1'b0;
           end
         end
-        // rstact (broadcast)
         CCC_BCAST_RSTACT: begin
-          if (state_q == RxDefByteTbit && bus_rx_rsp_i.done) begin
+          // Broadcast RSTACT: Arm after defining byte T-bit for action values (0x00-0x7F)
+          if (def_byte_tbit_valid && ~defining_byte[7]) begin
             rst_action_valid <= 1'b1;
-          end else begin
-            rst_action_valid <= 1'b0;
           end
         end
-        default: begin
-        end
+        default: ;
       endcase
     end
   end
 
-  // Handle Broadcast CCCs without data
-  always_ff @(posedge clk_i or negedge rst_ni) begin : bcast_ccc
+  // ===========================================================================
+  // BROADCAST CCC HANDLERS (without data)
+  // ===========================================================================
+  // Handles RSTDAA, SETAASA (CCCs that complete on command T-bit, no data phase)
+  always_ff @(posedge clk_i or negedge rst_ni) begin : proc_bcast_no_data_ccc
     if (~rst_ni) begin
       rstdaa_o <= '0;
       set_aasa_valid <= 1'b0;
@@ -1017,17 +1567,19 @@ module ccc
     end else begin
       case (command_code)
         CCC_BCAST_RSTDAA: begin
-          if (state_q == RxTbit && bus_rx_rsp_i.done) begin
-            rstdaa_o <= '1;
+          // RSTDAA completes after receiving the command T-bit
+          if (cmd_tbit_valid) begin
+            rstdaa_o <= 1'b1;
           end else begin
             rstdaa_o <= '0;
           end
         end
-        // set static address as dynamic
-        // we reuse the SETDASA path here, just set static addr as the one to
-        // be set
+        // SETAASA: Set All Addresses from Static Address
+        // Sets dynamic address = static address if not already assigned
         CCC_BCAST_SETAASA: begin
-          if (state_q == RxTbit && bus_rx_rsp_i.done) begin
+          if (cmd_tbit_valid) begin
+            // Only set if we don't already have a dynamic address
+            // and the static address is not in the reserved range
             if (~target_dyn_address_valid_i && ~(target_sta_address_i inside {[7'h00:7'h07], 7'h3E, 7'h5E, 7'h6E, 7'h76, [7'h78:7'h7F]})) begin
               set_aasa_valid <= 1'b1;
             end
@@ -1039,14 +1591,16 @@ module ccc
             set_aasa_virt_valid <= 1'b0;
           end
         end
-        default: begin
-        end
+        default: ;
       endcase
     end
   end
 
-  logic rstact_armed;
-  always_ff @(posedge clk_i or negedge rst_ni) begin : rst_action_internal
+  // ===========================================================================
+  // RSTACT STATE MACHINE
+  // ===========================================================================
+  // Track RSTACT armed state and handle reset actions
+  always_ff @(posedge clk_i or negedge rst_ni) begin : rst_action_state
     if (~rst_ni) begin
       rstact_armed <= '0;
       rst_action   <= '0;
@@ -1056,6 +1610,7 @@ module ccc
         rst_action   <= defining_byte;
       end
 
+      // Clear on start condition
       if (bus_start_det_i) begin
         rstact_armed <= '0;
         rst_action   <= '0;
@@ -1064,7 +1619,9 @@ module ccc
   end
 
   assign rstact_armed_o = rstact_armed;
-  always_ff @(posedge clk_i or negedge rst_ni) begin : rst_action_outputs
+  
+  // Generate reset action outputs when armed and reset detected
+  always_ff @(posedge clk_i or negedge rst_ni) begin : rst_action_output_gen
     if (~rst_ni) begin
       rst_action_valid_o <= '0;
       rst_action_o <= '0;
@@ -1081,17 +1638,21 @@ module ccc
     end
   end
 
-  always_ff @(posedge clk_i or negedge rst_ni) begin : choose_reset_type
+  // Reset escalation logic
+  always_ff @(posedge clk_i or negedge rst_ni) begin : reset_escalation
     if (~rst_ni) begin
       escalate_reset_o <= '0;
     end else begin
       if (peripheral_reset_done_i) escalate_reset_o <= '1;
       if (command_code inside {CCC_DIRECT_RSTACT, CCC_BCAST_RSTACT, CCC_DIRECT_GETSTATUS} &
-          ccc_valid_i)
+          command_code_valid)
         escalate_reset_o <= '0;
     end
   end
 
+  // ===========================================================================
+  // ENEC/DISEC OUTPUT ASSIGNMENTS
+  // ===========================================================================
   // Enable Target event driven interrupts
   assign enec_ibi_o = enec_ibi;
   assign enec_crr_o = enec_crr;
@@ -1102,12 +1663,13 @@ module ccc
   assign disec_crr_o = disec_crr;
   assign disec_hj_o = disec_hj;
 
-  // TODO: use those outputs once the following optional CCCs are added:
-  //
-  // * ENTTM
-  // * SETBRGTGT
-  // * ENTAS[0-3]
-  // * ENTHDR[0-7]
+  // ===========================================================================
+  // UNSUPPORTED/OPTIONAL CCC OUTPUTS (tied to defaults)
+  // ===========================================================================
+  // TODO: Implement these when the following optional CCCs are added:
+  // * ENTTM - Enter Test Mode
+  // * SETBRGTGT - Set Bridge Targets
+  // * ENTAS[0-3] - Enter Activity State
   assign set_brgtgt_o = '0;
   assign entas0_o = '0;
   assign entas1_o = '0;
@@ -1115,31 +1677,49 @@ module ccc
   assign entas3_o = '0;
   assign ent_tm_o = '0;
   assign tm_o = '0;
-  assign ent_hdr_0_o = '0;
-  assign ent_hdr_1_o = '0;
-  assign ent_hdr_2_o = '0;
-  assign ent_hdr_3_o = '0;
-  assign ent_hdr_4_o = '0;
-  assign ent_hdr_5_o = '0;
-  assign ent_hdr_6_o = '0;
-  assign ent_hdr_7_o = '0;
 
+  // ===========================================================================
+  // HDR MODE STATE MACHINE
+  // ===========================================================================
+  // Enter HDR mode when:
+  //   - A valid ENTHDR command is received, OR
+  //   - TE0 error (invalid reserved address), OR
+  //   - TE1 error (CCC command parity error)
+  // Exit HDR mode when the exit HDR pattern is detected on the bus.
+  always_ff @(posedge clk_i or negedge rst_ni) begin : proc_hdr_mode
+    if (~rst_ni) begin
+      in_hdr_mode <= 1'b0;
+    end else begin
+      if (enter_hdr_mode || te0_err || te1_err) begin
+        in_hdr_mode <= 1'b1;
+      end else if (exit_hdr_i) begin
+        in_hdr_mode <= 1'b0;
+      end
+    end
+  end
 
+  assign in_hdr_mode_o = in_hdr_mode;
+
+  // ===========================================================================
+  // ENTDAA SUB-MODULE INSTANTIATION
+  // ===========================================================================
   ccc_entdaa xccc_entdaa (
-    .clk_i,  // Clock
-    .rst_ni, // Async reset, active low
+    .clk_i,
+    .rst_ni,
 
+    // Device identification
     .id_i (get_pid_i),
     .bcr_i(get_bcr_i),
     .dcr_i(get_dcr_i),
 
+    // Virtual device identification  
     .virtual_id_i (virtual_get_pid_i),
     .virtual_bcr_i(virtual_get_bcr_i),
     .virtual_dcr_i(virtual_get_dcr_i),
 
+    // Control signals
     .start_daa_i(entdaa_o),
     .done_daa_o (entdaa_done),
-
     .process_virtual_i(entdaa_process_virtual),
 
     // Bus RX interface
@@ -1159,14 +1739,20 @@ module ccc
 
     // addr
     .address_o      (entdaa_address),
-    .address_valid_o(entdaa_addres_valid)
+    .address_valid_o(entdaa_address_valid),
+
+    // TE3 Error: Parity error on dynamic address during ENTDAA
+    .te3_err_o(te3_err),
+
+    // TE4 Error: Invalid reserved byte during ENTDAA
+    .te4_err_o(te4_err)
   );
 
 `ifndef SYNTHESIS
 `ifndef VERILATOR
   // Detect each SETDASA CCC targeted to us while we don't have dynamic address set
   property cover_first_both_dyn_setdasa;
-    @(posedge clk_i) ($rose(direct_addr_ack) && (command_code == CCC_DIRECT_SETDASA)) |=>
+    @(posedge clk_i) ($rose(addr_ack) && (command_code == CCC_DIRECT_SETDASA)) |=>
     ##1 @(posedge bus_rx_rsp_i.done) ##1
     ##1 @(posedge clk_i) ##2
     (
@@ -1180,14 +1766,14 @@ module ccc
   property cover_not_first_both_dyn_setdasa;
     @(posedge clk_i)
     (
-      $rose(bus_rx_rsp_i.done) && (command_code == CCC_DIRECT_SETDASA) && ccc_valid_i &&
+      $rose(bus_rx_rsp_i.done) && (command_code == CCC_DIRECT_SETDASA) && command_code_valid &&
       $stable(bus_rx_req_o.req_byte) && bus_rx_req_o.req_byte ##1
-      $rose(is_byte_our_static_addr) || $rose(is_byte_our_virtual_static_addr)
+      $rose(target_addr_matches_main_sta) || $rose(target_addr_matches_virt_sta)
     ) |=>
     @(posedge bus_rx_rsp_i.done) ##1
     ##1 @(posedge clk_i) ##2
     (
-      ($stable(direct_addr_ack) && ~direct_addr_ack) and
+      ($stable(addr_ack) && ~addr_ack) and
       (
         ($stable(virtual_target_dyn_address_valid_i) && virtual_target_dyn_address_valid_i ##0 $stable(virtual_target_dyn_address_i) && virtual_target_dyn_address_i) or
         ($stable(target_dyn_address_valid_i) && target_dyn_address_valid_i ##0 $stable(target_dyn_address_i) && target_dyn_address_i)
@@ -1224,8 +1810,8 @@ module ccc
   property cover_recv_setdasa;
     @(posedge clk_i)
     (
-      ccc_valid_i && (command_code == CCC_DIRECT_SETDASA) &&
-      ($rose(is_byte_our_addr) || $rose(is_byte_virtual_addr))
+      command_code_valid && (command_code == CCC_DIRECT_SETDASA) &&
+      ($rose(target_addr_matches_main) || $rose(target_addr_matches_virt))
     );
   endproperty : cover_recv_setdasa
   covprop_recv_setdasa: cover property (cover_recv_setdasa);

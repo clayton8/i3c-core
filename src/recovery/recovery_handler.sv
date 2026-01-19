@@ -185,7 +185,10 @@ module recovery_handler
     output logic recovery_mode_enter_o,
     output logic recovery_mode_enabled_o,
     input  logic virtual_device_sel_i,
-    input  logic xfer_in_progress_i
+    input  logic xfer_in_progress_i,
+
+    // Protocol error (PEC mismatch) for GETSTATUS
+    output logic protocol_err_o
 );
 
   // The recovery mode does not support interrupts
@@ -823,6 +826,9 @@ module recovery_handler
   logic [7:0] recv_cmd_cmd;
   logic [15:0] recv_cmd_len;
   logic recv_cmd_error;
+
+  // PEC error: pulse when recovery command completes with CRC mismatch
+  assign protocol_err_o = recv_cmd_valid & recv_cmd_error;
 
   // RX PEC calculator
   logic rx_pec_clear;

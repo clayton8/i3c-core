@@ -2453,6 +2453,128 @@
         end
     endfunction
 
+    /*----------------------- I3CCSR__I3C_EC__TTI__QUEUE_STATUS SAMPLE FUNCTIONS -----------------------*/
+    function void I3CCSR__I3C_EC__TTI__QUEUE_STATUS::sample(uvm_reg_data_t  data,
+                                                   uvm_reg_data_t  byte_en,
+                                                   bit             is_read,
+                                                   uvm_reg_map     map);
+        m_current = get();
+        m_data    = data;
+        m_is_read = is_read;
+        if (get_coverage(UVM_CVR_REG_BITS)) begin
+            foreach(RX_DESC_QUEUE_FULL_bit_cg[bt]) this.RX_DESC_QUEUE_FULL_bit_cg[bt].sample(data[0 + bt]);
+            foreach(RX_DESC_QUEUE_EMPTY_bit_cg[bt]) this.RX_DESC_QUEUE_EMPTY_bit_cg[bt].sample(data[1 + bt]);
+            foreach(TX_DESC_QUEUE_FULL_bit_cg[bt]) this.TX_DESC_QUEUE_FULL_bit_cg[bt].sample(data[2 + bt]);
+            foreach(TX_DESC_QUEUE_EMPTY_bit_cg[bt]) this.TX_DESC_QUEUE_EMPTY_bit_cg[bt].sample(data[3 + bt]);
+            foreach(RX_DATA_QUEUE_FULL_bit_cg[bt]) this.RX_DATA_QUEUE_FULL_bit_cg[bt].sample(data[4 + bt]);
+            foreach(RX_DATA_QUEUE_EMPTY_bit_cg[bt]) this.RX_DATA_QUEUE_EMPTY_bit_cg[bt].sample(data[5 + bt]);
+            foreach(TX_DATA_QUEUE_FULL_bit_cg[bt]) this.TX_DATA_QUEUE_FULL_bit_cg[bt].sample(data[6 + bt]);
+            foreach(TX_DATA_QUEUE_EMPTY_bit_cg[bt]) this.TX_DATA_QUEUE_EMPTY_bit_cg[bt].sample(data[7 + bt]);
+            foreach(IBI_QUEUE_FULL_bit_cg[bt]) this.IBI_QUEUE_FULL_bit_cg[bt].sample(data[8 + bt]);
+            foreach(IBI_QUEUE_EMPTY_bit_cg[bt]) this.IBI_QUEUE_EMPTY_bit_cg[bt].sample(data[9 + bt]);
+        end
+        if (get_coverage(UVM_CVR_FIELD_VALS)) begin
+            this.fld_cg.sample( data[0:0]/*RX_DESC_QUEUE_FULL*/  ,  data[1:1]/*RX_DESC_QUEUE_EMPTY*/  ,  data[2:2]/*TX_DESC_QUEUE_FULL*/  ,  data[3:3]/*TX_DESC_QUEUE_EMPTY*/  ,  data[4:4]/*RX_DATA_QUEUE_FULL*/  ,  data[5:5]/*RX_DATA_QUEUE_EMPTY*/  ,  data[6:6]/*TX_DATA_QUEUE_FULL*/  ,  data[7:7]/*TX_DATA_QUEUE_EMPTY*/  ,  data[8:8]/*IBI_QUEUE_FULL*/  ,  data[9:9]/*IBI_QUEUE_EMPTY*/   );
+        end
+    endfunction
+
+    function void I3CCSR__I3C_EC__TTI__QUEUE_STATUS::sample_values();
+        if (get_coverage(UVM_CVR_REG_BITS)) begin
+            foreach(RX_DESC_QUEUE_FULL_bit_cg[bt]) this.RX_DESC_QUEUE_FULL_bit_cg[bt].sample(RX_DESC_QUEUE_FULL.get_mirrored_value() >> bt);
+            foreach(RX_DESC_QUEUE_EMPTY_bit_cg[bt]) this.RX_DESC_QUEUE_EMPTY_bit_cg[bt].sample(RX_DESC_QUEUE_EMPTY.get_mirrored_value() >> bt);
+            foreach(TX_DESC_QUEUE_FULL_bit_cg[bt]) this.TX_DESC_QUEUE_FULL_bit_cg[bt].sample(TX_DESC_QUEUE_FULL.get_mirrored_value() >> bt);
+            foreach(TX_DESC_QUEUE_EMPTY_bit_cg[bt]) this.TX_DESC_QUEUE_EMPTY_bit_cg[bt].sample(TX_DESC_QUEUE_EMPTY.get_mirrored_value() >> bt);
+            foreach(RX_DATA_QUEUE_FULL_bit_cg[bt]) this.RX_DATA_QUEUE_FULL_bit_cg[bt].sample(RX_DATA_QUEUE_FULL.get_mirrored_value() >> bt);
+            foreach(RX_DATA_QUEUE_EMPTY_bit_cg[bt]) this.RX_DATA_QUEUE_EMPTY_bit_cg[bt].sample(RX_DATA_QUEUE_EMPTY.get_mirrored_value() >> bt);
+            foreach(TX_DATA_QUEUE_FULL_bit_cg[bt]) this.TX_DATA_QUEUE_FULL_bit_cg[bt].sample(TX_DATA_QUEUE_FULL.get_mirrored_value() >> bt);
+            foreach(TX_DATA_QUEUE_EMPTY_bit_cg[bt]) this.TX_DATA_QUEUE_EMPTY_bit_cg[bt].sample(TX_DATA_QUEUE_EMPTY.get_mirrored_value() >> bt);
+            foreach(IBI_QUEUE_FULL_bit_cg[bt]) this.IBI_QUEUE_FULL_bit_cg[bt].sample(IBI_QUEUE_FULL.get_mirrored_value() >> bt);
+            foreach(IBI_QUEUE_EMPTY_bit_cg[bt]) this.IBI_QUEUE_EMPTY_bit_cg[bt].sample(IBI_QUEUE_EMPTY.get_mirrored_value() >> bt);
+        end
+        if (get_coverage(UVM_CVR_FIELD_VALS)) begin
+            this.fld_cg.sample( RX_DESC_QUEUE_FULL.get_mirrored_value()  ,  RX_DESC_QUEUE_EMPTY.get_mirrored_value()  ,  TX_DESC_QUEUE_FULL.get_mirrored_value()  ,  TX_DESC_QUEUE_EMPTY.get_mirrored_value()  ,  RX_DATA_QUEUE_FULL.get_mirrored_value()  ,  RX_DATA_QUEUE_EMPTY.get_mirrored_value()  ,  TX_DATA_QUEUE_FULL.get_mirrored_value()  ,  TX_DATA_QUEUE_EMPTY.get_mirrored_value()  ,  IBI_QUEUE_FULL.get_mirrored_value()  ,  IBI_QUEUE_EMPTY.get_mirrored_value()   );
+        end
+    endfunction
+
+    /*----------------------- I3CCSR__I3C_EC__TTI__DESC_QUEUE_DEPTH SAMPLE FUNCTIONS -----------------------*/
+    function void I3CCSR__I3C_EC__TTI__DESC_QUEUE_DEPTH::sample(uvm_reg_data_t  data,
+                                                   uvm_reg_data_t  byte_en,
+                                                   bit             is_read,
+                                                   uvm_reg_map     map);
+        m_current = get();
+        m_data    = data;
+        m_is_read = is_read;
+        if (get_coverage(UVM_CVR_REG_BITS)) begin
+            foreach(RX_DESC_QUEUE_DEPTH_bit_cg[bt]) this.RX_DESC_QUEUE_DEPTH_bit_cg[bt].sample(data[0 + bt]);
+            foreach(TX_DESC_QUEUE_DEPTH_bit_cg[bt]) this.TX_DESC_QUEUE_DEPTH_bit_cg[bt].sample(data[8 + bt]);
+        end
+        if (get_coverage(UVM_CVR_FIELD_VALS)) begin
+            this.fld_cg.sample( data[7:0]/*RX_DESC_QUEUE_DEPTH*/  ,  data[15:8]/*TX_DESC_QUEUE_DEPTH*/   );
+        end
+    endfunction
+
+    function void I3CCSR__I3C_EC__TTI__DESC_QUEUE_DEPTH::sample_values();
+        if (get_coverage(UVM_CVR_REG_BITS)) begin
+            foreach(RX_DESC_QUEUE_DEPTH_bit_cg[bt]) this.RX_DESC_QUEUE_DEPTH_bit_cg[bt].sample(RX_DESC_QUEUE_DEPTH.get_mirrored_value() >> bt);
+            foreach(TX_DESC_QUEUE_DEPTH_bit_cg[bt]) this.TX_DESC_QUEUE_DEPTH_bit_cg[bt].sample(TX_DESC_QUEUE_DEPTH.get_mirrored_value() >> bt);
+        end
+        if (get_coverage(UVM_CVR_FIELD_VALS)) begin
+            this.fld_cg.sample( RX_DESC_QUEUE_DEPTH.get_mirrored_value()  ,  TX_DESC_QUEUE_DEPTH.get_mirrored_value()   );
+        end
+    endfunction
+
+    /*----------------------- I3CCSR__I3C_EC__TTI__DATA_QUEUE_DEPTH SAMPLE FUNCTIONS -----------------------*/
+    function void I3CCSR__I3C_EC__TTI__DATA_QUEUE_DEPTH::sample(uvm_reg_data_t  data,
+                                                   uvm_reg_data_t  byte_en,
+                                                   bit             is_read,
+                                                   uvm_reg_map     map);
+        m_current = get();
+        m_data    = data;
+        m_is_read = is_read;
+        if (get_coverage(UVM_CVR_REG_BITS)) begin
+            foreach(RX_DATA_QUEUE_DEPTH_bit_cg[bt]) this.RX_DATA_QUEUE_DEPTH_bit_cg[bt].sample(data[0 + bt]);
+            foreach(TX_DATA_QUEUE_DEPTH_bit_cg[bt]) this.TX_DATA_QUEUE_DEPTH_bit_cg[bt].sample(data[8 + bt]);
+        end
+        if (get_coverage(UVM_CVR_FIELD_VALS)) begin
+            this.fld_cg.sample( data[7:0]/*RX_DATA_QUEUE_DEPTH*/  ,  data[15:8]/*TX_DATA_QUEUE_DEPTH*/   );
+        end
+    endfunction
+
+    function void I3CCSR__I3C_EC__TTI__DATA_QUEUE_DEPTH::sample_values();
+        if (get_coverage(UVM_CVR_REG_BITS)) begin
+            foreach(RX_DATA_QUEUE_DEPTH_bit_cg[bt]) this.RX_DATA_QUEUE_DEPTH_bit_cg[bt].sample(RX_DATA_QUEUE_DEPTH.get_mirrored_value() >> bt);
+            foreach(TX_DATA_QUEUE_DEPTH_bit_cg[bt]) this.TX_DATA_QUEUE_DEPTH_bit_cg[bt].sample(TX_DATA_QUEUE_DEPTH.get_mirrored_value() >> bt);
+        end
+        if (get_coverage(UVM_CVR_FIELD_VALS)) begin
+            this.fld_cg.sample( RX_DATA_QUEUE_DEPTH.get_mirrored_value()  ,  TX_DATA_QUEUE_DEPTH.get_mirrored_value()   );
+        end
+    endfunction
+
+    /*----------------------- I3CCSR__I3C_EC__TTI__IBI_QUEUE_DEPTH SAMPLE FUNCTIONS -----------------------*/
+    function void I3CCSR__I3C_EC__TTI__IBI_QUEUE_DEPTH::sample(uvm_reg_data_t  data,
+                                                   uvm_reg_data_t  byte_en,
+                                                   bit             is_read,
+                                                   uvm_reg_map     map);
+        m_current = get();
+        m_data    = data;
+        m_is_read = is_read;
+        if (get_coverage(UVM_CVR_REG_BITS)) begin
+            foreach(IBI_QUEUE_DEPTH_bit_cg[bt]) this.IBI_QUEUE_DEPTH_bit_cg[bt].sample(data[0 + bt]);
+        end
+        if (get_coverage(UVM_CVR_FIELD_VALS)) begin
+            this.fld_cg.sample( data[7:0]/*IBI_QUEUE_DEPTH*/   );
+        end
+    endfunction
+
+    function void I3CCSR__I3C_EC__TTI__IBI_QUEUE_DEPTH::sample_values();
+        if (get_coverage(UVM_CVR_REG_BITS)) begin
+            foreach(IBI_QUEUE_DEPTH_bit_cg[bt]) this.IBI_QUEUE_DEPTH_bit_cg[bt].sample(IBI_QUEUE_DEPTH.get_mirrored_value() >> bt);
+        end
+        if (get_coverage(UVM_CVR_FIELD_VALS)) begin
+            this.fld_cg.sample( IBI_QUEUE_DEPTH.get_mirrored_value()   );
+        end
+    endfunction
+
     /*----------------------- I3CCSR__I3C_EC__TTI__INTERRUPT_STATUS SAMPLE FUNCTIONS -----------------------*/
     function void I3CCSR__I3C_EC__TTI__INTERRUPT_STATUS::sample(uvm_reg_data_t  data,
                                                    uvm_reg_data_t  byte_en,
