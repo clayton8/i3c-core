@@ -48,6 +48,11 @@ module bus_monitor
 
   assign enable = enable_i;
 
+  // Gate inputs: when disabled, force bus to appear idle (high)
+  logic scl_in, sda_in;
+  assign scl_in = enable ? scl_i : 1'b1;
+  assign sda_in = enable ? sda_i : 1'b1;
+
   // SDA and SCL at the previous clock edge
   logic scl_i_q, sda_i_q;
   always_ff @(posedge clk_i or negedge rst_ni) begin : bus_prev
@@ -55,15 +60,15 @@ module bus_monitor
       scl_i_q <= 1'b1;
       sda_i_q <= 1'b1;
     end else begin
-      scl_i_q <= scl_i;
-      sda_i_q <= sda_i;
+      scl_i_q <= scl_in;
+      sda_i_q <= sda_in;
     end
   end
 
-  assign scl_negedge_i = scl_i_q && !scl_i;
-  assign scl_posedge_i = !scl_i_q && scl_i;
-  assign sda_negedge_i = sda_i_q && !sda_i;
-  assign sda_posedge_i = !sda_i_q && sda_i;
+  assign scl_negedge_i = scl_i_q && !scl_in;
+  assign scl_posedge_i = !scl_i_q && scl_in;
+  assign sda_negedge_i = sda_i_q && !sda_in;
+  assign sda_posedge_i = !sda_i_q && sda_in;
 
   assign scl_edge = scl_negedge | scl_posedge;
   assign sda_edge = sda_negedge | sda_posedge;

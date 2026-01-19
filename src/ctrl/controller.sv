@@ -323,7 +323,7 @@ module controller
     .sda_i,
     .scl_i,
 
-    .enable_i   (1'b1),
+    .enable_i   (phy_en),
     .t_hd_dat_i (t_hd_dat),
     .t_r_i      (t_r),
     .t_f_i      (t_f),
