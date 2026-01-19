@@ -6,6 +6,48 @@ package i3c_pkg;
   `define I3C_RSVD_ADDR 7'h7E
   `define I3C_RSVD_BYTE 8'hFC
 
+  // ===========================================================================
+  // TE0 HDR Exit Condition: Invalid Reserved Address + RnW Combinations
+  // ===========================================================================
+  // Per I3C spec, these address+RnW combinations are invalid and trigger TE0:
+  //   7'h3E / W, 7'h5E / W, 7'h6E / W, 7'h76 / W,
+  //   7'h7A / W, 7'h7C / W, 7'h7F / W, 7'h7E / R
+  //
+  // Reserved addresses that are invalid with Write (RnW=0)
+  localparam logic [6:0] TE0_RSVD_ADDR_W [7] = '{
+    7'h3E,  // Reserved for Device Type Group Address
+    7'h5E,  // Reserved for Device Type Group Address
+    7'h6E,  // Reserved for Device Type Group Address
+    7'h76,  // Reserved for Device Type Group Address
+    7'h7A,  // Reserved for Device Type Group Address
+    7'h7C,  // Reserved for Device Type Group Address
+    7'h7F   // Reserved for Device Type Group Address
+  };
+
+  // Reserved address that is invalid with Read (RnW=1)
+  localparam logic [6:0] TE0_RSVD_ADDR_R = 7'h7E;  // I3C Broadcast Address
+
+  // Function to check if an address+RnW combination is a TE0 error
+  // Returns 1 if the combination is invalid per I3C spec
+  function automatic logic is_te0_rsvd_addr_err(
+    input logic [6:0] addr,
+    input logic       rnw
+  );
+    // Check for 7'h7E with Read
+    if (addr == TE0_RSVD_ADDR_R && rnw) begin
+      return 1'b1;
+    end
+    // Check for reserved addresses with Write
+    if (!rnw) begin
+      for (int i = 0; i < 7; i++) begin
+        if (addr == TE0_RSVD_ADDR_W[i]) begin
+          return 1'b1;
+        end
+      end
+    end
+    return 1'b0;
+  endfunction : is_te0_rsvd_addr_err
+
   localparam int unsigned RespErrIdWidth = 4;
   localparam int unsigned DatAw = $clog2(`DAT_DEPTH);
   localparam int unsigned DctAw = $clog2(`DCT_DEPTH);

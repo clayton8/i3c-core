@@ -181,6 +181,7 @@ module controller_standby
 
     output logic err_o,
     input  logic recovery_mode_enter_i,
+    input  logic recovery_protocol_err_i,
     output logic virtual_device_sel_o,
     output logic xfer_in_progress_o
 );
@@ -247,11 +248,12 @@ module controller_standby
   logic parity_err;
   logic get_status_done;
 
+  // Protocol error for GETSTATUS: includes I3C parity errors and Recovery PEC errors
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (~rst_ni) begin
       err_o <= '0;
     end else begin
-      if (parity_err) err_o <= 1'b1;
+      if (parity_err | recovery_protocol_err_i) err_o <= 1'b1;
       if (get_status_done) err_o <= 1'b0;
     end
   end

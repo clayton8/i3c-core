@@ -59,7 +59,8 @@ async def test_setup(dut, static_addr=0x5A, virtual_static_addr=0x5B, dynamic_ad
 async def test_ccc_getstatus(dut):
 
     (STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR) = random.sample(VALID_I3C_ADDRESSES, 4)
-    ADDRs = [random.choice([STATIC_ADDR, DYNAMIC_ADDR]), random.choice([VIRT_STATIC_ADDR, VIRT_DYNAMIC_ADDR])]
+    # Once dynamic address is assigned, static address can no longer be used
+    ADDRs = [DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR]
 
     i3c_controller, i3c_target, tb = await test_setup(dut, STATIC_ADDR, VIRT_STATIC_ADDR,
         dynamic_addr=DYNAMIC_ADDR, virtual_dynamic_addr=VIRT_DYNAMIC_ADDR)
@@ -78,16 +79,18 @@ async def test_ccc_getstatus(dut):
             pending_interrupt == PENDING_INTERRUPT
         ), "Unexpected pending interrupt value read from CSR"
 
-        addr = random.choice([STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR])
+        addr = random.choice([DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR])
         responses = await i3c_controller.i3c_ccc_read(ccc=CCC.DIRECT.GETSTATUS, addr=addr, count=2)
         status = int.from_bytes(responses[0][1], byteorder="big", signed=False)
         print("status", status)
-        if addr in [STATIC_ADDR, DYNAMIC_ADDR]:
+        if addr == DYNAMIC_ADDR:
+            # Main target: check pending interrupt field
             pending_interrupt = status & PENDING_INTERRUPT_MASK
             assert (
                 pending_interrupt == PENDING_INTERRUPT
             ), f"Unexpected pending interrupt value received from GETSTATUS CCC, expected: {PENDING_INTERRUPT} got: {pending_interrupt}"
         else:
+            # Virtual target: Activity Mode=3, no pending interrupts
             assert (status == 0x00C0), f"Unexpected value received from GETSTATUS CCC, expected: 0xC0 got: {status}"
         cocotb.log.info(f"GET STATUS = {status}")
 
@@ -779,8 +782,8 @@ async def test_ccc_rstact(dut, type, rstact):
     else:
         assert False, "Unsupported RSTACT type, must be 'broadcast' or 'direct'"
 
-    # Send directed RSTACT
-    rst_action = 0xAA
+    # Send RSTACT with the reset action as defining byte (0x00-0x02 are valid action values)
+    rst_action = int(rstact)
     await i3c_controller.i3c_ccc_write(
         ccc=command,
         defining_byte=rst_action,
@@ -792,7 +795,7 @@ async def test_ccc_rstact(dut, type, rstact):
     sig = dut.xi3c_wrapper.i3c.xcontroller.xcontroller_standby.xcontroller_standby_i3c.rst_action_o
     assert int(sig) == 0
     await i3c_controller.send_target_reset_pattern()
-    assert rst_action == int(sig)
+    assert rst_action == int(sig), f"Expected rst_action_o={rst_action}, got {int(sig)}"
     await i3c_controller.send_stop()
 
     # Start new frame and reset target with reset action set to peripheral reset
