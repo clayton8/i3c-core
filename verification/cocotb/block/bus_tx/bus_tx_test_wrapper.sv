@@ -1,17 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
-module bus_tx_test_wrapper (
+module bus_tx_test_wrapper
+  import i3c_pkg::*;
+(
     input logic clk_i,
     input logic rst_ni,
 
     input scl_i,  // Additional signal for SCL bus mock
 
     // I3C bus timings
-    input logic [19:0] t_r_i,      // rise time of both SDA and SCL in clock units
-    input logic [12:0] t_f_i,      // rise time of both SDA and SCL in clock units
-    input logic [19:0] t_su_dat_i,  // data setup time in clock units
-    input logic [19:0] t_hd_dat_i,  // data hold time in clock units
+    input i3c_timeparam_t t_r_i,      // rise time of both SDA and SCL in clock units
+    input logic [12:0] t_f_i,         // fall time (unused by bus_tx)
+    input i3c_timeparam_t t_su_dat_i, // data setup time in clock units
+    input i3c_timeparam_t t_hd_dat_i, // data hold time in clock units
 
-    input logic drive_i,  // Driving the bus, it should neve come later than (t_low-t_hd_dat) after
+    input logic drive_i,  // Driving the bus, it should never come later than (t_low-t_hd_dat) after
     // SCL falling edge if SCL is in stable LOW state
     input logic drive_value_i,  // Requested value to drive
 
@@ -30,5 +32,23 @@ module bus_tx_test_wrapper (
     output logic sel_od_pp_o,
     output logic sda_o  // Output I3C SDA bus line
 );
-  bus_tx xbus_tx (.*);
+
+  // sel_od_pp_o is unused by bus_tx but exposed for the testbench
+  assign sel_od_pp_o = sel_od_pp_i;
+
+  bus_tx xbus_tx (
+    .clk_i,
+    .rst_ni,
+    .t_r_i,
+    .t_su_dat_i,
+    .t_hd_dat_i,
+    .drive_i,
+    .drive_value_i,
+    .scl_negedge_i,
+    .scl_posedge_i,
+    .scl_stable_low_i,
+    .tx_idle_o,
+    .tx_done_o,
+    .sda_o
+  );
 endmodule

@@ -15,6 +15,7 @@ TOPLEVEL     = bus_tx_test_wrapper
 EXTRA_ARGS +=
 
 VERILOG_SOURCES  = \
+	$(SRC_DIR)/i3c_pkg.sv \
 	$(SRC_DIR)/ctrl/bus_tx.sv \
 	$(TEST_DIR)/bus_tx_test_wrapper.sv
 
