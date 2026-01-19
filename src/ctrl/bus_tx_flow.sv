@@ -61,7 +61,7 @@ module bus_tx_flow import i3c_pkg::*; (
   logic tx_idle;
   logic tx_done; // Indicates finished bit write
   logic bus_tx_done;
-  logic req_error, bus_error;
+  logic req_error, bus_error, error;
 
   typedef enum logic [2:0] {
     Idle,
