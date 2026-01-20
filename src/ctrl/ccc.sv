@@ -1342,6 +1342,9 @@ module ccc
           3'd3:    tx_data = target_addr_matches_virt ? virtual_get_pid_i[23:16] : get_pid_i[23:16];
           3'd4:    tx_data = target_addr_matches_virt ? virtual_get_pid_i[15:8]  : get_pid_i[15:8];
           3'd5:    tx_data = target_addr_matches_virt ? virtual_get_pid_i[7:0]   : get_pid_i[7:0];
+        endcase
+      end
+
       // ---------------------------------------------------------------------
       // Variable Length Responses
       // ---------------------------------------------------------------------
