@@ -1128,7 +1128,8 @@ module ccc
       // Bus Condition Handling
       // ---------------------------------------------------------------------
       WaitForBusCond: begin
-        // Wait for STOP or repeated start
+        // Wait repeat start. Stop condition is handled below
+        // for all of this logic and takes us to DoneCCC
         if (bus_rstart_det_i) state_d = RxTargetAddr;
       end
       
