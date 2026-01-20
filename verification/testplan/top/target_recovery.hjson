@@ -36,7 +36,7 @@
       desc:
         '''
         Tests CSR write(s) with lengths over CSR size to the virtual
-        address using recovery protocl.
+        address using recovery protocol.
 
         Performs a write to on of DEVICE_RESET/RECOVERY_CTRL/INDIRECT_FIFO_CTRL
         registers via the recovery protocol targeting the virtual address.
@@ -341,7 +341,7 @@
         check if it matches with what has been written.
 
         Writes to all remaining recovery CSRs using AHB/AXI, reads back
-        thier values and compares them.
+        their values and compares them.
         '''
       tests: ["ocp_csr_access"]
       tags: ["top"]
