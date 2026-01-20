@@ -240,14 +240,15 @@ module i3c_target_fsm import i3c_pkg::*; #(
   // Calculate parity bit
   assign parity_bit = ^{last_byte, 1'b1};
 
-  // Handy signals for determining address matches
-  assign is_our_addr_match = target_dyn_address_valid_i ? (target_dyn_address_i == bus_addr_q) :
-                             target_sta_address_valid_i ? (target_sta_address_i == bus_addr_q) :
-                             1'b0;
+  // Primary target address matching
+  // Per I3C spec: Once a target has a dynamic address, it stops responding to its static address
+  assign is_our_addr_match = ((bus_addr_q == target_dyn_address_i) && target_dyn_address_valid_i) ||
+                             ((bus_addr_q == target_sta_address_i) && target_sta_address_valid_i && ~target_dyn_address_valid_i);
 
-  assign is_virtual_addr_match = virtual_target_dyn_address_valid_i ? (virtual_target_dyn_address_i == bus_addr_q) :
-                                 virtual_target_sta_address_valid_i ? (virtual_target_sta_address_i == bus_addr_q) :
-                                 1'b0;
+  // Virtual target address matching
+  // Per I3C spec: Once a target has a dynamic address, it stops responding to its static address
+  assign is_virtual_addr_match = ((bus_addr_q == virtual_target_dyn_address_i) && virtual_target_dyn_address_valid_i) ||
+                                 ((bus_addr_q == virtual_target_sta_address_i) && virtual_target_sta_address_valid_i && ~virtual_target_dyn_address_valid_i);
 
   assign is_any_addr_match = is_our_addr_match || is_virtual_addr_match;
 
