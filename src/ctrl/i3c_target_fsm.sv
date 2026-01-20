@@ -464,10 +464,6 @@ module i3c_target_fsm import i3c_pkg::*; #(
         if (bus_start_det) begin
           state_d = RxSByteRepeated;
         end else if (bus_rx_rsp_i.done) begin
-          // TODO why is both addr and ccc written here??
-          bus_addr_valid = 1'b1;
-          bus_addr_d     = bus_rx_rsp_i.data[7:1];
-          bus_rnw_d      = bus_rx_rsp_i.data[0];
           // If we got CCC, this is the Command Code, we need to latch it for the CCC FSM
           ccc_data_valid = 1'b1;
           ccc_data       = ccc_cmd_e'(bus_rx_rsp_i.data);
