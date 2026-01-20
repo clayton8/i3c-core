@@ -479,6 +479,34 @@ module ccc
   // Per I3C spec: incorrect padding (Bit[0] = 1) is a protocol error
   logic       da_padding_err;
 
+  // ---------------------------------------------------------------------------
+  // SET CCC Handler Next-State Signals
+  // ---------------------------------------------------------------------------
+  logic        set_dasa_valid_next;
+  logic [6:0]  set_dasa_addr_next;
+  logic        set_newda_valid_next;
+  logic [6:0]  set_newda_addr_next;
+  logic        set_mrl_next;
+  logic [15:0] mrl_next;
+  logic        set_ibil_next;
+  logic [7:0]  ibil_next;
+  logic        set_mwl_next;
+  logic [15:0] mwl_next;
+  logic        enec_ibi_next;
+  logic        enec_crr_next;
+  logic        enec_hj_next;
+  logic        disec_ibi_next;
+  logic        disec_crr_next;
+  logic        disec_hj_next;
+  logic        rst_action_valid_next;
+
+  // ---------------------------------------------------------------------------
+  // Broadcast CCC Handler Next-State Signals
+  // ---------------------------------------------------------------------------
+  logic        rstdaa_next;
+  logic        set_aasa_valid_next;
+  logic        set_aasa_virt_valid_next;
+
   // ===========================================================================
   // COMMAND CODE REGISTRATION
   // ===========================================================================
@@ -1238,6 +1266,9 @@ module ccc
   // Determines TX data and byte count for GET CCCs.
   // tx_byte_num counts up from 0: byte 0 is first byte sent.
   always_comb begin : proc_get_ccc_handler
+    // Default values
+    tx_byte_total = 3'd0;
+    tx_data = '0;
     case (command_code)
       // ---------------------------------------------------------------------
       // 1 Byte Responses
@@ -1254,14 +1285,13 @@ module ccc
       
       CCC_DIRECT_RSTACT: begin
         tx_byte_total = 3'd1;
+        // If no defining byte then tx_data gets default value from above. 
         if (defining_byte == 8'h81 || defining_byte == 8'h82) begin
           // 0x81/0x82: Return reset recovery time (0xFF = worst case ~1s)
           tx_data = 8'hFF;
         end else if (defining_byte inside {8'h00, 8'h01, 8'h02}) begin
           // 0x00-0x02: Return armed action, or 0x80 if not armed
           tx_data = rstact_armed ? rst_action : 8'h80;
-        end else begin
-          tx_data = '0;
         end
       end
       
@@ -1276,7 +1306,6 @@ module ccc
           // (virtual target cannot send IBIs, so PENDING_INTERRUPT is always 0)
           3'd1:    tx_data = target_addr_matches_virt ? 
                              {2'b11, get_status_fmt1_i[5], 5'b0} : get_status_fmt1_i[7:0];
-          default: tx_data = '0;
         endcase
       end
       
@@ -1285,7 +1314,6 @@ module ccc
         case (tx_byte_num)
           3'd0:    tx_data = get_mwl_i[15:8];
           3'd1:    tx_data = get_mwl_i[7:0];
-          default: tx_data = '0;
         endcase
       end
       
@@ -1299,7 +1327,6 @@ module ccc
           3'd1:    tx_data = get_mrl_i[7:0];
           // Virtual target cannot send IBIs, so IBI payload length is 0
           3'd2:    tx_data = target_addr_matches_virt ? 8'h00 : get_ibil_i;
-          default: tx_data = '0;
         endcase
       end
       
@@ -1315,10 +1342,6 @@ module ccc
           3'd3:    tx_data = target_addr_matches_virt ? virtual_get_pid_i[23:16] : get_pid_i[23:16];
           3'd4:    tx_data = target_addr_matches_virt ? virtual_get_pid_i[15:8]  : get_pid_i[15:8];
           3'd5:    tx_data = target_addr_matches_virt ? virtual_get_pid_i[7:0]   : get_pid_i[7:0];
-          default: tx_data = '0;
-        endcase
-      end
-      
       // ---------------------------------------------------------------------
       // Variable Length Responses
       // ---------------------------------------------------------------------
@@ -1332,21 +1355,15 @@ module ccc
             // CRCAP1: 0x48 = IBI MDB (bit 6) + IBI Payload (bit 3) + GETCAPS defining bytes
             // Virtual target cannot send IBIs, so clear IBI-related bits (0x48 -> 0x00)
             3'd2:    tx_data = target_addr_matches_virt ? 8'h00 : 8'h48;
-            default: tx_data = '0;
           endcase
         end else if (defining_byte_valid && defining_byte == 8'h93) begin
           // GETCAPS 0x93: TESTCAP byte - device test capabilities
           tx_byte_total = 3'd1;
           tx_data = 8'h35;  // Share peripheral logic with side effects
-        end else begin
-          tx_byte_total = 3'd0;
-          tx_data = '0;
-        end
+        end 
       end
       
       default: begin
-        tx_byte_total = 3'd0;
-        tx_data = '0;
       end
     endcase
   end
@@ -1357,6 +1374,8 @@ module ccc
   // Determines expected RX byte count for SET CCCs.
   // rx_byte_num counts up from 0: byte 0 is first byte received.
   always_comb begin : proc_set_ccc_rx_byte_total
+    // Default value
+    rx_byte_total = 2'd1;
     case (command_code)
       // 1 Byte Commands
       CCC_BCAST_ENEC,
@@ -1371,7 +1390,7 @@ module ccc
       // 3 Byte Commands
       CCC_BCAST_SETMRL,
       CCC_DIRECT_SETMRL:     rx_byte_total = 2'd3;
-      default:               rx_byte_total = 2'd1;
+      default: begin end
     endcase
   end
 
@@ -1399,6 +1418,159 @@ module ccc
   // Handles: SETDASA, SETNEWDA, SETMWL, SETMRL, ENEC, DISEC, RSTACT
   // For broadcast CCCs: always process
   // For direct CCCs: only process if addressed to us (not reserved byte)
+
+  // ---------------------------------------------------------------------------
+  // Combinational logic: Compute next values for SET CCC registers
+  // ---------------------------------------------------------------------------
+  always_comb begin : proc_set_ccc_next
+    // Default: pulse signals clear, data signals hold
+    set_dasa_valid_next   = 1'b0;
+    set_dasa_addr_next    = set_dasa_addr;
+    set_newda_valid_next  = 1'b0;
+    set_newda_addr_next   = set_newda_addr;
+    set_mrl_next          = 1'b0;
+    mrl_next              = mrl_o;
+    set_ibil_next         = 1'b0;
+    ibil_next             = ibil_o;
+    set_mwl_next          = 1'b0;
+    mwl_next              = mwl_o;
+    enec_ibi_next         = 1'b0;
+    enec_crr_next         = 1'b0;
+    enec_hj_next          = 1'b0;
+    disec_ibi_next        = 1'b0;
+    disec_crr_next        = 1'b0;
+    disec_hj_next         = 1'b0;
+    rst_action_valid_next = 1'b0;
+
+    // Process received data bytes
+    // Note: For Direct CCCs, rx_data_valid only fires when target address matched
+    // AND padding bit is valid for DA assignment CCCs.
+    // Reserved address (7'h7E) and non-matching addresses never reach the data phase.
+    if (rx_data_valid) begin
+      case (command_code)
+        // -----------------------------------------------------------------
+        // Direct CCCs (require target address match)
+        // -----------------------------------------------------------------
+        CCC_DIRECT_SETDASA: begin
+          if (rx_byte_num == 2'd0) begin
+            // DA is in Bits[7:1] (Bit[0] padding already validated by FSM)
+            set_dasa_addr_next  = rx_data[7:1];
+            set_dasa_valid_next = 1'b1;
+          end
+        end
+        CCC_DIRECT_SETNEWDA: begin
+          if (rx_byte_num == 2'd0) begin
+            // DA is in Bits[7:1] (Bit[0] padding already validated by FSM)
+            set_newda_addr_next  = rx_data[7:1];
+            set_newda_valid_next = 1'b1;
+          end
+        end
+        CCC_DIRECT_SETMWL: begin
+          case (rx_byte_num)
+            2'd0: mwl_next[15:8] = rx_data;
+            2'd1: begin
+              mwl_next[7:0] = rx_data;
+              set_mwl_next  = 1'b1;
+            end
+            default: ;
+          endcase
+        end
+        CCC_DIRECT_SETMRL: begin
+          case (rx_byte_num)
+            2'd0: mrl_next[15:8] = rx_data;
+            2'd1: begin
+              mrl_next[7:0] = rx_data;
+              set_mrl_next  = 1'b1;
+            end
+            2'd2: begin
+              ibil_next     = rx_data;
+              set_ibil_next = 1'b1;
+            end
+            default: ;
+          endcase
+        end
+        CCC_DIRECT_ENEC: begin
+          if (rx_byte_num == 2'd0) begin
+            enec_ibi_next = rx_data[0];
+            enec_crr_next = rx_data[1];
+            enec_hj_next  = rx_data[3];
+          end
+        end
+        CCC_DIRECT_DISEC: begin
+          if (rx_byte_num == 2'd0) begin
+            disec_ibi_next = rx_data[0];
+            disec_crr_next = rx_data[1];
+            disec_hj_next  = rx_data[3];
+          end
+        end
+        // -----------------------------------------------------------------
+        // Broadcast CCCs (always process)
+        // -----------------------------------------------------------------
+        CCC_BCAST_SETMWL: begin
+          case (rx_byte_num)
+            2'd0: mwl_next[15:8] = rx_data;
+            2'd1: begin
+              mwl_next[7:0] = rx_data;
+              set_mwl_next  = 1'b1;
+            end
+            default: ;
+          endcase
+        end
+        CCC_BCAST_SETMRL: begin
+          case (rx_byte_num)
+            2'd0: mrl_next[15:8] = rx_data;
+            2'd1: begin
+              mrl_next[7:0] = rx_data;
+              set_mrl_next  = 1'b1;
+            end
+            2'd2: begin
+              ibil_next     = rx_data;
+              set_ibil_next = 1'b1;
+            end
+            default: ;
+          endcase
+        end
+        CCC_BCAST_ENEC: begin
+          if (rx_byte_num == 2'd0) begin
+            enec_ibi_next = rx_data[0];
+            enec_crr_next = rx_data[1];
+            enec_hj_next  = rx_data[3];
+          end
+        end
+        CCC_BCAST_DISEC: begin
+          if (rx_byte_num == 2'd0) begin
+            disec_ibi_next = rx_data[0];
+            disec_crr_next = rx_data[1];
+            disec_hj_next  = rx_data[3];
+          end
+        end
+        default: ;
+      endcase
+    end
+
+    // -----------------------------------------------------------------
+    // RSTACT: Arm reset action (triggers on ACK/T-bit, not data bytes)
+    // -----------------------------------------------------------------
+    case (command_code)
+      CCC_DIRECT_RSTACT: begin
+        // Direct RSTACT: Arm after target address ACK for action values (0x00-0x7F)
+        if (target_addr_ack_done && addr_ack_target && ~defining_byte[7]) begin
+          rst_action_valid_next = 1'b1;
+        end
+      end
+      CCC_BCAST_RSTACT: begin
+        // Broadcast RSTACT: Arm after defining byte T-bit for action values (0x00-0x7F)
+        if (def_byte_tbit_valid && ~defining_byte[7]) begin
+          rst_action_valid_next = 1'b1;
+        end
+      end
+      default: ;
+    endcase
+  end
+
+  // ---------------------------------------------------------------------------
+  // Sequential logic: Register the next values
+  // ---------------------------------------------------------------------------
   always_ff @(posedge clk_i or negedge rst_ni) begin : proc_set_ccc
     if (~rst_ni) begin
       set_dasa_valid   <= 1'b0;
@@ -1419,162 +1591,23 @@ module ccc
       disec_hj         <= '0;
       rst_action_valid <= 1'b0;
     end else begin
-      // Default: clear all pulse signals
-      set_dasa_valid   <= 1'b0;
-      set_newda_valid  <= 1'b0;
-      set_mwl_o        <= 1'b0;
-      set_mrl_o        <= 1'b0;
-      set_ibil_o       <= 1'b0;
-      enec_ibi         <= '0;
-      enec_crr         <= '0;
-      enec_hj          <= '0;
-      disec_ibi        <= '0;
-      disec_crr        <= '0;
-      disec_hj         <= '0;
-      rst_action_valid <= 1'b0;
-
-      // Process received data bytes
-      // Note: For Direct CCCs, rx_data_valid only fires when target address matched
-      // AND padding bit is valid for DA assignment CCCs.
-      // Reserved address (7'h7E) and non-matching addresses never reach the data phase.
-      if (rx_data_valid) begin
-        case (command_code)
-          // -----------------------------------------------------------------
-          // Direct CCCs (require target address match)
-          // -----------------------------------------------------------------
-          CCC_DIRECT_SETDASA: begin
-            case (rx_byte_num)
-              2'd0: begin
-                // DA is in Bits[7:1] (Bit[0] padding already validated by FSM)
-                set_dasa_addr  <= rx_data[7:1];
-                set_dasa_valid <= 1'b1;
-              end
-              default: ;
-            endcase
-          end
-          CCC_DIRECT_SETNEWDA: begin
-            case (rx_byte_num)
-              2'd0: begin
-                // DA is in Bits[7:1] (Bit[0] padding already validated by FSM)
-                set_newda_addr  <= rx_data[7:1];
-                set_newda_valid <= 1'b1;
-              end
-              default: ;
-            endcase
-          end
-          CCC_DIRECT_SETMWL: begin
-            case (rx_byte_num)
-              2'd0: mwl_o[15:8] <= rx_data;
-              2'd1: begin
-                mwl_o[7:0] <= rx_data;
-                set_mwl_o  <= 1'b1;
-              end
-              default: ;
-            endcase
-          end
-          CCC_DIRECT_SETMRL: begin
-            case (rx_byte_num)
-              2'd0: mrl_o[15:8] <= rx_data;
-              2'd1: begin
-                mrl_o[7:0] <= rx_data;
-                set_mrl_o  <= 1'b1;
-              end
-              2'd2: begin
-                ibil_o     <= rx_data;
-                set_ibil_o <= 1'b1;
-              end
-              default: ;
-            endcase
-          end
-          CCC_DIRECT_ENEC: begin
-            case (rx_byte_num)
-              2'd0: begin
-                enec_ibi <= rx_data[0];
-                enec_crr <= rx_data[1];
-                enec_hj  <= rx_data[3];
-              end
-              default: ;
-            endcase
-          end
-          CCC_DIRECT_DISEC: begin
-            case (rx_byte_num)
-              2'd0: begin
-                disec_ibi <= rx_data[0];
-                disec_crr <= rx_data[1];
-                disec_hj  <= rx_data[3];
-              end
-              default: ;
-            endcase
-          end
-          // -----------------------------------------------------------------
-          // Broadcast CCCs (always process)
-          // -----------------------------------------------------------------
-          CCC_BCAST_SETMWL: begin
-            case (rx_byte_num)
-              2'd0: mwl_o[15:8] <= rx_data;
-              2'd1: begin
-                mwl_o[7:0] <= rx_data;
-                set_mwl_o  <= 1'b1;
-              end
-              default: ;
-            endcase
-          end
-          CCC_BCAST_SETMRL: begin
-            case (rx_byte_num)
-              2'd0: mrl_o[15:8] <= rx_data;
-              2'd1: begin
-                mrl_o[7:0] <= rx_data;
-                set_mrl_o  <= 1'b1;
-              end
-              2'd2: begin
-                ibil_o     <= rx_data;
-                set_ibil_o <= 1'b1;
-              end
-              default: ;
-            endcase
-          end
-          CCC_BCAST_ENEC: begin
-            case (rx_byte_num)
-              2'd0: begin
-                enec_ibi <= rx_data[0];
-                enec_crr <= rx_data[1];
-                enec_hj  <= rx_data[3];
-              end
-              default: ;
-            endcase
-          end
-          CCC_BCAST_DISEC: begin
-            case (rx_byte_num)
-              2'd0: begin
-                disec_ibi <= rx_data[0];
-                disec_crr <= rx_data[1];
-                disec_hj  <= rx_data[3];
-              end
-              default: ;
-            endcase
-          end
-          default: ;
-        endcase
-      end
-
-      // -----------------------------------------------------------------
-      // RSTACT: Arm reset action (triggers on ACK/T-bit, not data bytes)
-      // -----------------------------------------------------------------
-      case (command_code)
-        CCC_DIRECT_RSTACT: begin
-          // Direct RSTACT: Arm after target address ACK for action values (0x00-0x7F)
-          if (target_addr_ack_done && addr_ack_target && ~defining_byte[7]) begin
-            rst_action_valid <= 1'b1;
-          end
-        end
-        CCC_BCAST_RSTACT: begin
-          // Broadcast RSTACT: Arm after defining byte T-bit for action values (0x00-0x7F)
-          if (def_byte_tbit_valid && ~defining_byte[7]) begin
-            rst_action_valid <= 1'b1;
-          end
-        end
-        default: ;
-      endcase
+      set_dasa_valid   <= set_dasa_valid_next;
+      set_dasa_addr    <= set_dasa_addr_next;
+      set_newda_valid  <= set_newda_valid_next;
+      set_newda_addr   <= set_newda_addr_next;
+      set_mrl_o        <= set_mrl_next;
+      mrl_o            <= mrl_next;
+      set_ibil_o       <= set_ibil_next;
+      ibil_o           <= ibil_next;
+      set_mwl_o        <= set_mwl_next;
+      mwl_o            <= mwl_next;
+      enec_ibi         <= enec_ibi_next;
+      enec_crr         <= enec_crr_next;
+      enec_hj          <= enec_hj_next;
+      disec_ibi        <= disec_ibi_next;
+      disec_crr        <= disec_crr_next;
+      disec_hj         <= disec_hj_next;
+      rst_action_valid <= rst_action_valid_next;
     end
   end
 
@@ -1582,40 +1615,53 @@ module ccc
   // BROADCAST CCC HANDLERS (without data)
   // ===========================================================================
   // Handles RSTDAA, SETAASA (CCCs that complete on command T-bit, no data phase)
+
+  // ---------------------------------------------------------------------------
+  // Combinational logic: Compute next values for broadcast CCC registers
+  // ---------------------------------------------------------------------------
+  always_comb begin : proc_bcast_no_data_ccc_next
+    // Default: all pulse signals clear
+    rstdaa_next             = 1'b0;
+    set_aasa_valid_next     = 1'b0;
+    set_aasa_virt_valid_next = 1'b0;
+
+    case (command_code)
+      CCC_BCAST_RSTDAA: begin
+        // RSTDAA completes after receiving the command T-bit
+        if (cmd_tbit_valid) begin
+          rstdaa_next = 1'b1;
+        end
+      end
+      // SETAASA: Set All Addresses from Static Address
+      // Sets dynamic address = static address if not already assigned
+      CCC_BCAST_SETAASA: begin
+        if (cmd_tbit_valid) begin
+          // Only set if we don't already have a dynamic address
+          // and the static address is not in the reserved range
+          if (~target_dyn_address_valid_i && ~(target_sta_address_i inside {[7'h00:7'h07], 7'h3E, 7'h5E, 7'h6E, 7'h76, [7'h78:7'h7F]})) begin
+            set_aasa_valid_next = 1'b1;
+          end
+          if (~virtual_target_dyn_address_valid_i && ~(virtual_target_sta_address_i inside {[7'h00:7'h07], 7'h3E, 7'h5E, 7'h6E, 7'h76, [7'h78:7'h7F]})) begin
+            set_aasa_virt_valid_next = 1'b1;
+          end
+        end
+      end
+      default: ;
+    endcase
+  end
+
+  // ---------------------------------------------------------------------------
+  // Sequential logic: Register the next values
+  // ---------------------------------------------------------------------------
   always_ff @(posedge clk_i or negedge rst_ni) begin : proc_bcast_no_data_ccc
     if (~rst_ni) begin
-      rstdaa_o <= '0;
-      set_aasa_valid <= 1'b0;
+      rstdaa_o            <= 1'b0;
+      set_aasa_valid      <= 1'b0;
       set_aasa_virt_valid <= 1'b0;
     end else begin
-      case (command_code)
-        CCC_BCAST_RSTDAA: begin
-          // RSTDAA completes after receiving the command T-bit
-          if (cmd_tbit_valid) begin
-            rstdaa_o <= 1'b1;
-          end else begin
-            rstdaa_o <= '0;
-          end
-        end
-        // SETAASA: Set All Addresses from Static Address
-        // Sets dynamic address = static address if not already assigned
-        CCC_BCAST_SETAASA: begin
-          if (cmd_tbit_valid) begin
-            // Only set if we don't already have a dynamic address
-            // and the static address is not in the reserved range
-            if (~target_dyn_address_valid_i && ~(target_sta_address_i inside {[7'h00:7'h07], 7'h3E, 7'h5E, 7'h6E, 7'h76, [7'h78:7'h7F]})) begin
-              set_aasa_valid <= 1'b1;
-            end
-            if (~virtual_target_dyn_address_valid_i && ~(virtual_target_sta_address_i inside {[7'h00:7'h07], 7'h3E, 7'h5E, 7'h6E, 7'h76, [7'h78:7'h7F]})) begin
-              set_aasa_virt_valid <= 1'b1;
-            end
-          end else begin
-            set_aasa_valid <= 1'b0;
-            set_aasa_virt_valid <= 1'b0;
-          end
-        end
-        default: ;
-      endcase
+      rstdaa_o            <= rstdaa_next;
+      set_aasa_valid      <= set_aasa_valid_next;
+      set_aasa_virt_valid <= set_aasa_virt_valid_next;
     end
   end
 
