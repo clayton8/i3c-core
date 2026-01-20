@@ -328,7 +328,7 @@ module i3c_target_fsm import i3c_pkg::*; #(
 
   assign rx_overflow_err_o = ~rx_overflow_err_q & rx_overflow_err_r;
 
-  // RX FIFO valid when we finish reading byte (leave RxPWriteData) and there was no parity error
+  // RX FIFO valid when we finish reading byte (leave RxPWriteData) and there was no protocol error
   assign rx_fifo_wvalid = (state_q == RxPWriteTbit) && (state_d != RxPWriteTbit) &&
                           !(parity_err || rx_overflow_err_o);
 
