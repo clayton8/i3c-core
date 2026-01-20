@@ -162,7 +162,8 @@ module controller_standby_i3c
     //
     output logic get_status_done_o,
 
-    output logic parity_err_o,
+    // Protocol Error Report (GETSTATUS Format 1): errors Controller cannot detect
+    output logic protocol_err_o,
 
     output logic peripheral_reset_o,
     input  logic peripheral_reset_done_i,
@@ -645,11 +646,11 @@ module controller_standby_i3c
   // - te2_err_ccc: CCC data parity error (TE2)
   // - te2_err_priv_wr: Private write parity error (TE2)
   // - framing_err_ccc: SETDASA/SETNEWDA padding bit error (Bit[0] != 0)
-  assign parity_err_o = te1_err_ccc | te2_err_ccc | te2_err_priv_wr | framing_err_ccc;
+  assign protocol_err_o = te1_err_ccc | te2_err_ccc | te2_err_priv_wr | framing_err_ccc;
 
   logic rx_error;
 
-  assign rx_error = parity_err_o | rx_overflow_err;
+  assign rx_error = protocol_err_o | rx_overflow_err;
 
   descriptor_rx #(
     .TtiRxDescDataWidth(TtiRxDescDataWidth),
