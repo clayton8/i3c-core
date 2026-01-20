@@ -46,8 +46,8 @@
       name: i3c_target_read_empty
       desc:
         '''
-        Issues multiple read transactions to the target and randomly selects,
-        which if transaction has data.
+        Issues multiple read transactions to the target and randomly selects 
+        whether each transaction has data.
 
         If transaction is selected to contain data, writes a data chunk and
         its descriptor to TTI TX queues, and verifies that the data matches.
