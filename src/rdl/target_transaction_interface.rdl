@@ -17,7 +17,7 @@ regfile TargetTransactionInterfaceRegisters #(
             desc = "Capability Structure Length in DWORDs";
             sw = r;
             hw = r;
-            reset = 16'h001F;
+            reset = 16'h0020;
         } CAP_LENGTH[23:8];
         field {
             name = "CAP_ID";
