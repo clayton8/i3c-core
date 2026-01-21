@@ -2279,6 +2279,40 @@
 
     endgroup
 
+    /*----------------------- I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL COVERGROUPS -----------------------*/
+    covergroup I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL_bit_cg with function sample(input bit reg_bit);
+        option.per_instance = 1;
+        reg_bit_cp : coverpoint reg_bit {
+            bins value[2] = {0,1};
+        }
+        reg_bit_edge_cp : coverpoint reg_bit {
+            bins rise = (0 => 1);
+            bins fall = (1 => 0);
+        }
+
+    endgroup
+    covergroup I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL_fld_cg with function sample(
+    input bit [1-1:0] TE0_ERR_DET_EN,
+    input bit [1-1:0] TE1_ERR_DET_EN,
+    input bit [1-1:0] TE2_ERR_DET_EN,
+    input bit [1-1:0] TE3_ERR_DET_EN,
+    input bit [1-1:0] TE4_ERR_DET_EN,
+    input bit [1-1:0] TE5_ERR_DET_EN,
+    input bit [1-1:0] FRAMING_ERR_DET_EN,
+    input bit [1-1:0] PEC_ERR_DET_EN
+    );
+        option.per_instance = 1;
+        TE0_ERR_DET_EN_cp : coverpoint TE0_ERR_DET_EN;
+        TE1_ERR_DET_EN_cp : coverpoint TE1_ERR_DET_EN;
+        TE2_ERR_DET_EN_cp : coverpoint TE2_ERR_DET_EN;
+        TE3_ERR_DET_EN_cp : coverpoint TE3_ERR_DET_EN;
+        TE4_ERR_DET_EN_cp : coverpoint TE4_ERR_DET_EN;
+        TE5_ERR_DET_EN_cp : coverpoint TE5_ERR_DET_EN;
+        FRAMING_ERR_DET_EN_cp : coverpoint FRAMING_ERR_DET_EN;
+        PEC_ERR_DET_EN_cp : coverpoint PEC_ERR_DET_EN;
+
+    endgroup
+
     /*----------------------- I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS COVERGROUPS -----------------------*/
     covergroup I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS_bit_cg with function sample(input bit reg_bit);
         option.per_instance = 1;

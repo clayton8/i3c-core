@@ -257,6 +257,15 @@ module controller
     output logic te5_err_o,
     output logic framing_err_o,
 
+    // Target Error Detection Enables (from TTI CSR)
+    input  logic te0_err_det_en_i,
+    input  logic te1_err_det_en_i,
+    input  logic te2_err_det_en_i,
+    input  logic te3_err_det_en_i,
+    input  logic te4_err_det_en_i,
+    input  logic te5_err_det_en_i,
+    input  logic framing_err_det_en_i,
+
     output logic virtual_device_sel_o,
     output logic xfer_in_progress_o
 );
@@ -616,6 +625,13 @@ module controller
       .te4_err_o(te4_err_o),
       .te5_err_o(te5_err_o),
       .framing_err_o(framing_err_o),
+      .te0_err_det_en_i(te0_err_det_en_i),
+      .te1_err_det_en_i(te1_err_det_en_i),
+      .te2_err_det_en_i(te2_err_det_en_i),
+      .te3_err_det_en_i(te3_err_det_en_i),
+      .te4_err_det_en_i(te4_err_det_en_i),
+      .te5_err_det_en_i(te5_err_det_en_i),
+      .framing_err_det_en_i(framing_err_det_en_i),
       .virtual_device_sel_o(virtual_device_sel_o),
       .xfer_in_progress_o(xfer_in_progress_o)
   );

@@ -164,6 +164,24 @@ module controller_standby_i3c
 
     // Protocol Error Report (GETSTATUS Format 1): errors Controller cannot detect
     output logic protocol_err_o,
+    // Individual TE error outputs for interrupt reporting
+    output logic te0_err_o,
+    output logic te1_err_o,
+    output logic te2_err_o,
+    output logic te3_err_o,
+    output logic te4_err_o,
+    output logic te5_err_o,
+    output logic framing_err_o,
+
+    // Target Error Detection Enables (from TTI CSR)
+    input  logic te0_err_det_en_i,
+    input  logic te1_err_det_en_i,
+    input  logic te2_err_det_en_i,
+    input  logic te3_err_det_en_i,
+    input  logic te4_err_det_en_i,
+    input  logic te5_err_det_en_i,
+    input  logic framing_err_det_en_i,
+
 
     output logic peripheral_reset_o,
     input  logic peripheral_reset_done_i,
@@ -423,6 +441,8 @@ module controller_standby_i3c
 
     .is_hotjoin_done_i          (hotjoin_done),
 
+    .te2_err_det_en_i           (te2_err_det_en_i),
+
     .last_addr_o                (bus_addr_o),
     .last_addr_valid_o          (bus_addr_valid_o),
 
@@ -447,7 +467,18 @@ module controller_standby_i3c
     .te0_err_i   (te0_err),
     .te1_err_o   (te1_err_ccc),
     .te2_err_ccc_o(te2_err_ccc),
+    .te3_err_o   (te3_err_ccc),
+    .te4_err_o   (te4_err_ccc),
+    .te5_err_o   (te5_err_ccc),
     .framing_err_o(framing_err_ccc),
+
+    .te0_err_det_en_i(te0_err_det_en_i),
+    .te1_err_det_en_i(te1_err_det_en_i),
+    .te2_err_det_en_i(te2_err_det_en_i),
+    .te3_err_det_en_i(te3_err_det_en_i),
+    .te4_err_det_en_i(te4_err_det_en_i),
+    .te5_err_det_en_i(te5_err_det_en_i),
+    .framing_err_det_en_i(framing_err_det_en_i),
 
     .bus_start_det_i (ctrl_bus_i.start_det),
     .bus_rstart_det_i(ctrl_bus_i.rstart_det),
