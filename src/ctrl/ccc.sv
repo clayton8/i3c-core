@@ -828,7 +828,7 @@ module ccc
 
   // TX Request: Bit/byte requests and drive type derived from state
   assign tx_req_ccc = '{
-    drive_type: (state_q inside {TxData}) ? PushPull : OpenDrain,
+    drive_type: (state_q inside {TxData, TxDataTbit}) ? PushPull : OpenDrain,
     req_byte:   (state_q == TxData),
     req_bit:    (state_q inside {TxTargetAddrAck, TxDataTbit}),
     data:       bus_tx_data
@@ -1135,18 +1135,22 @@ module ccc
       end
       
       TxDataTbit: begin
-        // T-bit: 1 = more data, 0 = last byte
+        // T-bit value: 0 = end of data, 1 = more data available
         bus_tx_data[0] = ~tx_data_last_byte;
 
-        if (bus_tx_rsp_i.done) begin
+        if (bus_rstart_det_i) begin
+          // Controller abort: Target sent T=1 but Controller issued Sr
+          state_d = RxTargetAddr;
+          set_tx_data_complete = 1'b1;
+        end else if (bus_tx_rsp_i.done) begin
           inc_tx_byte_num = 1'b1;
 
-          if (arbitration_lost_i || tx_data_last_byte) begin
-            if (!arbitration_lost_i) begin
-              set_tx_data_complete = 1'b1;
-            end
+          if (tx_data_last_byte) begin
+            // Target complete: Target sent T=0, wait for Sr or STOP
+            set_tx_data_complete = 1'b1;
             state_d = WaitForBusCond;
           end else begin
+            // Continue: Target sent T=1, Controller accepted
             state_d = TxData;
           end
         end
