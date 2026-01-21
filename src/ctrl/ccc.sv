@@ -470,6 +470,7 @@ module ccc
   // When detection is disabled, the error is never detected and the FSM continues normally.
   
   // TE0: Invalid reserved address + RnW combination (asserted in TxTargetAddrAck)
+  logic       te0_err;          // Combined TE0 error (CCC module + target FSM)
   logic       te0_err_ccc;      // TE0 from CCC module (direct CCC target address)
   logic       is_te0_err_condition;  // Helper: reserved address has invalid RnW (gated with enable)
   // TE1: Parity error on CCC command code T-bit (asserted in RxCmdTbit)

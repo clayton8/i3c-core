@@ -268,6 +268,9 @@ module controller_standby_i3c
   // CCC parity error signals (for Protocol Error Report)
   logic te1_err_ccc;      // CCC command parity error (TE1)
   logic te2_err_ccc;      // CCC data parity error (TE2)
+  logic te3_err_ccc;      // ENTDAA PID mismatch (TE3)
+  logic te4_err_ccc;      // ENTDAA BCR/DCR mismatch (TE4)
+  logic te5_err_ccc;      // Broadcast/Direct DA mismatch (TE5)
   logic framing_err_ccc;  // DA padding errors from CCC (for Protocol Error Report)
 
   // Private write parity error (from target FSM)
@@ -678,6 +681,15 @@ module controller_standby_i3c
   // - te2_err_priv_wr: Private write parity error (TE2)
   // - framing_err_ccc: SETDASA/SETNEWDA padding bit error (Bit[0] != 0)
   assign protocol_err_o = te1_err_ccc | te2_err_ccc | te2_err_priv_wr | framing_err_ccc;
+
+  // Individual TE error outputs for interrupt reporting
+  assign te0_err_o = te0_err;
+  assign te1_err_o = te1_err_ccc;
+  assign te2_err_o = te2_err_ccc | te2_err_priv_wr;
+  assign te3_err_o = te3_err_ccc;
+  assign te4_err_o = te4_err_ccc;
+  assign te5_err_o = te5_err_ccc;
+  assign framing_err_o = framing_err_ccc;
 
   logic rx_error;
 
