@@ -103,8 +103,11 @@ module ccc
     // =========================================================================
     output logic te0_enable_o,
     input  logic te0_err_i,
-    output logic te1_err_o,      // CCC command parity error (for Protocol Error Report)
-    output logic te2_err_ccc_o,  // CCC data parity error (for Protocol Error Report)
+    output logic te1_err_o,      // CCC command parity error (TE1)
+    output logic te2_err_ccc_o,  // CCC data parity error (TE2)
+    output logic te3_err_o,      // ENTDAA PID mismatch (TE3)
+    output logic te4_err_o,      // ENTDAA BCR/DCR mismatch (TE4)
+    output logic te5_err_o,      // Broadcast/Direct DA mismatch (TE5)
     output logic framing_err_o,  // DA padding errors (for Protocol Error Report)
 
     // =========================================================================
@@ -758,9 +761,12 @@ module ccc
   // Combined TE0 error (CCC module + target FSM)
   assign te0_err = te0_err_ccc || te0_err_i;
 
-  // Protocol Error outputs (TE1/TE2 parity errors for GETSTATUS Protocol Error bit)
+  // Protocol Error outputs (TE1-TE5 errors for GETSTATUS Protocol Error bit)
   assign te1_err_o = te1_err;
   assign te2_err_ccc_o = te2_err;
+  assign te3_err_o = te3_err;
+  assign te4_err_o = te4_err;
+  assign te5_err_o = te5_err;
 
   // Framing error for Protocol Error Report (GETSTATUS Format 1):
   // Per I3C FAQ Q16.10: Incorrect framing for DA assignment CCCs should be reported.

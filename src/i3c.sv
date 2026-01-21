@@ -536,6 +536,15 @@ module i3c
   logic controller_error;
   logic recovery_protocol_err;
 
+  // Individual TE error signals for interrupt reporting
+  logic te0_err;
+  logic te1_err;
+  logic te2_err;
+  logic te3_err;
+  logic te4_err;
+  logic te5_err;
+  logic framing_err;
+
   logic recovery_mode_enter;
   logic recovery_mode_enabled;
   logic virtual_device_sel;
@@ -752,6 +761,15 @@ module i3c
       .err_o(controller_error),
       .recovery_mode_enter_i(recovery_mode_enter),
       .recovery_protocol_err_i(recovery_protocol_err),
+
+      .te0_err_o(te0_err),
+      .te1_err_o(te1_err),
+      .te2_err_o(te2_err),
+      .te3_err_o(te3_err),
+      .te4_err_o(te4_err),
+      .te5_err_o(te5_err),
+      .framing_err_o(framing_err),
+
       .virtual_device_sel_o(virtual_device_sel),
       .xfer_in_progress_o(xfer_in_progress)
   );
@@ -1045,6 +1063,16 @@ module i3c
       .disec_hj_i (disec_hj),
 
       .err_i(controller_error),
+
+      // TE error inputs for interrupt reporting
+      .te0_err_i(te0_err),
+      .te1_err_i(te1_err),
+      .te2_err_i(te2_err),
+      .te3_err_i(te3_err),
+      .te4_err_i(te4_err),
+      .te5_err_i(te5_err),
+      .framing_err_i(framing_err),
+      .pec_err_i(recovery_protocol_err),
 
       .irq_o (tti_irq)
   );
