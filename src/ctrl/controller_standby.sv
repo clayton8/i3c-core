@@ -182,6 +182,16 @@ module controller_standby
     output logic err_o,
     input  logic recovery_mode_enter_i,
     input  logic recovery_protocol_err_i,
+
+    // Individual TE error outputs for interrupt reporting
+    output logic te0_err_o,
+    output logic te1_err_o,
+    output logic te2_err_o,
+    output logic te3_err_o,
+    output logic te4_err_o,
+    output logic te5_err_o,
+    output logic framing_err_o,
+
     output logic virtual_device_sel_o,
     output logic xfer_in_progress_o
 );
@@ -485,6 +495,13 @@ module controller_standby
       .ibi_status_we_o(ibi_status_we_o),
       .get_status_done_o(get_status_done),
       .protocol_err_o(protocol_err),
+      .te0_err_o(te0_err_o),
+      .te1_err_o(te1_err_o),
+      .te2_err_o(te2_err_o),
+      .te3_err_o(te3_err_o),
+      .te4_err_o(te4_err_o),
+      .te5_err_o(te5_err_o),
+      .framing_err_o(framing_err_o),
       .peripheral_reset_o,
       .peripheral_reset_done_i,
       .escalated_reset_o,

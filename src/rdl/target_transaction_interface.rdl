@@ -17,7 +17,7 @@ regfile TargetTransactionInterfaceRegisters #(
             desc = "Capability Structure Length in DWORDs";
             sw = r;
             hw = r;
-            reset = 16'h0020;
+            reset = 16'h001F;
         } CAP_LENGTH[23:8];
         field {
             name = "CAP_ID";
@@ -624,6 +624,314 @@ regfile TargetTransactionInterfaceRegisters #(
             reset = 1'b0;
         } RX_DESC_STAT_FORCE[0:0];
     } INTERRUPT_FORCE;
+    // =========================================================================
+    // Target Error Interrupt Registers
+    // =========================================================================
+    // Target Errors interrupt status and enable
+    // provide W1C interrupt status for each error type.
+    reg {
+        name = "TTI Target Error Interrupt Status";
+        desc = "Target Error Interrupt Status. Write 1 to clear individual bits.";
+        field {
+            name = "PEC_ERR_STAT";
+            desc = "Recovery PEC/CRC error detected";
+            sw = rw;
+            hw = rw;
+            woclr = true;
+            we = true;
+            reset = 1'b0;
+        } PEC_ERR_STAT[8:8];
+        field {
+            name = "FRAMING_ERR_STAT";
+            desc = "DA padding error (Bit[0] != 0 in SETDASA/SETNEWDA)";
+            sw = rw;
+            hw = rw;
+            woclr = true;
+            we = true;
+            reset = 1'b0;
+        } FRAMING_ERR_STAT[7:7];
+        field {
+            name = "TE5_ERR_STAT";
+            desc = "TE5: Broadcast/Direct CCC wrong R/W direction";
+            sw = rw;
+            hw = rw;
+            woclr = true;
+            we = true;
+            reset = 1'b0;
+        } TE5_ERR_STAT[6:6];
+        field {
+            name = "TE4_ERR_STAT";
+            desc = "TE4: ENTDAA BCR/DCR mismatch";
+            sw = rw;
+            hw = rw;
+            woclr = true;
+            we = true;
+            reset = 1'b0;
+        } TE4_ERR_STAT[5:5];
+        field {
+            name = "TE3_ERR_STAT";
+            desc = "TE3: ENTDAA PID mismatch";
+            sw = rw;
+            hw = rw;
+            woclr = true;
+            we = true;
+            reset = 1'b0;
+        } TE3_ERR_STAT[4:4];
+        field {
+            name = "TE2_ERR_STAT";
+            desc = "TE2: CCC or Private Write data parity error";
+            sw = rw;
+            hw = rw;
+            woclr = true;
+            we = true;
+            reset = 1'b0;
+        } TE2_ERR_STAT[3:3];
+        field {
+            name = "TE1_ERR_STAT";
+            desc = "TE1: CCC command parity error";
+            sw = rw;
+            hw = rw;
+            woclr = true;
+            we = true;
+            reset = 1'b0;
+        } TE1_ERR_STAT[2:2];
+        field {
+            name = "TE0_ERR_STAT";
+            desc = "TE0: Invalid reserved address + RnW combination";
+            sw = rw;
+            hw = rw;
+            woclr = true;
+            we = true;
+            reset = 1'b0;
+        } TE0_ERR_STAT[1:1];
+    } TARGET_ERR_INTR_STATUS;
+    reg {
+        name = "TTI Target Error Interrupt Enable";
+        desc = "Target Error Interrupt Enable. Set bits to enable corresponding interrupts.";
+        field {
+            name = "PEC_ERR_EN";
+            desc = "Enables the corresponding interrupt bit `PEC_ERR_STAT`";
+            sw = rw;
+            hw = r;
+            reset = 1'b0;
+        } PEC_ERR_EN[8:8];
+        field {
+            name = "FRAMING_ERR_EN";
+            desc = "Enables the corresponding interrupt bit `FRAMING_ERR_STAT`";
+            sw = rw;
+            hw = r;
+            reset = 1'b0;
+        } FRAMING_ERR_EN[7:7];
+        field {
+            name = "TE5_ERR_EN";
+            desc = "Enables the corresponding interrupt bit `TE5_ERR_STAT`";
+            sw = rw;
+            hw = r;
+            reset = 1'b0;
+        } TE5_ERR_EN[6:6];
+        field {
+            name = "TE4_ERR_EN";
+            desc = "Enables the corresponding interrupt bit `TE4_ERR_STAT`";
+            sw = rw;
+            hw = r;
+            reset = 1'b0;
+        } TE4_ERR_EN[5:5];
+        field {
+            name = "TE3_ERR_EN";
+            desc = "Enables the corresponding interrupt bit `TE3_ERR_STAT`";
+            sw = rw;
+            hw = r;
+            reset = 1'b0;
+        } TE3_ERR_EN[4:4];
+        field {
+            name = "TE2_ERR_EN";
+            desc = "Enables the corresponding interrupt bit `TE2_ERR_STAT`";
+            sw = rw;
+            hw = r;
+            reset = 1'b0;
+        } TE2_ERR_EN[3:3];
+        field {
+            name = "TE1_ERR_EN";
+            desc = "Enables the corresponding interrupt bit `TE1_ERR_STAT`";
+            sw = rw;
+            hw = r;
+            reset = 1'b0;
+        } TE1_ERR_EN[2:2];
+        field {
+            name = "TE0_ERR_EN";
+            desc = "Enables the corresponding interrupt bit `TE0_ERR_STAT`";
+            sw = rw;
+            hw = r;
+            reset = 1'b0;
+        } TE0_ERR_EN[1:1];
+    } TARGET_ERR_INTR_ENABLE;
+    reg {
+        name = "TTI Target Error Interrupt Force";
+        desc = "Target Error Interrupt Force. Set bits to force corresponding interrupts for testing.";
+        field {
+            name = "PEC_ERR_FORCE";
+            desc = "Forces the corresponding interrupt bit `PEC_ERR_STAT` to be set to 1";
+            sw = rw;
+            hw = r;
+            reset = 1'b0;
+        } PEC_ERR_FORCE[8:8];
+        field {
+            name = "FRAMING_ERR_FORCE";
+            desc = "Forces the corresponding interrupt bit `FRAMING_ERR_STAT` to be set to 1";
+            sw = rw;
+            hw = r;
+            reset = 1'b0;
+        } FRAMING_ERR_FORCE[7:7];
+        field {
+            name = "TE5_ERR_FORCE";
+            desc = "Forces the corresponding interrupt bit `TE5_ERR_STAT` to be set to 1";
+            sw = rw;
+            hw = r;
+            reset = 1'b0;
+        } TE5_ERR_FORCE[6:6];
+        field {
+            name = "TE4_ERR_FORCE";
+            desc = "Forces the corresponding interrupt bit `TE4_ERR_STAT` to be set to 1";
+            sw = rw;
+            hw = r;
+            reset = 1'b0;
+        } TE4_ERR_FORCE[5:5];
+        field {
+            name = "TE3_ERR_FORCE";
+            desc = "Forces the corresponding interrupt bit `TE3_ERR_STAT` to be set to 1";
+            sw = rw;
+            hw = r;
+            reset = 1'b0;
+        } TE3_ERR_FORCE[4:4];
+        field {
+            name = "TE2_ERR_FORCE";
+            desc = "Forces the corresponding interrupt bit `TE2_ERR_STAT` to be set to 1";
+            sw = rw;
+            hw = r;
+            reset = 1'b0;
+        } TE2_ERR_FORCE[3:3];
+        field {
+            name = "TE1_ERR_FORCE";
+            desc = "Forces the corresponding interrupt bit `TE1_ERR_STAT` to be set to 1";
+            sw = rw;
+            hw = r;
+            reset = 1'b0;
+        } TE1_ERR_FORCE[2:2];
+        field {
+            name = "TE0_ERR_FORCE";
+            desc = "Forces the corresponding interrupt bit `TE0_ERR_STAT` to be set to 1";
+            sw = rw;
+            hw = r;
+            reset = 1'b0;
+        } TE0_ERR_FORCE[1:1];
+    } TARGET_ERR_INTR_FORCE;
+
+    // Target Error Counters - 8-bit saturating counters
+    // SW can read the count or write 0 to clear. HW increments on errors.
+    reg {
+        name = "TE0 Error Counter";
+        desc = "Counts TE0 errors. Saturates at 255. Write 0 to clear.";
+        field {
+            name = "CNT";
+            desc = "Error count (saturates at 255). Write 0 to clear.";
+            sw = rw;
+            hw = rw;
+            we = true;
+            reset = 8'h00;
+        } CNT[7:0];
+    } TARGET_ERR_CNT_TE0;
+
+    reg {
+        name = "TE1 Error Counter";
+        desc = "Counts TE1 errors. Saturates at 255. Write 0 to clear.";
+        field {
+            name = "CNT";
+            desc = "Error count (saturates at 255). Write 0 to clear.";
+            sw = rw;
+            hw = rw;
+            we = true;
+            reset = 8'h00;
+        } CNT[7:0];
+    } TARGET_ERR_CNT_TE1;
+
+    reg {
+        name = "TE2 Error Counter";
+        desc = "Counts TE2 errors. Saturates at 255. Write 0 to clear.";
+        field {
+            name = "CNT";
+            desc = "Error count (saturates at 255). Write 0 to clear.";
+            sw = rw;
+            hw = rw;
+            we = true;
+            reset = 8'h00;
+        } CNT[7:0];
+    } TARGET_ERR_CNT_TE2;
+
+    reg {
+        name = "TE3 Error Counter";
+        desc = "Counts TE3 errors. Saturates at 255. Write 0 to clear.";
+        field {
+            name = "CNT";
+            desc = "Error count (saturates at 255). Write 0 to clear.";
+            sw = rw;
+            hw = rw;
+            we = true;
+            reset = 8'h00;
+        } CNT[7:0];
+    } TARGET_ERR_CNT_TE3;
+
+    reg {
+        name = "TE4 Error Counter";
+        desc = "Counts TE4 errors. Saturates at 255. Write 0 to clear.";
+        field {
+            name = "CNT";
+            desc = "Error count (saturates at 255). Write 0 to clear.";
+            sw = rw;
+            hw = rw;
+            we = true;
+            reset = 8'h00;
+        } CNT[7:0];
+    } TARGET_ERR_CNT_TE4;
+
+    reg {
+        name = "TE5 Error Counter";
+        desc = "Counts TE5 errors. Saturates at 255. Write 0 to clear.";
+        field {
+            name = "CNT";
+            desc = "Error count (saturates at 255). Write 0 to clear.";
+            sw = rw;
+            hw = rw;
+            we = true;
+            reset = 8'h00;
+        } CNT[7:0];
+    } TARGET_ERR_CNT_TE5;
+
+    reg {
+        name = "Framing Error Counter";
+        desc = "Counts framing errors. Saturates at 255. Write 0 to clear.";
+        field {
+            name = "CNT";
+            desc = "Error count (saturates at 255). Write 0 to clear.";
+            sw = rw;
+            hw = rw;
+            we = true;
+            reset = 8'h00;
+        } CNT[7:0];
+    } TARGET_ERR_CNT_FRAMING;
+
+    reg {
+        name = "PEC Error Counter";
+        desc = "Counts PEC errors. Saturates at 255. Write 0 to clear.";
+        field {
+            name = "CNT";
+            desc = "Error count (saturates at 255). Write 0 to clear.";
+            sw = rw;
+            hw = rw;
+            we = true;
+            reset = 8'h00;
+        } CNT[7:0];
+    } TARGET_ERR_CNT_PEC;
+
     external reg {
         name = "TTI RX Descriptor Queue Port";
         desc = "RX Descriptor Queue Port";

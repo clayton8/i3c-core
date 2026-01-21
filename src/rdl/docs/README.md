@@ -2648,30 +2648,41 @@ shall be revoked) with this Target Reset Pattern.</p>
 
 - Absolute Address: 0x200
 - Base Offset: 0x100
-- Size: 0x50
+- Size: 0x7C
 
-|Offset|      Identifier     |              Name             |
-|------|---------------------|-------------------------------|
-| 0x00 |    EXTCAP_HEADER    |               —               |
-| 0x04 |       CONTROL       |          TTI Control          |
-| 0x08 |        STATUS       |           TTI Status          |
-| 0x0C |    RESET_CONTROL    |    TTI Queue Reset Control    |
-| 0x10 |     QUEUE_STATUS    |        TTI Queue Status       |
-| 0x14 |   DESC_QUEUE_DEPTH  |   TTI Descriptor Queue Depth  |
-| 0x18 |   DATA_QUEUE_DEPTH  |      TTI Data Queue Depth     |
-| 0x1C |   IBI_QUEUE_DEPTH   |      TTI IBI Queue Depth      |
-| 0x20 |   INTERRUPT_STATUS  |      TTI Interrupt Status     |
-| 0x24 |   INTERRUPT_ENABLE  |      TTI Interrupt Enable     |
-| 0x28 |   INTERRUPT_FORCE   |      TTI Interrupt Force      |
-| 0x2C |  RX_DESC_QUEUE_PORT |  TTI RX Descriptor Queue Port |
-| 0x30 |     RX_DATA_PORT    |        TTI RX Data Port       |
-| 0x34 |  TX_DESC_QUEUE_PORT |  TTI TX Descriptor Queue Port |
-| 0x38 |     TX_DATA_PORT    |        TTI TX Data Port       |
-| 0x3C |       IBI_PORT      |       TTI IBI Data Port       |
-| 0x40 |      QUEUE_SIZE     |         TTI Queue Size        |
-| 0x44 |    IBI_QUEUE_SIZE   |       TTI IBI Queue Size      |
-| 0x48 |   QUEUE_THLD_CTRL   |  TTI Queue Threshold Control  |
-| 0x4C |DATA_BUFFER_THLD_CTRL|TTI IBI Queue Threshold Control|
+|Offset|      Identifier      |               Name              |
+|------|----------------------|---------------------------------|
+| 0x00 |     EXTCAP_HEADER    |                —                |
+| 0x04 |        CONTROL       |           TTI Control           |
+| 0x08 |        STATUS        |            TTI Status           |
+| 0x0C |     RESET_CONTROL    |     TTI Queue Reset Control     |
+| 0x10 |     QUEUE_STATUS     |         TTI Queue Status        |
+| 0x14 |   DESC_QUEUE_DEPTH   |    TTI Descriptor Queue Depth   |
+| 0x18 |   DATA_QUEUE_DEPTH   |       TTI Data Queue Depth      |
+| 0x1C |    IBI_QUEUE_DEPTH   |       TTI IBI Queue Depth       |
+| 0x20 |   INTERRUPT_STATUS   |       TTI Interrupt Status      |
+| 0x24 |   INTERRUPT_ENABLE   |       TTI Interrupt Enable      |
+| 0x28 |    INTERRUPT_FORCE   |       TTI Interrupt Force       |
+| 0x2C |TARGET_ERR_INTR_STATUS|TTI Target Error Interrupt Status|
+| 0x30 |TARGET_ERR_INTR_ENABLE|TTI Target Error Interrupt Enable|
+| 0x34 | TARGET_ERR_INTR_FORCE| TTI Target Error Interrupt Force|
+| 0x38 |  TARGET_ERR_CNT_TE0  |        TE0 Error Counter        |
+| 0x3C |  TARGET_ERR_CNT_TE1  |        TE1 Error Counter        |
+| 0x40 |  TARGET_ERR_CNT_TE2  |        TE2 Error Counter        |
+| 0x44 |  TARGET_ERR_CNT_TE3  |        TE3 Error Counter        |
+| 0x48 |  TARGET_ERR_CNT_TE4  |        TE4 Error Counter        |
+| 0x4C |  TARGET_ERR_CNT_TE5  |        TE5 Error Counter        |
+| 0x50 |TARGET_ERR_CNT_FRAMING|      Framing Error Counter      |
+| 0x54 |  TARGET_ERR_CNT_PEC  |        PEC Error Counter        |
+| 0x58 |  RX_DESC_QUEUE_PORT  |   TTI RX Descriptor Queue Port  |
+| 0x5C |     RX_DATA_PORT     |         TTI RX Data Port        |
+| 0x60 |  TX_DESC_QUEUE_PORT  |   TTI TX Descriptor Queue Port  |
+| 0x64 |     TX_DATA_PORT     |         TTI TX Data Port        |
+| 0x68 |       IBI_PORT       |        TTI IBI Data Port        |
+| 0x6C |      QUEUE_SIZE      |          TTI Queue Size         |
+| 0x70 |    IBI_QUEUE_SIZE    |        TTI IBI Queue Size       |
+| 0x74 |    QUEUE_THLD_CTRL   |   TTI Queue Threshold Control   |
+| 0x78 | DATA_BUFFER_THLD_CTRL| TTI IBI Queue Threshold Control |
 
 ### EXTCAP_HEADER register
 
@@ -3163,10 +3174,291 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 <p>Enables the corresponding interrupt bit <code>TRANSFER_ERR_STAT_FORCE</code></p>
 
-### RX_DESC_QUEUE_PORT register
+### TARGET_ERR_INTR_STATUS register
 
 - Absolute Address: 0x22C
 - Base Offset: 0x2C
+- Size: 0x4
+
+<p>Target Error Interrupt Status. Write 1 to clear individual bits.</p>
+
+|Bits|   Identifier   |  Access |Reset|      Name      |
+|----|----------------|---------|-----|----------------|
+|  1 |  TE0_ERR_STAT  |rw, woclr| 0x0 |  TE0_ERR_STAT  |
+|  2 |  TE1_ERR_STAT  |rw, woclr| 0x0 |  TE1_ERR_STAT  |
+|  3 |  TE2_ERR_STAT  |rw, woclr| 0x0 |  TE2_ERR_STAT  |
+|  4 |  TE3_ERR_STAT  |rw, woclr| 0x0 |  TE3_ERR_STAT  |
+|  5 |  TE4_ERR_STAT  |rw, woclr| 0x0 |  TE4_ERR_STAT  |
+|  6 |  TE5_ERR_STAT  |rw, woclr| 0x0 |  TE5_ERR_STAT  |
+|  7 |FRAMING_ERR_STAT|rw, woclr| 0x0 |FRAMING_ERR_STAT|
+|  8 |  PEC_ERR_STAT  |rw, woclr| 0x0 |  PEC_ERR_STAT  |
+
+#### TE0_ERR_STAT field
+
+<p>TE0: Invalid reserved address + RnW combination</p>
+
+#### TE1_ERR_STAT field
+
+<p>TE1: CCC command parity error</p>
+
+#### TE2_ERR_STAT field
+
+<p>TE2: CCC or Private Write data parity error</p>
+
+#### TE3_ERR_STAT field
+
+<p>TE3: ENTDAA PID mismatch</p>
+
+#### TE4_ERR_STAT field
+
+<p>TE4: ENTDAA BCR/DCR mismatch</p>
+
+#### TE5_ERR_STAT field
+
+<p>TE5: Broadcast/Direct CCC wrong R/W direction</p>
+
+#### FRAMING_ERR_STAT field
+
+<p>DA padding error (Bit[0] != 0 in SETDASA/SETNEWDA)</p>
+
+#### PEC_ERR_STAT field
+
+<p>Recovery PEC/CRC error detected</p>
+
+### TARGET_ERR_INTR_ENABLE register
+
+- Absolute Address: 0x230
+- Base Offset: 0x30
+- Size: 0x4
+
+<p>Target Error Interrupt Enable. Set bits to enable corresponding interrupts.</p>
+
+|Bits|  Identifier  |Access|Reset|     Name     |
+|----|--------------|------|-----|--------------|
+|  1 |  TE0_ERR_EN  |  rw  | 0x0 |  TE0_ERR_EN  |
+|  2 |  TE1_ERR_EN  |  rw  | 0x0 |  TE1_ERR_EN  |
+|  3 |  TE2_ERR_EN  |  rw  | 0x0 |  TE2_ERR_EN  |
+|  4 |  TE3_ERR_EN  |  rw  | 0x0 |  TE3_ERR_EN  |
+|  5 |  TE4_ERR_EN  |  rw  | 0x0 |  TE4_ERR_EN  |
+|  6 |  TE5_ERR_EN  |  rw  | 0x0 |  TE5_ERR_EN  |
+|  7 |FRAMING_ERR_EN|  rw  | 0x0 |FRAMING_ERR_EN|
+|  8 |  PEC_ERR_EN  |  rw  | 0x0 |  PEC_ERR_EN  |
+
+#### TE0_ERR_EN field
+
+<p>Enables the corresponding interrupt bit <code>TE0_ERR_STAT</code></p>
+
+#### TE1_ERR_EN field
+
+<p>Enables the corresponding interrupt bit <code>TE1_ERR_STAT</code></p>
+
+#### TE2_ERR_EN field
+
+<p>Enables the corresponding interrupt bit <code>TE2_ERR_STAT</code></p>
+
+#### TE3_ERR_EN field
+
+<p>Enables the corresponding interrupt bit <code>TE3_ERR_STAT</code></p>
+
+#### TE4_ERR_EN field
+
+<p>Enables the corresponding interrupt bit <code>TE4_ERR_STAT</code></p>
+
+#### TE5_ERR_EN field
+
+<p>Enables the corresponding interrupt bit <code>TE5_ERR_STAT</code></p>
+
+#### FRAMING_ERR_EN field
+
+<p>Enables the corresponding interrupt bit <code>FRAMING_ERR_STAT</code></p>
+
+#### PEC_ERR_EN field
+
+<p>Enables the corresponding interrupt bit <code>PEC_ERR_STAT</code></p>
+
+### TARGET_ERR_INTR_FORCE register
+
+- Absolute Address: 0x234
+- Base Offset: 0x34
+- Size: 0x4
+
+<p>Target Error Interrupt Force. Set bits to force corresponding interrupts for testing.</p>
+
+|Bits|    Identifier   |Access|Reset|       Name      |
+|----|-----------------|------|-----|-----------------|
+|  1 |  TE0_ERR_FORCE  |  rw  | 0x0 |  TE0_ERR_FORCE  |
+|  2 |  TE1_ERR_FORCE  |  rw  | 0x0 |  TE1_ERR_FORCE  |
+|  3 |  TE2_ERR_FORCE  |  rw  | 0x0 |  TE2_ERR_FORCE  |
+|  4 |  TE3_ERR_FORCE  |  rw  | 0x0 |  TE3_ERR_FORCE  |
+|  5 |  TE4_ERR_FORCE  |  rw  | 0x0 |  TE4_ERR_FORCE  |
+|  6 |  TE5_ERR_FORCE  |  rw  | 0x0 |  TE5_ERR_FORCE  |
+|  7 |FRAMING_ERR_FORCE|  rw  | 0x0 |FRAMING_ERR_FORCE|
+|  8 |  PEC_ERR_FORCE  |  rw  | 0x0 |  PEC_ERR_FORCE  |
+
+#### TE0_ERR_FORCE field
+
+<p>Forces the corresponding interrupt bit <code>TE0_ERR_STAT</code> to be set to 1</p>
+
+#### TE1_ERR_FORCE field
+
+<p>Forces the corresponding interrupt bit <code>TE1_ERR_STAT</code> to be set to 1</p>
+
+#### TE2_ERR_FORCE field
+
+<p>Forces the corresponding interrupt bit <code>TE2_ERR_STAT</code> to be set to 1</p>
+
+#### TE3_ERR_FORCE field
+
+<p>Forces the corresponding interrupt bit <code>TE3_ERR_STAT</code> to be set to 1</p>
+
+#### TE4_ERR_FORCE field
+
+<p>Forces the corresponding interrupt bit <code>TE4_ERR_STAT</code> to be set to 1</p>
+
+#### TE5_ERR_FORCE field
+
+<p>Forces the corresponding interrupt bit <code>TE5_ERR_STAT</code> to be set to 1</p>
+
+#### FRAMING_ERR_FORCE field
+
+<p>Forces the corresponding interrupt bit <code>FRAMING_ERR_STAT</code> to be set to 1</p>
+
+#### PEC_ERR_FORCE field
+
+<p>Forces the corresponding interrupt bit <code>PEC_ERR_STAT</code> to be set to 1</p>
+
+### TARGET_ERR_CNT_TE0 register
+
+- Absolute Address: 0x238
+- Base Offset: 0x38
+- Size: 0x4
+
+<p>Counts TE0 errors. Saturates at 255. Write 0 to clear.</p>
+
+|Bits|Identifier|Access|Reset|Name|
+|----|----------|------|-----|----|
+| 7:0|    CNT   |  rw  | 0x0 | CNT|
+
+#### CNT field
+
+<p>Error count (saturates at 255). Write 0 to clear.</p>
+
+### TARGET_ERR_CNT_TE1 register
+
+- Absolute Address: 0x23C
+- Base Offset: 0x3C
+- Size: 0x4
+
+<p>Counts TE1 errors. Saturates at 255. Write 0 to clear.</p>
+
+|Bits|Identifier|Access|Reset|Name|
+|----|----------|------|-----|----|
+| 7:0|    CNT   |  rw  | 0x0 | CNT|
+
+#### CNT field
+
+<p>Error count (saturates at 255). Write 0 to clear.</p>
+
+### TARGET_ERR_CNT_TE2 register
+
+- Absolute Address: 0x240
+- Base Offset: 0x40
+- Size: 0x4
+
+<p>Counts TE2 errors. Saturates at 255. Write 0 to clear.</p>
+
+|Bits|Identifier|Access|Reset|Name|
+|----|----------|------|-----|----|
+| 7:0|    CNT   |  rw  | 0x0 | CNT|
+
+#### CNT field
+
+<p>Error count (saturates at 255). Write 0 to clear.</p>
+
+### TARGET_ERR_CNT_TE3 register
+
+- Absolute Address: 0x244
+- Base Offset: 0x44
+- Size: 0x4
+
+<p>Counts TE3 errors. Saturates at 255. Write 0 to clear.</p>
+
+|Bits|Identifier|Access|Reset|Name|
+|----|----------|------|-----|----|
+| 7:0|    CNT   |  rw  | 0x0 | CNT|
+
+#### CNT field
+
+<p>Error count (saturates at 255). Write 0 to clear.</p>
+
+### TARGET_ERR_CNT_TE4 register
+
+- Absolute Address: 0x248
+- Base Offset: 0x48
+- Size: 0x4
+
+<p>Counts TE4 errors. Saturates at 255. Write 0 to clear.</p>
+
+|Bits|Identifier|Access|Reset|Name|
+|----|----------|------|-----|----|
+| 7:0|    CNT   |  rw  | 0x0 | CNT|
+
+#### CNT field
+
+<p>Error count (saturates at 255). Write 0 to clear.</p>
+
+### TARGET_ERR_CNT_TE5 register
+
+- Absolute Address: 0x24C
+- Base Offset: 0x4C
+- Size: 0x4
+
+<p>Counts TE5 errors. Saturates at 255. Write 0 to clear.</p>
+
+|Bits|Identifier|Access|Reset|Name|
+|----|----------|------|-----|----|
+| 7:0|    CNT   |  rw  | 0x0 | CNT|
+
+#### CNT field
+
+<p>Error count (saturates at 255). Write 0 to clear.</p>
+
+### TARGET_ERR_CNT_FRAMING register
+
+- Absolute Address: 0x250
+- Base Offset: 0x50
+- Size: 0x4
+
+<p>Counts framing errors. Saturates at 255. Write 0 to clear.</p>
+
+|Bits|Identifier|Access|Reset|Name|
+|----|----------|------|-----|----|
+| 7:0|    CNT   |  rw  | 0x0 | CNT|
+
+#### CNT field
+
+<p>Error count (saturates at 255). Write 0 to clear.</p>
+
+### TARGET_ERR_CNT_PEC register
+
+- Absolute Address: 0x254
+- Base Offset: 0x54
+- Size: 0x4
+
+<p>Counts PEC errors. Saturates at 255. Write 0 to clear.</p>
+
+|Bits|Identifier|Access|Reset|Name|
+|----|----------|------|-----|----|
+| 7:0|    CNT   |  rw  | 0x0 | CNT|
+
+#### CNT field
+
+<p>Error count (saturates at 255). Write 0 to clear.</p>
+
+### RX_DESC_QUEUE_PORT register
+
+- Absolute Address: 0x258
+- Base Offset: 0x58
 - Size: 0x4
 
 <p>RX Descriptor Queue Port</p>
@@ -3181,8 +3473,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### RX_DATA_PORT register
 
-- Absolute Address: 0x230
-- Base Offset: 0x30
+- Absolute Address: 0x25C
+- Base Offset: 0x5C
 - Size: 0x4
 
 <p>RX Data Port</p>
@@ -3197,8 +3489,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### TX_DESC_QUEUE_PORT register
 
-- Absolute Address: 0x234
-- Base Offset: 0x34
+- Absolute Address: 0x260
+- Base Offset: 0x60
 - Size: 0x4
 
 <p>TX Descriptor Queue Port</p>
@@ -3213,8 +3505,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### TX_DATA_PORT register
 
-- Absolute Address: 0x238
-- Base Offset: 0x38
+- Absolute Address: 0x264
+- Base Offset: 0x64
 - Size: 0x4
 
 <p>TX Data Port</p>
@@ -3229,8 +3521,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### IBI_PORT register
 
-- Absolute Address: 0x23C
-- Base Offset: 0x3C
+- Absolute Address: 0x268
+- Base Offset: 0x68
 - Size: 0x4
 
 <p>IBI Data Port</p>
@@ -3245,8 +3537,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### QUEUE_SIZE register
 
-- Absolute Address: 0x240
-- Base Offset: 0x40
+- Absolute Address: 0x26C
+- Base Offset: 0x6C
 - Size: 0x4
 
 <p>Queue Size</p>
@@ -3276,8 +3568,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### IBI_QUEUE_SIZE register
 
-- Absolute Address: 0x244
-- Base Offset: 0x44
+- Absolute Address: 0x270
+- Base Offset: 0x70
 - Size: 0x4
 
 <p>IBI Queue Size</p>
@@ -3292,8 +3584,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### QUEUE_THLD_CTRL register
 
-- Absolute Address: 0x248
-- Base Offset: 0x48
+- Absolute Address: 0x274
+- Base Offset: 0x74
 - Size: 0x4
 
 <p>Queue Threshold Control</p>
@@ -3318,8 +3610,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### DATA_BUFFER_THLD_CTRL register
 
-- Absolute Address: 0x24C
-- Base Offset: 0x4C
+- Absolute Address: 0x278
+- Base Offset: 0x78
 - Size: 0x4
 
 <p>IBI Queue Threshold Control</p>
