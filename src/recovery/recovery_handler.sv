@@ -187,6 +187,9 @@ module recovery_handler
     input  logic virtual_device_sel_i,
     input  logic xfer_in_progress_i,
 
+    // PEC error detection enable (from TTI CSR)
+    input  logic pec_err_det_en_i,
+
     // Protocol error (PEC mismatch) for GETSTATUS
     output logic protocol_err_o
 );
@@ -866,6 +869,7 @@ module recovery_handler
       .rst_ni(rst_ni),
       .recovery_enable_i(recovery_enable),
       .bypass_i3c_core_i(bypass_i3c_core_i),
+      .pec_err_det_en_i(pec_err_det_en_i),
 
       .desc_valid_i(recv_tti_rx_desc_valid),
       .desc_ready_o(recv_tti_rx_desc_ready),

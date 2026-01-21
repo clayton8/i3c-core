@@ -110,6 +110,15 @@ module ccc
     output logic te5_err_o,      // Broadcast/Direct DA mismatch (TE5)
     output logic framing_err_o,  // DA padding errors (for Protocol Error Report)
 
+    // Target Error Detection Enables (from TTI CSR)
+    input  logic te0_err_det_en_i,
+    input  logic te1_err_det_en_i,
+    input  logic te2_err_det_en_i,
+    input  logic te3_err_det_en_i,
+    input  logic te4_err_det_en_i,
+    input  logic te5_err_det_en_i,
+    input  logic framing_err_det_en_i,
+
     // =========================================================================
     // Bus Monitor Interface
     // =========================================================================
@@ -457,20 +466,22 @@ module ccc
   // ---------------------------------------------------------------------------
   // I3C TE0-5 Error Pulses (asserted in FSM for one cycle when error detected)
   // ---------------------------------------------------------------------------
+  // Error pulses are gated at the source by detection enable bits.
+  // When detection is disabled, the error is never detected and the FSM continues normally.
+  
   // TE0: Invalid reserved address + RnW combination (asserted in TxTargetAddrAck)
-  logic       te0_err_ccc;  // TE0 from CCC module (direct CCC target address)
-  logic       te0_err;      // Combined: te0_err_ccc || te0_err_i (from target FSM)
-  logic       is_te0_err_condition;  // Helper: reserved address has invalid RnW
+  logic       te0_err_ccc;      // TE0 from CCC module (direct CCC target address)
+  logic       is_te0_err_condition;  // Helper: reserved address has invalid RnW (gated with enable)
   // TE1: Parity error on CCC command code T-bit (asserted in RxCmdTbit)
   logic       te1_err;
   // TE2: Parity error on CCC data byte T-bit (asserted in RxDefByteTbit, RxDirectDefByteTbit, RxDataTbit)
   logic       te2_err;
-  // TE3/TE4: Detected in ccc_entdaa submodule
+  // TE3/TE4: Detected in ccc_entdaa submodule (gated there with enables)
   logic       te3_err;
   logic       te4_err;
   // TE5: Wrong R/W direction for Direct CCC (asserted in TxTargetAddrAck)
   logic       te5_err;
-  logic       is_te5_err_condition;  // Helper: addressed with supported cmd but wrong direction
+  logic       is_te5_err_condition;  // Helper: addressed with supported cmd but wrong direction (gated with enable)
 
   // ---------------------------------------------------------------------------
   // Framing Error Signals
@@ -742,26 +753,28 @@ module ccc
   // ===========================================================================
   // TE ERROR DETECTION HELPERS
   // ===========================================================================
-  // These are helper signals used by the FSM to detect error conditions.
-  // The actual TE error pulses (te0_err_ccc, te1_err, te2_err, te5_err) are
-  // asserted as single-cycle pulses within the FSM (fsm_ccc_main).
-  // TE3/TE4 are detected in ccc_entdaa submodule.
+  // Error detection is gated at the source by detection enable bits.
+  // When a detection enable is 0, the corresponding error condition evaluates to 0,
+  // so the FSM never sees the error and continues normal operation.
+  // This is the same pattern used by te0_enable_o.
 
   // TE0 helper: Check if reserved address has invalid RnW
-  // Disabled during ENTDAA mode (including WaitForENTDAAEnd) since 7'h7E/R is valid
-  assign te0_enable_o = !in_entdaa_mode && (target_dyn_address_valid_i || virtual_target_dyn_address_valid_i);
+  // - Disabled during ENTDAA mode (since 7'h7E/R is valid)
+  // - Gated with te0_err_det_en_i
+  assign te0_enable_o = te0_err_det_en_i && !in_entdaa_mode && 
+                        (target_dyn_address_valid_i || virtual_target_dyn_address_valid_i);
   assign is_te0_err_condition = te0_enable_o && is_te0_rsvd_addr_err(target_addr, target_rnw);
 
   // TE5 helper: Check if direction is wrong for this command
-  // Since this is checked inside ~addr_ack in the FSM:
-  // - If addressed (target_addr_matches_any) with a supported command (supported_direct_command)
-  //   but still NACKed, the only remaining reason is wrong R/W direction (TE5)
-  assign is_te5_err_condition = target_addr_matches_any && supported_direct_command;
+  // - Gated with te5_err_det_en_i
+  assign is_te5_err_condition = te5_err_det_en_i && target_addr_matches_any && supported_direct_command;
 
   // Combined TE0 error (CCC module + target FSM)
+  // te0_err_i from target FSM is already gated with te0_enable_o (which includes detection enable)
   assign te0_err = te0_err_ccc || te0_err_i;
 
-  // Protocol Error outputs (TE1-TE5 errors for GETSTATUS Protocol Error bit)
+  // Protocol Error outputs for interrupt reporting
+  // These pass through the error pulses (already gated by detection enables in FSM)
   assign te1_err_o = te1_err;
   assign te2_err_ccc_o = te2_err;
   assign te3_err_o = te3_err;
@@ -771,7 +784,7 @@ module ccc
   // Framing error for Protocol Error Report (GETSTATUS Format 1):
   // Per I3C FAQ Q16.10: Incorrect framing for DA assignment CCCs should be reported.
   // da_padding_err: Bit[0] != 0 in SETDASA/SETNEWDA address byte.
-  // The Target already ACKed the CCC, so Controller has no way of knowing the error.
+  // Detection is gated with framing_err_det_en_i in fsm_ccc_main
   assign framing_err_o = da_padding_err;
 
   // ===========================================================================
@@ -922,7 +935,7 @@ module ccc
       // ---------------------------------------------------------------------
       RxCmdTbit: begin
         if (bus_rx_rsp_i.done) begin
-          if (tbit_parity_err) begin
+          if (tbit_parity_err && te1_err_det_en_i) begin
             // TE1: CCC command parity error - signal done and enter HDR mode (deaf mode)
             te1_err = 1'b1;  // Assert TE1 error pulse
             state_d = DoneCCC;
@@ -1003,7 +1016,7 @@ module ccc
       
       RxDefByteTbit: begin
         if (bus_rx_rsp_i.done) begin
-          if (tbit_parity_err) begin
+          if (tbit_parity_err && te2_err_det_en_i) begin
             // TE2: Defining byte parity error - abort this CCC
             te2_err = 1'b1;  // Assert TE2 error pulse
             state_d = DoneCCC;
@@ -1028,7 +1041,7 @@ module ccc
       
       RxDirectDefByteTbit: begin
         if (bus_rx_rsp_i.done) begin
-          if (tbit_parity_err) begin
+          if (tbit_parity_err && te2_err_det_en_i) begin
             // TE2: Parity error on additional data byte before target address
             te2_err = 1'b1;  // Assert TE2 error pulse
             state_d = DoneCCC;
@@ -1109,14 +1122,16 @@ module ccc
       end
       RxDataTbit: begin
         if (bus_rx_rsp_i.done) begin
-          if (tbit_parity_err) begin
+          if (tbit_parity_err && te2_err_det_en_i) begin
             // TE2: Data byte parity error - abort this CCC
             te2_err = 1'b1;  // Assert TE2 error pulse
             state_d = DoneCCC;
           end else begin
             inc_rx_byte_num = 1'b1;   // Move to next byte
             // Check for DA padding bit error (Bit[0] must be 0 for DA assignment CCCs)
-            if (rx_byte_num == 2'd0 &&
+            // Gated with framing_err_det_en_i - when disabled, proceed normally
+            if (framing_err_det_en_i &&
+                rx_byte_num == 2'd0 &&
                 (command_code == CCC_DIRECT_SETDASA || command_code == CCC_DIRECT_SETNEWDA) &&
                 rx_data[0] == 1'b1) begin
               // DA padding bit error: Don't set rx_data_valid - address won't be applied
@@ -1822,6 +1837,10 @@ module ccc
     // addr
     .address_o      (entdaa_address),
     .address_valid_o(entdaa_address_valid),
+
+    // TE3/TE4 detection enables
+    .te3_err_det_en_i(te3_err_det_en_i),
+    .te4_err_det_en_i(te4_err_det_en_i),
 
     // TE3 Error: Parity error on dynamic address during ENTDAA
     .te3_err_o(te3_err),

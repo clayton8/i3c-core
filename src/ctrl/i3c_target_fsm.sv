@@ -116,6 +116,9 @@ module i3c_target_fsm import i3c_pkg::*; #(
 
   input  logic is_hotjoin_done_i,
 
+  // TE2 Error Detection Enable
+  input  logic te2_err_det_en_i,
+
   output logic te2_err_priv_wr,
   output logic rx_overflow_err_o,
   output logic virtual_device_sel_o,
@@ -307,6 +310,7 @@ module i3c_target_fsm import i3c_pkg::*; #(
     if (~rst_ni) begin
       parity_err <= 1'b0;
     end else begin
+      // te2_err_priv_wr is already gated with te2_err_det_en_i at detection source
       if (te2_err_priv_wr) begin
         parity_err <= 1'b1;
       end else if (target_idle_o) begin
@@ -529,7 +533,8 @@ module i3c_target_fsm import i3c_pkg::*; #(
         bus_rx_req_bit = !bus_start_det;
 
         if (bus_rx_rsp_i.done) begin
-          te2_err_priv_wr = (parity_bit != bus_rx_rsp_i.data[0]);
+          // Gate parity error detection with detection enable at the source
+          te2_err_priv_wr = te2_err_det_en_i && (parity_bit != bus_rx_rsp_i.data[0]);
           state_d = RxPWriteData;
         end
       end

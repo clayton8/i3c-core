@@ -436,6 +436,8 @@ module tti
   // Target Error Interrupts (TE0-TE5, Framing, PEC)
   // ===========================================================================
   // Per I3C v1.1.1 spec, these are Target Errors that should be reported to SW.
+  // Error signals are already gated at the source with detection enable bits.
+  // Detection enables are extracted directly from hwif_tti_out in i3c.sv.
 
   // TE0_ERR: Invalid reserved address + RnW combination
   interrupt xintr_te0 (

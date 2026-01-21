@@ -2648,41 +2648,42 @@ shall be revoked) with this Target Reset Pattern.</p>
 
 - Absolute Address: 0x200
 - Base Offset: 0x100
-- Size: 0x7C
+- Size: 0x80
 
-|Offset|      Identifier      |               Name              |
-|------|----------------------|---------------------------------|
-| 0x00 |     EXTCAP_HEADER    |                —                |
-| 0x04 |        CONTROL       |           TTI Control           |
-| 0x08 |        STATUS        |            TTI Status           |
-| 0x0C |     RESET_CONTROL    |     TTI Queue Reset Control     |
-| 0x10 |     QUEUE_STATUS     |         TTI Queue Status        |
-| 0x14 |   DESC_QUEUE_DEPTH   |    TTI Descriptor Queue Depth   |
-| 0x18 |   DATA_QUEUE_DEPTH   |       TTI Data Queue Depth      |
-| 0x1C |    IBI_QUEUE_DEPTH   |       TTI IBI Queue Depth       |
-| 0x20 |   INTERRUPT_STATUS   |       TTI Interrupt Status      |
-| 0x24 |   INTERRUPT_ENABLE   |       TTI Interrupt Enable      |
-| 0x28 |    INTERRUPT_FORCE   |       TTI Interrupt Force       |
-| 0x2C |TARGET_ERR_INTR_STATUS|TTI Target Error Interrupt Status|
-| 0x30 |TARGET_ERR_INTR_ENABLE|TTI Target Error Interrupt Enable|
-| 0x34 | TARGET_ERR_INTR_FORCE| TTI Target Error Interrupt Force|
-| 0x38 |  TARGET_ERR_CNT_TE0  |        TE0 Error Counter        |
-| 0x3C |  TARGET_ERR_CNT_TE1  |        TE1 Error Counter        |
-| 0x40 |  TARGET_ERR_CNT_TE2  |        TE2 Error Counter        |
-| 0x44 |  TARGET_ERR_CNT_TE3  |        TE3 Error Counter        |
-| 0x48 |  TARGET_ERR_CNT_TE4  |        TE4 Error Counter        |
-| 0x4C |  TARGET_ERR_CNT_TE5  |        TE5 Error Counter        |
-| 0x50 |TARGET_ERR_CNT_FRAMING|      Framing Error Counter      |
-| 0x54 |  TARGET_ERR_CNT_PEC  |        PEC Error Counter        |
-| 0x58 |  RX_DESC_QUEUE_PORT  |   TTI RX Descriptor Queue Port  |
-| 0x5C |     RX_DATA_PORT     |         TTI RX Data Port        |
-| 0x60 |  TX_DESC_QUEUE_PORT  |   TTI TX Descriptor Queue Port  |
-| 0x64 |     TX_DATA_PORT     |         TTI TX Data Port        |
-| 0x68 |       IBI_PORT       |        TTI IBI Data Port        |
-| 0x6C |      QUEUE_SIZE      |          TTI Queue Size         |
-| 0x70 |    IBI_QUEUE_SIZE    |        TTI IBI Queue Size       |
-| 0x74 |    QUEUE_THLD_CTRL   |   TTI Queue Threshold Control   |
-| 0x78 | DATA_BUFFER_THLD_CTRL| TTI IBI Queue Threshold Control |
+|Offset|      Identifier      |               Name               |
+|------|----------------------|----------------------------------|
+| 0x00 |     EXTCAP_HEADER    |                 —                |
+| 0x04 |        CONTROL       |            TTI Control           |
+| 0x08 |        STATUS        |            TTI Status            |
+| 0x0C |     RESET_CONTROL    |      TTI Queue Reset Control     |
+| 0x10 |     QUEUE_STATUS     |         TTI Queue Status         |
+| 0x14 |   DESC_QUEUE_DEPTH   |    TTI Descriptor Queue Depth    |
+| 0x18 |   DATA_QUEUE_DEPTH   |       TTI Data Queue Depth       |
+| 0x1C |    IBI_QUEUE_DEPTH   |        TTI IBI Queue Depth       |
+| 0x20 |   INTERRUPT_STATUS   |       TTI Interrupt Status       |
+| 0x24 |   INTERRUPT_ENABLE   |       TTI Interrupt Enable       |
+| 0x28 |    INTERRUPT_FORCE   |        TTI Interrupt Force       |
+| 0x2C |    TARGET_ERR_CTRL   |TTI Target Error Detection Control|
+| 0x30 |TARGET_ERR_INTR_STATUS| TTI Target Error Interrupt Status|
+| 0x34 |TARGET_ERR_INTR_ENABLE| TTI Target Error Interrupt Enable|
+| 0x38 | TARGET_ERR_INTR_FORCE| TTI Target Error Interrupt Force |
+| 0x3C |  TARGET_ERR_CNT_TE0  |         TE0 Error Counter        |
+| 0x40 |  TARGET_ERR_CNT_TE1  |         TE1 Error Counter        |
+| 0x44 |  TARGET_ERR_CNT_TE2  |         TE2 Error Counter        |
+| 0x48 |  TARGET_ERR_CNT_TE3  |         TE3 Error Counter        |
+| 0x4C |  TARGET_ERR_CNT_TE4  |         TE4 Error Counter        |
+| 0x50 |  TARGET_ERR_CNT_TE5  |         TE5 Error Counter        |
+| 0x54 |TARGET_ERR_CNT_FRAMING|       Framing Error Counter      |
+| 0x58 |  TARGET_ERR_CNT_PEC  |         PEC Error Counter        |
+| 0x5C |  RX_DESC_QUEUE_PORT  |   TTI RX Descriptor Queue Port   |
+| 0x60 |     RX_DATA_PORT     |         TTI RX Data Port         |
+| 0x64 |  TX_DESC_QUEUE_PORT  |   TTI TX Descriptor Queue Port   |
+| 0x68 |     TX_DATA_PORT     |         TTI TX Data Port         |
+| 0x6C |       IBI_PORT       |         TTI IBI Data Port        |
+| 0x70 |      QUEUE_SIZE      |          TTI Queue Size          |
+| 0x74 |    IBI_QUEUE_SIZE    |        TTI IBI Queue Size        |
+| 0x78 |    QUEUE_THLD_CTRL   |    TTI Queue Threshold Control   |
+| 0x7C | DATA_BUFFER_THLD_CTRL|  TTI IBI Queue Threshold Control |
 
 ### EXTCAP_HEADER register
 
@@ -3174,10 +3175,61 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 <p>Enables the corresponding interrupt bit <code>TRANSFER_ERR_STAT_FORCE</code></p>
 
-### TARGET_ERR_INTR_STATUS register
+### TARGET_ERR_CTRL register
 
 - Absolute Address: 0x22C
 - Base Offset: 0x2C
+- Size: 0x4
+
+<p>Target Error Detection Control. Set bits to enable error detection. Clear to disable.</p>
+
+|Bits|    Identifier    |Access|Reset|       Name       |
+|----|------------------|------|-----|------------------|
+|  0 |  TE0_ERR_DET_EN  |  rw  | 0x1 |  TE0_ERR_DET_EN  |
+|  1 |  TE1_ERR_DET_EN  |  rw  | 0x1 |  TE1_ERR_DET_EN  |
+|  2 |  TE2_ERR_DET_EN  |  rw  | 0x1 |  TE2_ERR_DET_EN  |
+|  3 |  TE3_ERR_DET_EN  |  rw  | 0x1 |  TE3_ERR_DET_EN  |
+|  4 |  TE4_ERR_DET_EN  |  rw  | 0x1 |  TE4_ERR_DET_EN  |
+|  5 |  TE5_ERR_DET_EN  |  rw  | 0x1 |  TE5_ERR_DET_EN  |
+|  6 |FRAMING_ERR_DET_EN|  rw  | 0x1 |FRAMING_ERR_DET_EN|
+|  7 |  PEC_ERR_DET_EN  |  rw  | 0x1 |  PEC_ERR_DET_EN  |
+
+#### TE0_ERR_DET_EN field
+
+<p>Enable TE0 error detection. Set to 0 to disable.</p>
+
+#### TE1_ERR_DET_EN field
+
+<p>Enable TE1 error detection. Set to 0 to disable.</p>
+
+#### TE2_ERR_DET_EN field
+
+<p>Enable TE2 error detection. Set to 0 to disable.</p>
+
+#### TE3_ERR_DET_EN field
+
+<p>Enable TE3 error detection. Set to 0 to disable.</p>
+
+#### TE4_ERR_DET_EN field
+
+<p>Enable TE4 error detection. Set to 0 to disable.</p>
+
+#### TE5_ERR_DET_EN field
+
+<p>Enable TE5 error detection. Set to 0 to disable.</p>
+
+#### FRAMING_ERR_DET_EN field
+
+<p>Enable framing error detection. Set to 0 to disable.</p>
+
+#### PEC_ERR_DET_EN field
+
+<p>Enable PEC/CRC error detection. Set to 0 to disable.</p>
+
+### TARGET_ERR_INTR_STATUS register
+
+- Absolute Address: 0x230
+- Base Offset: 0x30
 - Size: 0x4
 
 <p>Target Error Interrupt Status. Write 1 to clear individual bits.</p>
@@ -3227,8 +3279,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### TARGET_ERR_INTR_ENABLE register
 
-- Absolute Address: 0x230
-- Base Offset: 0x30
+- Absolute Address: 0x234
+- Base Offset: 0x34
 - Size: 0x4
 
 <p>Target Error Interrupt Enable. Set bits to enable corresponding interrupts.</p>
@@ -3278,8 +3330,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### TARGET_ERR_INTR_FORCE register
 
-- Absolute Address: 0x234
-- Base Offset: 0x34
+- Absolute Address: 0x238
+- Base Offset: 0x38
 - Size: 0x4
 
 <p>Target Error Interrupt Force. Set bits to force corresponding interrupts for testing.</p>
@@ -3329,8 +3381,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### TARGET_ERR_CNT_TE0 register
 
-- Absolute Address: 0x238
-- Base Offset: 0x38
+- Absolute Address: 0x23C
+- Base Offset: 0x3C
 - Size: 0x4
 
 <p>Counts TE0 errors. Saturates at 255. Write 0 to clear.</p>
@@ -3345,8 +3397,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### TARGET_ERR_CNT_TE1 register
 
-- Absolute Address: 0x23C
-- Base Offset: 0x3C
+- Absolute Address: 0x240
+- Base Offset: 0x40
 - Size: 0x4
 
 <p>Counts TE1 errors. Saturates at 255. Write 0 to clear.</p>
@@ -3361,8 +3413,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### TARGET_ERR_CNT_TE2 register
 
-- Absolute Address: 0x240
-- Base Offset: 0x40
+- Absolute Address: 0x244
+- Base Offset: 0x44
 - Size: 0x4
 
 <p>Counts TE2 errors. Saturates at 255. Write 0 to clear.</p>
@@ -3377,8 +3429,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### TARGET_ERR_CNT_TE3 register
 
-- Absolute Address: 0x244
-- Base Offset: 0x44
+- Absolute Address: 0x248
+- Base Offset: 0x48
 - Size: 0x4
 
 <p>Counts TE3 errors. Saturates at 255. Write 0 to clear.</p>
@@ -3393,8 +3445,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### TARGET_ERR_CNT_TE4 register
 
-- Absolute Address: 0x248
-- Base Offset: 0x48
+- Absolute Address: 0x24C
+- Base Offset: 0x4C
 - Size: 0x4
 
 <p>Counts TE4 errors. Saturates at 255. Write 0 to clear.</p>
@@ -3409,8 +3461,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### TARGET_ERR_CNT_TE5 register
 
-- Absolute Address: 0x24C
-- Base Offset: 0x4C
+- Absolute Address: 0x250
+- Base Offset: 0x50
 - Size: 0x4
 
 <p>Counts TE5 errors. Saturates at 255. Write 0 to clear.</p>
@@ -3425,8 +3477,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### TARGET_ERR_CNT_FRAMING register
 
-- Absolute Address: 0x250
-- Base Offset: 0x50
+- Absolute Address: 0x254
+- Base Offset: 0x54
 - Size: 0x4
 
 <p>Counts framing errors. Saturates at 255. Write 0 to clear.</p>
@@ -3441,8 +3493,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### TARGET_ERR_CNT_PEC register
 
-- Absolute Address: 0x254
-- Base Offset: 0x54
+- Absolute Address: 0x258
+- Base Offset: 0x58
 - Size: 0x4
 
 <p>Counts PEC errors. Saturates at 255. Write 0 to clear.</p>
@@ -3457,8 +3509,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### RX_DESC_QUEUE_PORT register
 
-- Absolute Address: 0x258
-- Base Offset: 0x58
+- Absolute Address: 0x25C
+- Base Offset: 0x5C
 - Size: 0x4
 
 <p>RX Descriptor Queue Port</p>
@@ -3473,8 +3525,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### RX_DATA_PORT register
 
-- Absolute Address: 0x25C
-- Base Offset: 0x5C
+- Absolute Address: 0x260
+- Base Offset: 0x60
 - Size: 0x4
 
 <p>RX Data Port</p>
@@ -3489,8 +3541,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### TX_DESC_QUEUE_PORT register
 
-- Absolute Address: 0x260
-- Base Offset: 0x60
+- Absolute Address: 0x264
+- Base Offset: 0x64
 - Size: 0x4
 
 <p>TX Descriptor Queue Port</p>
@@ -3505,8 +3557,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### TX_DATA_PORT register
 
-- Absolute Address: 0x264
-- Base Offset: 0x64
+- Absolute Address: 0x268
+- Base Offset: 0x68
 - Size: 0x4
 
 <p>TX Data Port</p>
@@ -3521,8 +3573,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### IBI_PORT register
 
-- Absolute Address: 0x268
-- Base Offset: 0x68
+- Absolute Address: 0x26C
+- Base Offset: 0x6C
 - Size: 0x4
 
 <p>IBI Data Port</p>
@@ -3537,8 +3589,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### QUEUE_SIZE register
 
-- Absolute Address: 0x26C
-- Base Offset: 0x6C
+- Absolute Address: 0x270
+- Base Offset: 0x70
 - Size: 0x4
 
 <p>Queue Size</p>
@@ -3568,8 +3620,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### IBI_QUEUE_SIZE register
 
-- Absolute Address: 0x270
-- Base Offset: 0x70
+- Absolute Address: 0x274
+- Base Offset: 0x74
 - Size: 0x4
 
 <p>IBI Queue Size</p>
@@ -3584,8 +3636,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### QUEUE_THLD_CTRL register
 
-- Absolute Address: 0x274
-- Base Offset: 0x74
+- Absolute Address: 0x278
+- Base Offset: 0x78
 - Size: 0x4
 
 <p>Queue Threshold Control</p>
@@ -3610,8 +3662,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### DATA_BUFFER_THLD_CTRL register
 
-- Absolute Address: 0x278
-- Base Offset: 0x78
+- Absolute Address: 0x27C
+- Base Offset: 0x7C
 - Size: 0x4
 
 <p>IBI Queue Threshold Control</p>

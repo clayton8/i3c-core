@@ -4400,6 +4400,71 @@ package I3CCSR_uvm;
         endfunction : build
     endclass : I3CCSR__I3C_EC__TTI__INTERRUPT_FORCE
 
+    // Reg - I3CCSR.I3C_EC.TTI.TARGET_ERR_CTRL
+    class I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL extends uvm_reg;
+        protected uvm_reg_data_t m_current;
+        protected uvm_reg_data_t m_data;
+        protected bit            m_is_read;
+
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL_bit_cg TE0_ERR_DET_EN_bit_cg[1];
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL_bit_cg TE1_ERR_DET_EN_bit_cg[1];
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL_bit_cg TE2_ERR_DET_EN_bit_cg[1];
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL_bit_cg TE3_ERR_DET_EN_bit_cg[1];
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL_bit_cg TE4_ERR_DET_EN_bit_cg[1];
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL_bit_cg TE5_ERR_DET_EN_bit_cg[1];
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL_bit_cg FRAMING_ERR_DET_EN_bit_cg[1];
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL_bit_cg PEC_ERR_DET_EN_bit_cg[1];
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL_fld_cg fld_cg;
+        rand uvm_reg_field TE0_ERR_DET_EN;
+        rand uvm_reg_field TE1_ERR_DET_EN;
+        rand uvm_reg_field TE2_ERR_DET_EN;
+        rand uvm_reg_field TE3_ERR_DET_EN;
+        rand uvm_reg_field TE4_ERR_DET_EN;
+        rand uvm_reg_field TE5_ERR_DET_EN;
+        rand uvm_reg_field FRAMING_ERR_DET_EN;
+        rand uvm_reg_field PEC_ERR_DET_EN;
+
+        function new(string name = "I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL");
+            super.new(name, 32, build_coverage(UVM_CVR_ALL));
+        endfunction : new
+        extern virtual function void sample_values();
+        extern protected virtual function void sample(uvm_reg_data_t  data,
+                                                      uvm_reg_data_t  byte_en,
+                                                      bit             is_read,
+                                                      uvm_reg_map     map);
+
+        virtual function void build();
+            this.TE0_ERR_DET_EN = new("TE0_ERR_DET_EN");
+            this.TE0_ERR_DET_EN.configure(this, 1, 0, "RW", 0, 'h1, 1, 1, 0);
+            this.TE1_ERR_DET_EN = new("TE1_ERR_DET_EN");
+            this.TE1_ERR_DET_EN.configure(this, 1, 1, "RW", 0, 'h1, 1, 1, 0);
+            this.TE2_ERR_DET_EN = new("TE2_ERR_DET_EN");
+            this.TE2_ERR_DET_EN.configure(this, 1, 2, "RW", 0, 'h1, 1, 1, 0);
+            this.TE3_ERR_DET_EN = new("TE3_ERR_DET_EN");
+            this.TE3_ERR_DET_EN.configure(this, 1, 3, "RW", 0, 'h1, 1, 1, 0);
+            this.TE4_ERR_DET_EN = new("TE4_ERR_DET_EN");
+            this.TE4_ERR_DET_EN.configure(this, 1, 4, "RW", 0, 'h1, 1, 1, 0);
+            this.TE5_ERR_DET_EN = new("TE5_ERR_DET_EN");
+            this.TE5_ERR_DET_EN.configure(this, 1, 5, "RW", 0, 'h1, 1, 1, 0);
+            this.FRAMING_ERR_DET_EN = new("FRAMING_ERR_DET_EN");
+            this.FRAMING_ERR_DET_EN.configure(this, 1, 6, "RW", 0, 'h1, 1, 1, 0);
+            this.PEC_ERR_DET_EN = new("PEC_ERR_DET_EN");
+            this.PEC_ERR_DET_EN.configure(this, 1, 7, "RW", 0, 'h1, 1, 1, 0);
+            if (has_coverage(UVM_CVR_REG_BITS)) begin
+                foreach(TE0_ERR_DET_EN_bit_cg[bt]) TE0_ERR_DET_EN_bit_cg[bt] = new();
+                foreach(TE1_ERR_DET_EN_bit_cg[bt]) TE1_ERR_DET_EN_bit_cg[bt] = new();
+                foreach(TE2_ERR_DET_EN_bit_cg[bt]) TE2_ERR_DET_EN_bit_cg[bt] = new();
+                foreach(TE3_ERR_DET_EN_bit_cg[bt]) TE3_ERR_DET_EN_bit_cg[bt] = new();
+                foreach(TE4_ERR_DET_EN_bit_cg[bt]) TE4_ERR_DET_EN_bit_cg[bt] = new();
+                foreach(TE5_ERR_DET_EN_bit_cg[bt]) TE5_ERR_DET_EN_bit_cg[bt] = new();
+                foreach(FRAMING_ERR_DET_EN_bit_cg[bt]) FRAMING_ERR_DET_EN_bit_cg[bt] = new();
+                foreach(PEC_ERR_DET_EN_bit_cg[bt]) PEC_ERR_DET_EN_bit_cg[bt] = new();
+            end
+            if (has_coverage(UVM_CVR_FIELD_VALS))
+                fld_cg = new();
+        endfunction : build
+    endclass : I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL
+
     // Reg - I3CCSR.I3C_EC.TTI.TARGET_ERR_INTR_STATUS
     class I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS extends uvm_reg;
         protected uvm_reg_data_t m_current;
@@ -5158,6 +5223,7 @@ package I3CCSR_uvm;
         rand I3CCSR__I3C_EC__TTI__INTERRUPT_STATUS INTERRUPT_STATUS;
         rand I3CCSR__I3C_EC__TTI__INTERRUPT_ENABLE INTERRUPT_ENABLE;
         rand I3CCSR__I3C_EC__TTI__INTERRUPT_FORCE INTERRUPT_FORCE;
+        rand I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL TARGET_ERR_CTRL;
         rand I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS TARGET_ERR_INTR_STATUS;
         rand I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_ENABLE TARGET_ERR_INTR_ENABLE;
         rand I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_FORCE TARGET_ERR_INTR_FORCE;
@@ -5240,106 +5306,111 @@ package I3CCSR_uvm;
 
             this.INTERRUPT_FORCE.build();
             this.default_map.add_reg(this.INTERRUPT_FORCE, 'h28);
+            this.TARGET_ERR_CTRL = new("TARGET_ERR_CTRL");
+            this.TARGET_ERR_CTRL.configure(this);
+
+            this.TARGET_ERR_CTRL.build();
+            this.default_map.add_reg(this.TARGET_ERR_CTRL, 'h2c);
             this.TARGET_ERR_INTR_STATUS = new("TARGET_ERR_INTR_STATUS");
             this.TARGET_ERR_INTR_STATUS.configure(this);
 
             this.TARGET_ERR_INTR_STATUS.build();
-            this.default_map.add_reg(this.TARGET_ERR_INTR_STATUS, 'h2c);
+            this.default_map.add_reg(this.TARGET_ERR_INTR_STATUS, 'h30);
             this.TARGET_ERR_INTR_ENABLE = new("TARGET_ERR_INTR_ENABLE");
             this.TARGET_ERR_INTR_ENABLE.configure(this);
 
             this.TARGET_ERR_INTR_ENABLE.build();
-            this.default_map.add_reg(this.TARGET_ERR_INTR_ENABLE, 'h30);
+            this.default_map.add_reg(this.TARGET_ERR_INTR_ENABLE, 'h34);
             this.TARGET_ERR_INTR_FORCE = new("TARGET_ERR_INTR_FORCE");
             this.TARGET_ERR_INTR_FORCE.configure(this);
 
             this.TARGET_ERR_INTR_FORCE.build();
-            this.default_map.add_reg(this.TARGET_ERR_INTR_FORCE, 'h34);
+            this.default_map.add_reg(this.TARGET_ERR_INTR_FORCE, 'h38);
             this.TARGET_ERR_CNT_TE0 = new("TARGET_ERR_CNT_TE0");
             this.TARGET_ERR_CNT_TE0.configure(this);
 
             this.TARGET_ERR_CNT_TE0.build();
-            this.default_map.add_reg(this.TARGET_ERR_CNT_TE0, 'h38);
+            this.default_map.add_reg(this.TARGET_ERR_CNT_TE0, 'h3c);
             this.TARGET_ERR_CNT_TE1 = new("TARGET_ERR_CNT_TE1");
             this.TARGET_ERR_CNT_TE1.configure(this);
 
             this.TARGET_ERR_CNT_TE1.build();
-            this.default_map.add_reg(this.TARGET_ERR_CNT_TE1, 'h3c);
+            this.default_map.add_reg(this.TARGET_ERR_CNT_TE1, 'h40);
             this.TARGET_ERR_CNT_TE2 = new("TARGET_ERR_CNT_TE2");
             this.TARGET_ERR_CNT_TE2.configure(this);
 
             this.TARGET_ERR_CNT_TE2.build();
-            this.default_map.add_reg(this.TARGET_ERR_CNT_TE2, 'h40);
+            this.default_map.add_reg(this.TARGET_ERR_CNT_TE2, 'h44);
             this.TARGET_ERR_CNT_TE3 = new("TARGET_ERR_CNT_TE3");
             this.TARGET_ERR_CNT_TE3.configure(this);
 
             this.TARGET_ERR_CNT_TE3.build();
-            this.default_map.add_reg(this.TARGET_ERR_CNT_TE3, 'h44);
+            this.default_map.add_reg(this.TARGET_ERR_CNT_TE3, 'h48);
             this.TARGET_ERR_CNT_TE4 = new("TARGET_ERR_CNT_TE4");
             this.TARGET_ERR_CNT_TE4.configure(this);
 
             this.TARGET_ERR_CNT_TE4.build();
-            this.default_map.add_reg(this.TARGET_ERR_CNT_TE4, 'h48);
+            this.default_map.add_reg(this.TARGET_ERR_CNT_TE4, 'h4c);
             this.TARGET_ERR_CNT_TE5 = new("TARGET_ERR_CNT_TE5");
             this.TARGET_ERR_CNT_TE5.configure(this);
 
             this.TARGET_ERR_CNT_TE5.build();
-            this.default_map.add_reg(this.TARGET_ERR_CNT_TE5, 'h4c);
+            this.default_map.add_reg(this.TARGET_ERR_CNT_TE5, 'h50);
             this.TARGET_ERR_CNT_FRAMING = new("TARGET_ERR_CNT_FRAMING");
             this.TARGET_ERR_CNT_FRAMING.configure(this);
 
             this.TARGET_ERR_CNT_FRAMING.build();
-            this.default_map.add_reg(this.TARGET_ERR_CNT_FRAMING, 'h50);
+            this.default_map.add_reg(this.TARGET_ERR_CNT_FRAMING, 'h54);
             this.TARGET_ERR_CNT_PEC = new("TARGET_ERR_CNT_PEC");
             this.TARGET_ERR_CNT_PEC.configure(this);
 
             this.TARGET_ERR_CNT_PEC.build();
-            this.default_map.add_reg(this.TARGET_ERR_CNT_PEC, 'h54);
+            this.default_map.add_reg(this.TARGET_ERR_CNT_PEC, 'h58);
             this.RX_DESC_QUEUE_PORT = new("RX_DESC_QUEUE_PORT");
             this.RX_DESC_QUEUE_PORT.configure(this);
 
             this.RX_DESC_QUEUE_PORT.build();
-            this.default_map.add_reg(this.RX_DESC_QUEUE_PORT, 'h58);
+            this.default_map.add_reg(this.RX_DESC_QUEUE_PORT, 'h5c);
             this.RX_DATA_PORT = new("RX_DATA_PORT");
             this.RX_DATA_PORT.configure(this);
 
             this.RX_DATA_PORT.build();
-            this.default_map.add_reg(this.RX_DATA_PORT, 'h5c);
+            this.default_map.add_reg(this.RX_DATA_PORT, 'h60);
             this.TX_DESC_QUEUE_PORT = new("TX_DESC_QUEUE_PORT");
             this.TX_DESC_QUEUE_PORT.configure(this);
 
             this.TX_DESC_QUEUE_PORT.build();
-            this.default_map.add_reg(this.TX_DESC_QUEUE_PORT, 'h60);
+            this.default_map.add_reg(this.TX_DESC_QUEUE_PORT, 'h64);
             this.TX_DATA_PORT = new("TX_DATA_PORT");
             this.TX_DATA_PORT.configure(this);
 
             this.TX_DATA_PORT.build();
-            this.default_map.add_reg(this.TX_DATA_PORT, 'h64);
+            this.default_map.add_reg(this.TX_DATA_PORT, 'h68);
             this.IBI_PORT = new("IBI_PORT");
             this.IBI_PORT.configure(this);
 
             this.IBI_PORT.build();
-            this.default_map.add_reg(this.IBI_PORT, 'h68);
+            this.default_map.add_reg(this.IBI_PORT, 'h6c);
             this.QUEUE_SIZE = new("QUEUE_SIZE");
             this.QUEUE_SIZE.configure(this);
 
             this.QUEUE_SIZE.build();
-            this.default_map.add_reg(this.QUEUE_SIZE, 'h6c);
+            this.default_map.add_reg(this.QUEUE_SIZE, 'h70);
             this.IBI_QUEUE_SIZE = new("IBI_QUEUE_SIZE");
             this.IBI_QUEUE_SIZE.configure(this);
 
             this.IBI_QUEUE_SIZE.build();
-            this.default_map.add_reg(this.IBI_QUEUE_SIZE, 'h70);
+            this.default_map.add_reg(this.IBI_QUEUE_SIZE, 'h74);
             this.QUEUE_THLD_CTRL = new("QUEUE_THLD_CTRL");
             this.QUEUE_THLD_CTRL.configure(this);
 
             this.QUEUE_THLD_CTRL.build();
-            this.default_map.add_reg(this.QUEUE_THLD_CTRL, 'h74);
+            this.default_map.add_reg(this.QUEUE_THLD_CTRL, 'h78);
             this.DATA_BUFFER_THLD_CTRL = new("DATA_BUFFER_THLD_CTRL");
             this.DATA_BUFFER_THLD_CTRL.configure(this);
 
             this.DATA_BUFFER_THLD_CTRL.build();
-            this.default_map.add_reg(this.DATA_BUFFER_THLD_CTRL, 'h78);
+            this.default_map.add_reg(this.DATA_BUFFER_THLD_CTRL, 'h7c);
         endfunction : build
     endclass : I3CCSR__I3C_EC__TTI
 

@@ -192,6 +192,15 @@ module controller_standby
     output logic te5_err_o,
     output logic framing_err_o,
 
+    // Target Error Detection Enables (from TTI CSR)
+    input  logic te0_err_det_en_i,
+    input  logic te1_err_det_en_i,
+    input  logic te2_err_det_en_i,
+    input  logic te3_err_det_en_i,
+    input  logic te4_err_det_en_i,
+    input  logic te5_err_det_en_i,
+    input  logic framing_err_det_en_i,
+
     output logic virtual_device_sel_o,
     output logic xfer_in_progress_o
 );
@@ -259,6 +268,7 @@ module controller_standby
   logic get_status_done;
 
   // Protocol error for GETSTATUS: includes I3C protocol errors and Recovery PEC errors
+  // Note: recovery_protocol_err is already gated at source in recovery_receiver.sv
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (~rst_ni) begin
       err_o <= '0;
@@ -502,6 +512,13 @@ module controller_standby
       .te4_err_o(te4_err_o),
       .te5_err_o(te5_err_o),
       .framing_err_o(framing_err_o),
+      .te0_err_det_en_i(te0_err_det_en_i),
+      .te1_err_det_en_i(te1_err_det_en_i),
+      .te2_err_det_en_i(te2_err_det_en_i),
+      .te3_err_det_en_i(te3_err_det_en_i),
+      .te4_err_det_en_i(te4_err_det_en_i),
+      .te5_err_det_en_i(te5_err_det_en_i),
+      .framing_err_det_en_i(framing_err_det_en_i),
       .peripheral_reset_o,
       .peripheral_reset_done_i,
       .escalated_reset_o,

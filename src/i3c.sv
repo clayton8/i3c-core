@@ -770,6 +770,15 @@ module i3c
       .te5_err_o(te5_err),
       .framing_err_o(framing_err),
 
+      // Target error detection enables (directly from TTI CSR)
+      .te0_err_det_en_i(hwif_tti_out.TARGET_ERR_CTRL.TE0_ERR_DET_EN.value),
+      .te1_err_det_en_i(hwif_tti_out.TARGET_ERR_CTRL.TE1_ERR_DET_EN.value),
+      .te2_err_det_en_i(hwif_tti_out.TARGET_ERR_CTRL.TE2_ERR_DET_EN.value),
+      .te3_err_det_en_i(hwif_tti_out.TARGET_ERR_CTRL.TE3_ERR_DET_EN.value),
+      .te4_err_det_en_i(hwif_tti_out.TARGET_ERR_CTRL.TE4_ERR_DET_EN.value),
+      .te5_err_det_en_i(hwif_tti_out.TARGET_ERR_CTRL.TE5_ERR_DET_EN.value),
+      .framing_err_det_en_i(hwif_tti_out.TARGET_ERR_CTRL.FRAMING_ERR_DET_EN.value),
+
       .virtual_device_sel_o(virtual_device_sel),
       .xfer_in_progress_o(xfer_in_progress)
   );
@@ -1239,6 +1248,7 @@ module i3c
       .recovery_mode_enabled_o(recovery_mode_enabled),
       .virtual_device_sel_i(virtual_device_sel),
       .xfer_in_progress_i(xfer_in_progress),
+      .pec_err_det_en_i(hwif_tti_out.TARGET_ERR_CTRL.PEC_ERR_DET_EN.value),
       .protocol_err_o(recovery_protocol_err)
   );
 

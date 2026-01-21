@@ -80,6 +80,10 @@ module ccc_entdaa
   // =========================================================================
   // Target Error Outputs
   // =========================================================================
+  // Detection enables - when 0, error detection is disabled
+  input  logic       te3_err_det_en_i,
+  input  logic       te4_err_det_en_i,
+
   // TE3: Parity error on dynamic address during ENTDAA
   // Single-cycle pulse when parity error detected on assigned address
   output logic       te3_err_o,
@@ -159,7 +163,7 @@ module ccc_entdaa
 
   // Odd parity check on received address byte
   // Address is in bits [7:1], parity bit is in bit [0]
-  assign parity_ok = (~^bus_rx_rsp_i.data[7:1] == bus_rx_rsp_i.data[0]);
+  assign parity_ok = (~^bus_rx_rsp_i.data[7:1] == bus_rx_rsp_i.data[0]) || te3_err_det_en_i;
 
   // Extract 7-bit address from received byte (discard parity bit)
   assign address_o = bus_rx_rsp_i.data[7:1];
@@ -222,7 +226,8 @@ module ccc_entdaa
       // -----------------------------------------------------------------------
       ReceiveRsvdByte: begin
         if (bus_rx_rsp_i.done) begin
-          if (reserved_word_det) begin
+          if (reserved_word_det || !te4_err_det_en_i) begin
+            // Valid reserved byte received (or check disabled)
             state_d = AckRsvdByte;
           end else begin
             // TE4 Error: Invalid reserved byte received

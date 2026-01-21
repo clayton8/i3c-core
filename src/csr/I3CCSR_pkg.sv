@@ -3059,6 +3059,49 @@ package I3CCSR_pkg;
 
     typedef struct packed{
         logic value;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL__TE0_ERR_DET_EN__out_t;
+
+    typedef struct packed{
+        logic value;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL__TE1_ERR_DET_EN__out_t;
+
+    typedef struct packed{
+        logic value;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL__TE2_ERR_DET_EN__out_t;
+
+    typedef struct packed{
+        logic value;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL__TE3_ERR_DET_EN__out_t;
+
+    typedef struct packed{
+        logic value;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL__TE4_ERR_DET_EN__out_t;
+
+    typedef struct packed{
+        logic value;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL__TE5_ERR_DET_EN__out_t;
+
+    typedef struct packed{
+        logic value;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL__FRAMING_ERR_DET_EN__out_t;
+
+    typedef struct packed{
+        logic value;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL__PEC_ERR_DET_EN__out_t;
+
+    typedef struct packed{
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL__TE0_ERR_DET_EN__out_t TE0_ERR_DET_EN;
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL__TE1_ERR_DET_EN__out_t TE1_ERR_DET_EN;
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL__TE2_ERR_DET_EN__out_t TE2_ERR_DET_EN;
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL__TE3_ERR_DET_EN__out_t TE3_ERR_DET_EN;
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL__TE4_ERR_DET_EN__out_t TE4_ERR_DET_EN;
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL__TE5_ERR_DET_EN__out_t TE5_ERR_DET_EN;
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL__FRAMING_ERR_DET_EN__out_t FRAMING_ERR_DET_EN;
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL__PEC_ERR_DET_EN__out_t PEC_ERR_DET_EN;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL__out_t;
+
+    typedef struct packed{
+        logic value;
     } I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS__TE0_ERR_STAT__out_t;
 
     typedef struct packed{
@@ -3376,6 +3419,7 @@ package I3CCSR_pkg;
         I3CCSR__I3C_EC__TTI__INTERRUPT_STATUS__out_t INTERRUPT_STATUS;
         I3CCSR__I3C_EC__TTI__INTERRUPT_ENABLE__out_t INTERRUPT_ENABLE;
         I3CCSR__I3C_EC__TTI__INTERRUPT_FORCE__out_t INTERRUPT_FORCE;
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL__out_t TARGET_ERR_CTRL;
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS__out_t TARGET_ERR_INTR_STATUS;
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_ENABLE__out_t TARGET_ERR_INTR_ENABLE;
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_FORCE__out_t TARGET_ERR_INTR_FORCE;

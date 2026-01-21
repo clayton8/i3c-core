@@ -625,8 +625,71 @@ regfile TargetTransactionInterfaceRegisters #(
         } RX_DESC_STAT_FORCE[0:0];
     } INTERRUPT_FORCE;
     // =========================================================================
-    // Target Error Interrupt Registers
+    // Target Error Detection Control and Interrupt Registers
     // =========================================================================
+    // Error detection enable bits - default enabled
+    // Set to 0 to disable error detection for debugging
+    reg {
+        name = "TTI Target Error Detection Control";
+        desc = "Target Error Detection Control. Set bits to enable error detection. Clear to disable.";
+        field {
+            name = "PEC_ERR_DET_EN";
+            desc = "Enable PEC/CRC error detection. Set to 0 to disable.";
+            sw = rw;
+            hw = r;
+            reset = 1'b1;
+        } PEC_ERR_DET_EN[7:7];
+        field {
+            name = "FRAMING_ERR_DET_EN";
+            desc = "Enable framing error detection. Set to 0 to disable.";
+            sw = rw;
+            hw = r;
+            reset = 1'b1;
+        } FRAMING_ERR_DET_EN[6:6];
+        field {
+            name = "TE5_ERR_DET_EN";
+            desc = "Enable TE5 error detection. Set to 0 to disable.";
+            sw = rw;
+            hw = r;
+            reset = 1'b1;
+        } TE5_ERR_DET_EN[5:5];
+        field {
+            name = "TE4_ERR_DET_EN";
+            desc = "Enable TE4 error detection. Set to 0 to disable.";
+            sw = rw;
+            hw = r;
+            reset = 1'b1;
+        } TE4_ERR_DET_EN[4:4];
+        field {
+            name = "TE3_ERR_DET_EN";
+            desc = "Enable TE3 error detection. Set to 0 to disable.";
+            sw = rw;
+            hw = r;
+            reset = 1'b1;
+        } TE3_ERR_DET_EN[3:3];
+        field {
+            name = "TE2_ERR_DET_EN";
+            desc = "Enable TE2 error detection. Set to 0 to disable.";
+            sw = rw;
+            hw = r;
+            reset = 1'b1;
+        } TE2_ERR_DET_EN[2:2];
+        field {
+            name = "TE1_ERR_DET_EN";
+            desc = "Enable TE1 error detection. Set to 0 to disable.";
+            sw = rw;
+            hw = r;
+            reset = 1'b1;
+        } TE1_ERR_DET_EN[1:1];
+        field {
+            name = "TE0_ERR_DET_EN";
+            desc = "Enable TE0 error detection. Set to 0 to disable.";
+            sw = rw;
+            hw = r;
+            reset = 1'b1;
+        } TE0_ERR_DET_EN[0:0];
+    } TARGET_ERR_CTRL;
+
     // Target Errors interrupt status and enable
     // provide W1C interrupt status for each error type.
     reg {

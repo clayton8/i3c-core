@@ -8,6 +8,7 @@ module recovery_receiver
     input logic rst_ni, // Reset (active low)
     input logic recovery_enable_i,
     input logic bypass_i3c_core_i,
+    input logic pec_err_det_en_i,  // PEC error detection enable
 
     // TTI RX descriptor
     input  logic                          desc_valid_i,
@@ -266,7 +267,8 @@ module recovery_receiver
     end
 
   assign cmd_len_o = {len_msb, len_lsb};
-  assign cmd_error_o = !pec_match;
+  // Gate PEC error detection at source - when disabled, never report error
+  assign cmd_error_o = pec_err_det_en_i && !pec_match;
 
   // Discard any RX descriptors
   assign desc_ready_o = 1'b1;
