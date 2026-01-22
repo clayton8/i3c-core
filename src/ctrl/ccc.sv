@@ -828,8 +828,8 @@ module ccc
   // Note: This is a level signal indicating the error condition exists.
   // The actual error pulse should be generated when target_addr_ack_done fires.
   logic setdasa_to_dyn_addr;
-  assign setdasa_to_dyn_addr = (command_code == CCC_DIRECT_SETDASA) &
-                               (target_addr_matches_main_dyn | target_addr_matches_virt_dyn);
+  assign setdasa_to_dyn_addr = (command_code == CCC_DIRECT_SETDASA) &&
+                               (target_addr_matches_main_dyn || target_addr_matches_virt_dyn);
 
   // ===========================================================================
   // DATA RECEPTION
