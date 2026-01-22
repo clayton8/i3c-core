@@ -209,7 +209,7 @@ async def test_enter_exit_hdr_mode_read(dut):
             [byte for word in exp_data for byte in word.to_bytes(2, "big")],
             2 * data_len
         )
-        cocotb.log.info(f"Sending HDR-DDR write to {hex(test_addr)} with length: {data_len}")
+        cocotb.log.info(f"Sending HDR-DDR read to {hex(test_addr)} with length: {data_len}")
         test_data = await i3c_controller.send_hdr_ddr_read(addr=test_addr)
         assert (
             (test_data.nack == True and accept_data == 0) or
