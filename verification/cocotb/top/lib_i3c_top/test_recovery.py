@@ -302,6 +302,127 @@ async def test_virtual_write(dut):
 
 
 @cocotb.test()
+async def test_indirect_fifo_overflow_pointer(dut):
+    """
+    Tests that WRITE_INDEX does not increment when writing to a full INDIRECT_FIFO.
+    
+    This test:
+    1. Fills the hardware FIFO completely (64 entries * 4 bytes = 256 bytes)
+    2. Attempts to write more data when full
+    3. Verifies WRITE_INDEX does NOT increment for rejected writes
+    
+    Note: The hardware FIFO depth is 64 entries (parameterized as IndirectFifoDepth).
+    The INDIRECT_FIFO_STATUS_3.FIFO_SIZE CSR is for software pointer wrap-around only.
+    """
+
+    # Initialize
+    i3c_controller, i3c_target, tb, recovery = await initialize(dut, timeout=500)
+
+    # Set virtual device dynamic address
+    await i3c_controller.i3c_ccc_write(
+        ccc=CCC.DIRECT.SETDASA, directed_data=[(VIRT_STATIC_ADDR, [VIRT_DYNAMIC_ADDR << 1])]
+    )
+
+    async def get_fifo_ptrs():
+        """Returns (empty, full, write index, read index)"""
+        sts = dword2int(
+            await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_STATUS_0.base_addr, 4)
+        )
+        wrptr = dword2int(
+            await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_STATUS_1.base_addr, 4)
+        )
+        rdptr = dword2int(
+            await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_STATUS_2.base_addr, 4)
+        )
+        return bool(sts & 1), bool(sts & 2), wrptr, rdptr
+
+    # Hardware FIFO depth is 64 entries (each 32-bit / 4 bytes)
+    FIFO_DEPTH = 64
+    CHUNK_SIZE = 16  # Send 16 bytes (4 DWORDs) per I3C transaction
+
+    # Verify initial state
+    empty0, full0, wrptr0, rdptr0 = await get_fifo_ptrs()
+    dut._log.info(f"Initial state: empty={empty0}, full={full0}, wrptr={wrptr0}, rdptr={rdptr0}")
+    assert empty0 == True, "FIFO should be empty initially"
+    assert full0 == False, "FIFO should not be full initially"
+    assert wrptr0 == 0, "Write pointer should be 0 initially"
+    assert rdptr0 == 0, "Read pointer should be 0 initially"
+
+    # Step 1: Fill the FIFO completely (64 entries * 4 bytes = 256 bytes)
+    # Send in chunks to work with I3C transaction size limitations
+    total_bytes = FIFO_DEPTH * 4  # 256 bytes
+    fill_data = list(range(total_bytes))
+    
+    for offset in range(0, total_bytes, CHUNK_SIZE):
+        chunk = fill_data[offset:offset + CHUNK_SIZE]
+        await recovery.command_write(
+            VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.INDIRECT_FIFO_DATA, chunk
+        )
+        await Timer(100, "ns")
+
+    await Timer(1, "us")
+
+    # Check FIFO is now full
+    empty1, full1, wrptr1, rdptr1 = await get_fifo_ptrs()
+    dut._log.info(f"After fill: empty={empty1}, full={full1}, wrptr={wrptr1}, rdptr={rdptr1}")
+    
+    assert full1 == True, f"FIFO should be full after writing {FIFO_DEPTH} entries (256 bytes)"
+    assert wrptr1 == FIFO_DEPTH or wrptr1 == 0, f"Write pointer should be at FIFO size or wrapped to 0, got {wrptr1}"
+    wrptr_before_overflow = wrptr1
+
+    # Step 2: Try to write more data when FIFO is full
+    overflow_data = [0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE, 0xBA, 0xBE]  # 8 more bytes (2 DWORDs)
+    await recovery.command_write(
+        VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.INDIRECT_FIFO_DATA, overflow_data
+    )
+
+    await Timer(1, "us")
+
+    # Step 3: Verify WRITE_INDEX did NOT increment for the rejected writes
+    empty2, full2, wrptr2, rdptr2 = await get_fifo_ptrs()
+    dut._log.info(f"After overflow attempt: empty={empty2}, full={full2}, wrptr={wrptr2}, rdptr={rdptr2}")
+
+    # KEY ASSERTION: Write pointer should NOT have changed
+    assert wrptr2 == wrptr_before_overflow, \
+        f"WRITE_INDEX should not increment for rejected writes! Expected {wrptr_before_overflow}, got {wrptr2}"
+    
+    assert full2 == True, "FIFO should still be full"
+    assert rdptr2 == rdptr1, "Read pointer should be unchanged"
+
+    # Step 4: Read all data and verify we only get the original data (not overflow data)
+    rx_words = []
+    for i in range(FIFO_DEPTH):
+        res = await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_DATA.base_addr, 4)
+        data = dword2int(res)
+        rx_words.append(data)
+        if i < 4 or i >= FIFO_DEPTH - 2:  # Only log first 4 and last 2 entries
+            dut._log.info(f"Read[{i}] = 0x{data:08X}")
+        elif i == 4:
+            dut._log.info(f"... (skipping intermediate entries)")
+
+    # Verify final state
+    empty3, full3, wrptr3, rdptr3 = await get_fifo_ptrs()
+    assert empty3 == True, "FIFO should be empty after reading all entries"
+    
+    # Convert original fill_data to words for comparison
+    expected_words = []
+    for i in range(FIFO_DEPTH):
+        word = 0
+        for j in range(4):
+            idx = 4 * i + j
+            word >>= 8
+            if idx < len(fill_data):
+                word |= fill_data[idx] << 24
+        expected_words.append(word)
+
+    dut._log.info(f"Expected: {[hex(w) for w in expected_words]}")
+    dut._log.info(f"Received: {[hex(w) for w in rx_words]}")
+    
+    assert rx_words == expected_words, "Data should match original fill data (no overflow data)"
+
+    dut._log.info("TEST PASSED: WRITE_INDEX correctly did not increment for overflow writes")
+
+@cocotb.test()
 async def test_virtual_write_alternating(dut):
     """
     Alternate between recovery CSR write and regular TTI private writes

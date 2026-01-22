@@ -647,8 +647,12 @@ module recovery_executor
 
   // ..............
 
-  // Increment FIFO write index on each word copied from TTI RX queue
-  assign fifo_wrptr_inc = (state_q == FifoWrite) & tti_rx_rack_i;
+  // Increment FIFO write index only when data is successfully written to the FIFO.
+  // This requires both:
+  //   1. We are in FifoWrite state with valid data from TTI RX queue (tti_rx_rack_i)
+  //   2. The indirect FIFO accepts the write (indirect_rx_wready_i)
+  // This prevents the write pointer from incrementing for rejected writes when FIFO is full.
+  assign fifo_wrptr_inc = (state_q == FifoWrite) & tti_rx_rack_i & indirect_rx_wready_i;
   // Increment FIFO read index on INDIRECT_FIFO_DATA read from the CSR side
   assign fifo_rdptr_inc = indirect_rx_rack_i;
 
