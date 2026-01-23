@@ -1408,9 +1408,9 @@ module ccc
   // ===========================================================================
   // Both SETNEWDA (direct CCC) and ENTDAA (broadcast with sub-FSM) set a new dynamic address.
   // SETNEWDA takes priority since it can't happen simultaneously with ENTDAA.
-  assign set_newda_o              = set_newda_valid | entdaa_set_newda;
+  assign set_newda_o                = set_newda_valid | entdaa_set_newda;
   assign set_newda_virtual_device_o = set_newda_valid ? target_addr_matches_virt_dyn : entdaa_is_virtual;
-  assign newda_o                  = set_newda_valid ? set_newda_addr : entdaa_address;
+  assign newda_o                    = set_newda_valid ? set_newda_addr : entdaa_address;
 
   // ===========================================================================
   // SET CCC HANDLERS (Broadcast and Direct)
