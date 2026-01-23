@@ -318,7 +318,6 @@ module ccc
   // ---------------------------------------------------------------------------
   logic       tbit_rx_state;              // FSM is in any T-bit receiving state
   logic       tbit_cmd_rx_state;          // FSM is specifically in command code T-bit state
-  logic       tbit_data_rx_state;         // FSM is in data T-bit state (defining byte, data bytes)
   logic       capture_tbit_data;          // Trigger to capture data byte for T-bit check
   logic       tbit_rx_value;              // The received T-bit value
   logic       tbit_rx_expected_value;     // Expected T-bit value (odd parity of preceding data byte)
@@ -341,7 +340,6 @@ module ccc
   // ---------------------------------------------------------------------------
   logic [6:0] target_addr;           // 7-bit target address from direct CCC
   logic       target_rnw;            // Read (1) / Write (0) bit
-  logic       target_addr_captured;  // Pulses for one cycle when address is captured
   logic       capture_target_addr;   // Trigger to capture target address (set by FSM)
 
   // ---------------------------------------------------------------------------
@@ -487,9 +485,6 @@ module ccc
   // ---------------------------------------------------------------------------
   // Framing Error Signals
   // ---------------------------------------------------------------------------
-  // Command sequence error: SETDASA to target that already has dynamic address
-  // (detected when Controller addresses us with SETDASA using our dynamic address)
-  logic       cmd_seq_err;
   // Dynamic Address padding error: Bit[0] must be 0 for SETDASA/SETNEWDA/SETGRPA
   // Per I3C spec: incorrect padding (Bit[0] = 1) is a protocol error
   logic       da_padding_err;
@@ -622,7 +617,6 @@ module ccc
   assign tbit_rx_state = state_q inside {RxCmdTbit, RxDataTbit, 
                                          RxDirectDefByteTbit, RxDefByteTbit};
   assign tbit_cmd_rx_state = state_q == RxCmdTbit;
-  assign tbit_data_rx_state = state_q inside {RxDefByteTbit, RxDataTbit, RxDirectDefByteTbit};
 
   // Capture data bytes for parity calculation (fires when byte received, not T-bit)
   assign capture_tbit_data = bus_rx_rsp_i.done && !tbit_rx_state;
@@ -793,16 +787,12 @@ module ccc
   // ===========================================================================
   always_ff @(posedge clk_i or negedge rst_ni) begin : proc_target_addr
     if (~rst_ni) begin
-      target_addr          <= '0;
-      target_rnw           <= '0;
-      target_addr_captured <= '0;
+      target_addr <= '0;
+      target_rnw  <= '0;
     end else begin
       if (capture_target_addr) begin
-        target_addr          <= bus_rx_rsp_i.data[7:1];
-        target_rnw           <= bus_rx_rsp_i.data[0];
-        target_addr_captured <= 1'b1;
-      end else begin
-        target_addr_captured <= 1'b0;
+        target_addr <= bus_rx_rsp_i.data[7:1];
+        target_rnw  <= bus_rx_rsp_i.data[0];
       end
     end
   end
@@ -817,19 +807,6 @@ module ccc
   assign addr_ack_rsvd    = target_addr_matches_rsvd & ~target_rnw;  // Only ACK 7E/W
 
   assign addr_ack = addr_ack_setdasa | addr_ack_target | addr_ack_rsvd;
-
-  // ===========================================================================
-  // COMMAND SEQUENCE ERROR DETECTION
-  // ===========================================================================
-  // Detects invalid CCC sequences that violate framing rules:
-  // - SETDASA sent to a target using its dynamic address (should use static)
-  // - This indicates Controller is confused about our address state
-  //
-  // Note: This is a level signal indicating the error condition exists.
-  // The actual error pulse should be generated when target_addr_ack_done fires.
-  logic setdasa_to_dyn_addr;
-  assign setdasa_to_dyn_addr = (command_code == CCC_DIRECT_SETDASA) &&
-                               (target_addr_matches_main_dyn || target_addr_matches_virt_dyn);
 
   // ===========================================================================
   // DATA RECEPTION
@@ -910,8 +887,6 @@ module ccc
     te2_err     = 1'b0;
     te5_err     = 1'b0;
 
-    // Framing/sequence error (single-cycle pulse)
-    cmd_seq_err = 1'b0;
     // Dynamic Address padding error (single-cycle pulse)
     da_padding_err = 1'b0;
 
@@ -1084,11 +1059,7 @@ module ccc
             // Reserved address (7'h7E/W): End of Direct CCC frame
             state_d = NextCCC;
           end else if (~addr_ack) begin
-            if (setdasa_to_dyn_addr) begin
-              // Command sequence error: SETDASA sent using dynamic address
-              // Controller is confused - we already have a dynamic address
-              cmd_seq_err = 1'b1;
-            end else if (is_te5_err_condition) begin
+            if (is_te5_err_condition) begin
               // TE5: Wrong R/W direction - already NACKed, wait for recovery
               te5_err = 1'b1;  // Assert TE5 error pulse
             end
