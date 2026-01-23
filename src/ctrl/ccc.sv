@@ -896,9 +896,7 @@ module ccc
       // Initial State
       // ---------------------------------------------------------------------
       WaitCCC: begin
-        // Only accept new CCC commands when not in HDR mode
-        // In HDR mode, the bus uses a different protocol until exit_hdr_i
-        if (ccc_valid_i && ~in_hdr_mode) begin
+        if (ccc_valid_i) begin
           // Clear byte counters at start of every CCC (broadcast and direct)
           clear_rx_byte_num = 1'b1;
           clear_tx_byte_num = 1'b1;
