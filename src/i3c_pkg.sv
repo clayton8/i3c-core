@@ -48,6 +48,21 @@ package i3c_pkg;
     return 1'b0;
   endfunction : is_te0_rsvd_addr_err
 
+  // ===========================================================================
+  // I3C Reserved Address Check for Dynamic Address Assignment
+  // ===========================================================================
+  // Per I3C spec Table 8, certain addresses cannot be assigned as Dynamic Addresses.
+  // This function returns 1 if the address is reserved and cannot be used.
+  // Reserved ranges:
+  //   7'h00-7'h07: Reserved for I3C broadcast and special purposes
+  //   7'h3E, 7'h5E, 7'h6E, 7'h76: Reserved for Device Type Group Address
+  //   7'h78-7'h7F: Reserved for I3C special addresses
+  function automatic logic is_i3c_rsvd_addr(
+    input logic [6:0] addr
+  );
+    return addr inside {[7'h00:7'h07], 7'h3E, 7'h5E, 7'h6E, 7'h76, [7'h78:7'h7F]};
+  endfunction : is_i3c_rsvd_addr
+
   localparam int unsigned RespErrIdWidth = 4;
   localparam int unsigned DatAw = $clog2(`DAT_DEPTH);
   localparam int unsigned DctAw = $clog2(`DCT_DEPTH);

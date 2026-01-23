@@ -1636,10 +1636,10 @@ module ccc
         if (cmd_tbit_valid) begin
           // Only set if we don't already have a dynamic address
           // and the static address is not in the reserved range
-          if (~target_dyn_address_valid_i && ~(target_sta_address_i inside {[7'h00:7'h07], 7'h3E, 7'h5E, 7'h6E, 7'h76, [7'h78:7'h7F]})) begin
+          if (~target_dyn_address_valid_i && ~is_i3c_rsvd_addr(target_sta_address_i)) begin
             set_aasa_valid_next = 1'b1;
           end
-          if (~virtual_target_dyn_address_valid_i && ~(virtual_target_sta_address_i inside {[7'h00:7'h07], 7'h3E, 7'h5E, 7'h6E, 7'h76, [7'h78:7'h7F]})) begin
+          if (~virtual_target_dyn_address_valid_i && ~is_i3c_rsvd_addr(virtual_target_sta_address_i)) begin
             set_aasa_virt_valid_next = 1'b1;
           end
         end
