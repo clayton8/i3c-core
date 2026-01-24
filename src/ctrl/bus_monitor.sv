@@ -30,7 +30,7 @@ module bus_monitor
   logic scl_edge;
   logic scl_stable_high;
   logic scl_stable_low;
-  logic scl_intrnal;
+  logic scl_internal;
 
   logic sda;
   logic sda_negedge;
