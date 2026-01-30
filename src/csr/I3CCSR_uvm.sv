@@ -3805,7 +3805,7 @@ package I3CCSR_uvm;
             this.CAP_ID = new("CAP_ID");
             this.CAP_ID.configure(this, 8, 0, "RO", 0, 'hc4, 1, 1, 0);
             this.CAP_LENGTH = new("CAP_LENGTH");
-            this.CAP_LENGTH.configure(this, 16, 8, "RO", 0, 'h20, 1, 1, 0);
+            this.CAP_LENGTH.configure(this, 16, 8, "RO", 0, 'h40, 1, 1, 0);
             if (has_coverage(UVM_CVR_REG_BITS)) begin
                 foreach(CAP_ID_bit_cg[bt]) CAP_ID_bit_cg[bt] = new();
                 foreach(CAP_LENGTH_bit_cg[bt]) CAP_LENGTH_bit_cg[bt] = new();
@@ -4413,7 +4413,10 @@ package I3CCSR_uvm;
         I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL_bit_cg TE4_ERR_DET_EN_bit_cg[1];
         I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL_bit_cg TE5_ERR_DET_EN_bit_cg[1];
         I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL_bit_cg FRAMING_ERR_DET_EN_bit_cg[1];
-        I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL_bit_cg PEC_ERR_DET_EN_bit_cg[1];
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL_bit_cg RI_PEC_ERR_DET_EN_bit_cg[1];
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL_bit_cg RI_LENGTH_ERR_DET_EN_bit_cg[1];
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL_bit_cg RI_READONLY_ERR_DET_EN_bit_cg[1];
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL_bit_cg RI_UNSUPPORTED_ERR_DET_EN_bit_cg[1];
         I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL_fld_cg fld_cg;
         rand uvm_reg_field TE0_ERR_DET_EN;
         rand uvm_reg_field TE1_ERR_DET_EN;
@@ -4422,7 +4425,10 @@ package I3CCSR_uvm;
         rand uvm_reg_field TE4_ERR_DET_EN;
         rand uvm_reg_field TE5_ERR_DET_EN;
         rand uvm_reg_field FRAMING_ERR_DET_EN;
-        rand uvm_reg_field PEC_ERR_DET_EN;
+        rand uvm_reg_field RI_PEC_ERR_DET_EN;
+        rand uvm_reg_field RI_LENGTH_ERR_DET_EN;
+        rand uvm_reg_field RI_READONLY_ERR_DET_EN;
+        rand uvm_reg_field RI_UNSUPPORTED_ERR_DET_EN;
 
         function new(string name = "I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL");
             super.new(name, 32, build_coverage(UVM_CVR_ALL));
@@ -4448,8 +4454,14 @@ package I3CCSR_uvm;
             this.TE5_ERR_DET_EN.configure(this, 1, 5, "RW", 0, 'h1, 1, 1, 0);
             this.FRAMING_ERR_DET_EN = new("FRAMING_ERR_DET_EN");
             this.FRAMING_ERR_DET_EN.configure(this, 1, 6, "RW", 0, 'h1, 1, 1, 0);
-            this.PEC_ERR_DET_EN = new("PEC_ERR_DET_EN");
-            this.PEC_ERR_DET_EN.configure(this, 1, 7, "RW", 0, 'h1, 1, 1, 0);
+            this.RI_PEC_ERR_DET_EN = new("RI_PEC_ERR_DET_EN");
+            this.RI_PEC_ERR_DET_EN.configure(this, 1, 7, "RW", 0, 'h1, 1, 1, 0);
+            this.RI_LENGTH_ERR_DET_EN = new("RI_LENGTH_ERR_DET_EN");
+            this.RI_LENGTH_ERR_DET_EN.configure(this, 1, 8, "RW", 0, 'h1, 1, 1, 0);
+            this.RI_READONLY_ERR_DET_EN = new("RI_READONLY_ERR_DET_EN");
+            this.RI_READONLY_ERR_DET_EN.configure(this, 1, 9, "RW", 0, 'h1, 1, 1, 0);
+            this.RI_UNSUPPORTED_ERR_DET_EN = new("RI_UNSUPPORTED_ERR_DET_EN");
+            this.RI_UNSUPPORTED_ERR_DET_EN.configure(this, 1, 10, "RW", 0, 'h1, 1, 1, 0);
             if (has_coverage(UVM_CVR_REG_BITS)) begin
                 foreach(TE0_ERR_DET_EN_bit_cg[bt]) TE0_ERR_DET_EN_bit_cg[bt] = new();
                 foreach(TE1_ERR_DET_EN_bit_cg[bt]) TE1_ERR_DET_EN_bit_cg[bt] = new();
@@ -4458,7 +4470,10 @@ package I3CCSR_uvm;
                 foreach(TE4_ERR_DET_EN_bit_cg[bt]) TE4_ERR_DET_EN_bit_cg[bt] = new();
                 foreach(TE5_ERR_DET_EN_bit_cg[bt]) TE5_ERR_DET_EN_bit_cg[bt] = new();
                 foreach(FRAMING_ERR_DET_EN_bit_cg[bt]) FRAMING_ERR_DET_EN_bit_cg[bt] = new();
-                foreach(PEC_ERR_DET_EN_bit_cg[bt]) PEC_ERR_DET_EN_bit_cg[bt] = new();
+                foreach(RI_PEC_ERR_DET_EN_bit_cg[bt]) RI_PEC_ERR_DET_EN_bit_cg[bt] = new();
+                foreach(RI_LENGTH_ERR_DET_EN_bit_cg[bt]) RI_LENGTH_ERR_DET_EN_bit_cg[bt] = new();
+                foreach(RI_READONLY_ERR_DET_EN_bit_cg[bt]) RI_READONLY_ERR_DET_EN_bit_cg[bt] = new();
+                foreach(RI_UNSUPPORTED_ERR_DET_EN_bit_cg[bt]) RI_UNSUPPORTED_ERR_DET_EN_bit_cg[bt] = new();
             end
             if (has_coverage(UVM_CVR_FIELD_VALS))
                 fld_cg = new();
@@ -4478,7 +4493,10 @@ package I3CCSR_uvm;
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS_bit_cg TE4_ERR_STAT_bit_cg[1];
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS_bit_cg TE5_ERR_STAT_bit_cg[1];
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS_bit_cg FRAMING_ERR_STAT_bit_cg[1];
-        I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS_bit_cg PEC_ERR_STAT_bit_cg[1];
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS_bit_cg RI_PEC_ERR_STAT_bit_cg[1];
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS_bit_cg RI_LENGTH_ERR_STAT_bit_cg[1];
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS_bit_cg RI_READONLY_ERR_STAT_bit_cg[1];
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS_bit_cg RI_UNSUPPORTED_ERR_STAT_bit_cg[1];
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS_fld_cg fld_cg;
         rand uvm_reg_field TE0_ERR_STAT;
         rand uvm_reg_field TE1_ERR_STAT;
@@ -4487,7 +4505,10 @@ package I3CCSR_uvm;
         rand uvm_reg_field TE4_ERR_STAT;
         rand uvm_reg_field TE5_ERR_STAT;
         rand uvm_reg_field FRAMING_ERR_STAT;
-        rand uvm_reg_field PEC_ERR_STAT;
+        rand uvm_reg_field RI_PEC_ERR_STAT;
+        rand uvm_reg_field RI_LENGTH_ERR_STAT;
+        rand uvm_reg_field RI_READONLY_ERR_STAT;
+        rand uvm_reg_field RI_UNSUPPORTED_ERR_STAT;
 
         function new(string name = "I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS");
             super.new(name, 32, build_coverage(UVM_CVR_ALL));
@@ -4513,8 +4534,14 @@ package I3CCSR_uvm;
             this.TE5_ERR_STAT.configure(this, 1, 6, "W1C", 1, 'h0, 1, 1, 0);
             this.FRAMING_ERR_STAT = new("FRAMING_ERR_STAT");
             this.FRAMING_ERR_STAT.configure(this, 1, 7, "W1C", 1, 'h0, 1, 1, 0);
-            this.PEC_ERR_STAT = new("PEC_ERR_STAT");
-            this.PEC_ERR_STAT.configure(this, 1, 8, "W1C", 1, 'h0, 1, 1, 0);
+            this.RI_PEC_ERR_STAT = new("RI_PEC_ERR_STAT");
+            this.RI_PEC_ERR_STAT.configure(this, 1, 8, "W1C", 1, 'h0, 1, 1, 0);
+            this.RI_LENGTH_ERR_STAT = new("RI_LENGTH_ERR_STAT");
+            this.RI_LENGTH_ERR_STAT.configure(this, 1, 9, "W1C", 1, 'h0, 1, 1, 0);
+            this.RI_READONLY_ERR_STAT = new("RI_READONLY_ERR_STAT");
+            this.RI_READONLY_ERR_STAT.configure(this, 1, 10, "W1C", 1, 'h0, 1, 1, 0);
+            this.RI_UNSUPPORTED_ERR_STAT = new("RI_UNSUPPORTED_ERR_STAT");
+            this.RI_UNSUPPORTED_ERR_STAT.configure(this, 1, 11, "W1C", 1, 'h0, 1, 1, 0);
             if (has_coverage(UVM_CVR_REG_BITS)) begin
                 foreach(TE0_ERR_STAT_bit_cg[bt]) TE0_ERR_STAT_bit_cg[bt] = new();
                 foreach(TE1_ERR_STAT_bit_cg[bt]) TE1_ERR_STAT_bit_cg[bt] = new();
@@ -4523,7 +4550,10 @@ package I3CCSR_uvm;
                 foreach(TE4_ERR_STAT_bit_cg[bt]) TE4_ERR_STAT_bit_cg[bt] = new();
                 foreach(TE5_ERR_STAT_bit_cg[bt]) TE5_ERR_STAT_bit_cg[bt] = new();
                 foreach(FRAMING_ERR_STAT_bit_cg[bt]) FRAMING_ERR_STAT_bit_cg[bt] = new();
-                foreach(PEC_ERR_STAT_bit_cg[bt]) PEC_ERR_STAT_bit_cg[bt] = new();
+                foreach(RI_PEC_ERR_STAT_bit_cg[bt]) RI_PEC_ERR_STAT_bit_cg[bt] = new();
+                foreach(RI_LENGTH_ERR_STAT_bit_cg[bt]) RI_LENGTH_ERR_STAT_bit_cg[bt] = new();
+                foreach(RI_READONLY_ERR_STAT_bit_cg[bt]) RI_READONLY_ERR_STAT_bit_cg[bt] = new();
+                foreach(RI_UNSUPPORTED_ERR_STAT_bit_cg[bt]) RI_UNSUPPORTED_ERR_STAT_bit_cg[bt] = new();
             end
             if (has_coverage(UVM_CVR_FIELD_VALS))
                 fld_cg = new();
@@ -4543,7 +4573,10 @@ package I3CCSR_uvm;
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_ENABLE_bit_cg TE4_ERR_EN_bit_cg[1];
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_ENABLE_bit_cg TE5_ERR_EN_bit_cg[1];
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_ENABLE_bit_cg FRAMING_ERR_EN_bit_cg[1];
-        I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_ENABLE_bit_cg PEC_ERR_EN_bit_cg[1];
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_ENABLE_bit_cg RI_PEC_ERR_EN_bit_cg[1];
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_ENABLE_bit_cg RI_LENGTH_ERR_EN_bit_cg[1];
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_ENABLE_bit_cg RI_READONLY_ERR_EN_bit_cg[1];
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_ENABLE_bit_cg RI_UNSUPPORTED_ERR_EN_bit_cg[1];
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_ENABLE_fld_cg fld_cg;
         rand uvm_reg_field TE0_ERR_EN;
         rand uvm_reg_field TE1_ERR_EN;
@@ -4552,7 +4585,10 @@ package I3CCSR_uvm;
         rand uvm_reg_field TE4_ERR_EN;
         rand uvm_reg_field TE5_ERR_EN;
         rand uvm_reg_field FRAMING_ERR_EN;
-        rand uvm_reg_field PEC_ERR_EN;
+        rand uvm_reg_field RI_PEC_ERR_EN;
+        rand uvm_reg_field RI_LENGTH_ERR_EN;
+        rand uvm_reg_field RI_READONLY_ERR_EN;
+        rand uvm_reg_field RI_UNSUPPORTED_ERR_EN;
 
         function new(string name = "I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_ENABLE");
             super.new(name, 32, build_coverage(UVM_CVR_ALL));
@@ -4578,8 +4614,14 @@ package I3CCSR_uvm;
             this.TE5_ERR_EN.configure(this, 1, 6, "RW", 0, 'h0, 1, 1, 0);
             this.FRAMING_ERR_EN = new("FRAMING_ERR_EN");
             this.FRAMING_ERR_EN.configure(this, 1, 7, "RW", 0, 'h0, 1, 1, 0);
-            this.PEC_ERR_EN = new("PEC_ERR_EN");
-            this.PEC_ERR_EN.configure(this, 1, 8, "RW", 0, 'h0, 1, 1, 0);
+            this.RI_PEC_ERR_EN = new("RI_PEC_ERR_EN");
+            this.RI_PEC_ERR_EN.configure(this, 1, 8, "RW", 0, 'h0, 1, 1, 0);
+            this.RI_LENGTH_ERR_EN = new("RI_LENGTH_ERR_EN");
+            this.RI_LENGTH_ERR_EN.configure(this, 1, 9, "RW", 0, 'h0, 1, 1, 0);
+            this.RI_READONLY_ERR_EN = new("RI_READONLY_ERR_EN");
+            this.RI_READONLY_ERR_EN.configure(this, 1, 10, "RW", 0, 'h0, 1, 1, 0);
+            this.RI_UNSUPPORTED_ERR_EN = new("RI_UNSUPPORTED_ERR_EN");
+            this.RI_UNSUPPORTED_ERR_EN.configure(this, 1, 11, "RW", 0, 'h0, 1, 1, 0);
             if (has_coverage(UVM_CVR_REG_BITS)) begin
                 foreach(TE0_ERR_EN_bit_cg[bt]) TE0_ERR_EN_bit_cg[bt] = new();
                 foreach(TE1_ERR_EN_bit_cg[bt]) TE1_ERR_EN_bit_cg[bt] = new();
@@ -4588,7 +4630,10 @@ package I3CCSR_uvm;
                 foreach(TE4_ERR_EN_bit_cg[bt]) TE4_ERR_EN_bit_cg[bt] = new();
                 foreach(TE5_ERR_EN_bit_cg[bt]) TE5_ERR_EN_bit_cg[bt] = new();
                 foreach(FRAMING_ERR_EN_bit_cg[bt]) FRAMING_ERR_EN_bit_cg[bt] = new();
-                foreach(PEC_ERR_EN_bit_cg[bt]) PEC_ERR_EN_bit_cg[bt] = new();
+                foreach(RI_PEC_ERR_EN_bit_cg[bt]) RI_PEC_ERR_EN_bit_cg[bt] = new();
+                foreach(RI_LENGTH_ERR_EN_bit_cg[bt]) RI_LENGTH_ERR_EN_bit_cg[bt] = new();
+                foreach(RI_READONLY_ERR_EN_bit_cg[bt]) RI_READONLY_ERR_EN_bit_cg[bt] = new();
+                foreach(RI_UNSUPPORTED_ERR_EN_bit_cg[bt]) RI_UNSUPPORTED_ERR_EN_bit_cg[bt] = new();
             end
             if (has_coverage(UVM_CVR_FIELD_VALS))
                 fld_cg = new();
@@ -4608,7 +4653,10 @@ package I3CCSR_uvm;
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_FORCE_bit_cg TE4_ERR_FORCE_bit_cg[1];
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_FORCE_bit_cg TE5_ERR_FORCE_bit_cg[1];
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_FORCE_bit_cg FRAMING_ERR_FORCE_bit_cg[1];
-        I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_FORCE_bit_cg PEC_ERR_FORCE_bit_cg[1];
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_FORCE_bit_cg RI_PEC_ERR_FORCE_bit_cg[1];
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_FORCE_bit_cg RI_LENGTH_ERR_FORCE_bit_cg[1];
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_FORCE_bit_cg RI_READONLY_ERR_FORCE_bit_cg[1];
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_FORCE_bit_cg RI_UNSUPPORTED_ERR_FORCE_bit_cg[1];
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_FORCE_fld_cg fld_cg;
         rand uvm_reg_field TE0_ERR_FORCE;
         rand uvm_reg_field TE1_ERR_FORCE;
@@ -4617,7 +4665,10 @@ package I3CCSR_uvm;
         rand uvm_reg_field TE4_ERR_FORCE;
         rand uvm_reg_field TE5_ERR_FORCE;
         rand uvm_reg_field FRAMING_ERR_FORCE;
-        rand uvm_reg_field PEC_ERR_FORCE;
+        rand uvm_reg_field RI_PEC_ERR_FORCE;
+        rand uvm_reg_field RI_LENGTH_ERR_FORCE;
+        rand uvm_reg_field RI_READONLY_ERR_FORCE;
+        rand uvm_reg_field RI_UNSUPPORTED_ERR_FORCE;
 
         function new(string name = "I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_FORCE");
             super.new(name, 32, build_coverage(UVM_CVR_ALL));
@@ -4643,8 +4694,14 @@ package I3CCSR_uvm;
             this.TE5_ERR_FORCE.configure(this, 1, 6, "RW", 0, 'h0, 1, 1, 0);
             this.FRAMING_ERR_FORCE = new("FRAMING_ERR_FORCE");
             this.FRAMING_ERR_FORCE.configure(this, 1, 7, "RW", 0, 'h0, 1, 1, 0);
-            this.PEC_ERR_FORCE = new("PEC_ERR_FORCE");
-            this.PEC_ERR_FORCE.configure(this, 1, 8, "RW", 0, 'h0, 1, 1, 0);
+            this.RI_PEC_ERR_FORCE = new("RI_PEC_ERR_FORCE");
+            this.RI_PEC_ERR_FORCE.configure(this, 1, 8, "RW", 0, 'h0, 1, 1, 0);
+            this.RI_LENGTH_ERR_FORCE = new("RI_LENGTH_ERR_FORCE");
+            this.RI_LENGTH_ERR_FORCE.configure(this, 1, 9, "RW", 0, 'h0, 1, 1, 0);
+            this.RI_READONLY_ERR_FORCE = new("RI_READONLY_ERR_FORCE");
+            this.RI_READONLY_ERR_FORCE.configure(this, 1, 10, "RW", 0, 'h0, 1, 1, 0);
+            this.RI_UNSUPPORTED_ERR_FORCE = new("RI_UNSUPPORTED_ERR_FORCE");
+            this.RI_UNSUPPORTED_ERR_FORCE.configure(this, 1, 11, "RW", 0, 'h0, 1, 1, 0);
             if (has_coverage(UVM_CVR_REG_BITS)) begin
                 foreach(TE0_ERR_FORCE_bit_cg[bt]) TE0_ERR_FORCE_bit_cg[bt] = new();
                 foreach(TE1_ERR_FORCE_bit_cg[bt]) TE1_ERR_FORCE_bit_cg[bt] = new();
@@ -4653,7 +4710,10 @@ package I3CCSR_uvm;
                 foreach(TE4_ERR_FORCE_bit_cg[bt]) TE4_ERR_FORCE_bit_cg[bt] = new();
                 foreach(TE5_ERR_FORCE_bit_cg[bt]) TE5_ERR_FORCE_bit_cg[bt] = new();
                 foreach(FRAMING_ERR_FORCE_bit_cg[bt]) FRAMING_ERR_FORCE_bit_cg[bt] = new();
-                foreach(PEC_ERR_FORCE_bit_cg[bt]) PEC_ERR_FORCE_bit_cg[bt] = new();
+                foreach(RI_PEC_ERR_FORCE_bit_cg[bt]) RI_PEC_ERR_FORCE_bit_cg[bt] = new();
+                foreach(RI_LENGTH_ERR_FORCE_bit_cg[bt]) RI_LENGTH_ERR_FORCE_bit_cg[bt] = new();
+                foreach(RI_READONLY_ERR_FORCE_bit_cg[bt]) RI_READONLY_ERR_FORCE_bit_cg[bt] = new();
+                foreach(RI_UNSUPPORTED_ERR_FORCE_bit_cg[bt]) RI_UNSUPPORTED_ERR_FORCE_bit_cg[bt] = new();
             end
             if (has_coverage(UVM_CVR_FIELD_VALS))
                 fld_cg = new();
@@ -4870,17 +4930,17 @@ package I3CCSR_uvm;
         endfunction : build
     endclass : I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_FRAMING
 
-    // Reg - I3CCSR.I3C_EC.TTI.TARGET_ERR_CNT_PEC
-    class I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_PEC extends uvm_reg;
+    // Reg - I3CCSR.I3C_EC.TTI.TARGET_ERR_CNT_RI_PEC
+    class I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_PEC extends uvm_reg;
         protected uvm_reg_data_t m_current;
         protected uvm_reg_data_t m_data;
         protected bit            m_is_read;
 
-        I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_PEC_bit_cg CNT_bit_cg[8];
-        I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_PEC_fld_cg fld_cg;
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_PEC_bit_cg CNT_bit_cg[8];
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_PEC_fld_cg fld_cg;
         rand uvm_reg_field CNT;
 
-        function new(string name = "I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_PEC");
+        function new(string name = "I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_PEC");
             super.new(name, 32, build_coverage(UVM_CVR_ALL));
         endfunction : new
         extern virtual function void sample_values();
@@ -4898,7 +4958,97 @@ package I3CCSR_uvm;
             if (has_coverage(UVM_CVR_FIELD_VALS))
                 fld_cg = new();
         endfunction : build
-    endclass : I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_PEC
+    endclass : I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_PEC
+
+    // Reg - I3CCSR.I3C_EC.TTI.TARGET_ERR_CNT_RI_LENGTH
+    class I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_LENGTH extends uvm_reg;
+        protected uvm_reg_data_t m_current;
+        protected uvm_reg_data_t m_data;
+        protected bit            m_is_read;
+
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_LENGTH_bit_cg CNT_bit_cg[8];
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_LENGTH_fld_cg fld_cg;
+        rand uvm_reg_field CNT;
+
+        function new(string name = "I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_LENGTH");
+            super.new(name, 32, build_coverage(UVM_CVR_ALL));
+        endfunction : new
+        extern virtual function void sample_values();
+        extern protected virtual function void sample(uvm_reg_data_t  data,
+                                                      uvm_reg_data_t  byte_en,
+                                                      bit             is_read,
+                                                      uvm_reg_map     map);
+
+        virtual function void build();
+            this.CNT = new("CNT");
+            this.CNT.configure(this, 8, 0, "RW", 1, 'h0, 1, 1, 0);
+            if (has_coverage(UVM_CVR_REG_BITS)) begin
+                foreach(CNT_bit_cg[bt]) CNT_bit_cg[bt] = new();
+            end
+            if (has_coverage(UVM_CVR_FIELD_VALS))
+                fld_cg = new();
+        endfunction : build
+    endclass : I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_LENGTH
+
+    // Reg - I3CCSR.I3C_EC.TTI.TARGET_ERR_CNT_RI_READONLY
+    class I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_READONLY extends uvm_reg;
+        protected uvm_reg_data_t m_current;
+        protected uvm_reg_data_t m_data;
+        protected bit            m_is_read;
+
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_READONLY_bit_cg CNT_bit_cg[8];
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_READONLY_fld_cg fld_cg;
+        rand uvm_reg_field CNT;
+
+        function new(string name = "I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_READONLY");
+            super.new(name, 32, build_coverage(UVM_CVR_ALL));
+        endfunction : new
+        extern virtual function void sample_values();
+        extern protected virtual function void sample(uvm_reg_data_t  data,
+                                                      uvm_reg_data_t  byte_en,
+                                                      bit             is_read,
+                                                      uvm_reg_map     map);
+
+        virtual function void build();
+            this.CNT = new("CNT");
+            this.CNT.configure(this, 8, 0, "RW", 1, 'h0, 1, 1, 0);
+            if (has_coverage(UVM_CVR_REG_BITS)) begin
+                foreach(CNT_bit_cg[bt]) CNT_bit_cg[bt] = new();
+            end
+            if (has_coverage(UVM_CVR_FIELD_VALS))
+                fld_cg = new();
+        endfunction : build
+    endclass : I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_READONLY
+
+    // Reg - I3CCSR.I3C_EC.TTI.TARGET_ERR_CNT_RI_UNSUPPORTED
+    class I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_UNSUPPORTED extends uvm_reg;
+        protected uvm_reg_data_t m_current;
+        protected uvm_reg_data_t m_data;
+        protected bit            m_is_read;
+
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_UNSUPPORTED_bit_cg CNT_bit_cg[8];
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_UNSUPPORTED_fld_cg fld_cg;
+        rand uvm_reg_field CNT;
+
+        function new(string name = "I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_UNSUPPORTED");
+            super.new(name, 32, build_coverage(UVM_CVR_ALL));
+        endfunction : new
+        extern virtual function void sample_values();
+        extern protected virtual function void sample(uvm_reg_data_t  data,
+                                                      uvm_reg_data_t  byte_en,
+                                                      bit             is_read,
+                                                      uvm_reg_map     map);
+
+        virtual function void build();
+            this.CNT = new("CNT");
+            this.CNT.configure(this, 8, 0, "RW", 1, 'h0, 1, 1, 0);
+            if (has_coverage(UVM_CVR_REG_BITS)) begin
+                foreach(CNT_bit_cg[bt]) CNT_bit_cg[bt] = new();
+            end
+            if (has_coverage(UVM_CVR_FIELD_VALS))
+                fld_cg = new();
+        endfunction : build
+    endclass : I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_UNSUPPORTED
 
     // Reg - I3CCSR.I3C_EC.TTI.RX_DESC_QUEUE_PORT
     class I3CCSR__I3C_EC__TTI__RX_DESC_QUEUE_PORT extends uvm_reg;
@@ -5234,7 +5384,10 @@ package I3CCSR_uvm;
         rand I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_TE4 TARGET_ERR_CNT_TE4;
         rand I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_TE5 TARGET_ERR_CNT_TE5;
         rand I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_FRAMING TARGET_ERR_CNT_FRAMING;
-        rand I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_PEC TARGET_ERR_CNT_PEC;
+        rand I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_PEC TARGET_ERR_CNT_RI_PEC;
+        rand I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_LENGTH TARGET_ERR_CNT_RI_LENGTH;
+        rand I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_READONLY TARGET_ERR_CNT_RI_READONLY;
+        rand I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_UNSUPPORTED TARGET_ERR_CNT_RI_UNSUPPORTED;
         rand I3CCSR__I3C_EC__TTI__RX_DESC_QUEUE_PORT RX_DESC_QUEUE_PORT;
         rand I3CCSR__I3C_EC__TTI__RX_DATA_PORT RX_DATA_PORT;
         rand I3CCSR__I3C_EC__TTI__TX_DESC_QUEUE_PORT TX_DESC_QUEUE_PORT;
@@ -5361,56 +5514,71 @@ package I3CCSR_uvm;
 
             this.TARGET_ERR_CNT_FRAMING.build();
             this.default_map.add_reg(this.TARGET_ERR_CNT_FRAMING, 'h54);
-            this.TARGET_ERR_CNT_PEC = new("TARGET_ERR_CNT_PEC");
-            this.TARGET_ERR_CNT_PEC.configure(this);
+            this.TARGET_ERR_CNT_RI_PEC = new("TARGET_ERR_CNT_RI_PEC");
+            this.TARGET_ERR_CNT_RI_PEC.configure(this);
 
-            this.TARGET_ERR_CNT_PEC.build();
-            this.default_map.add_reg(this.TARGET_ERR_CNT_PEC, 'h58);
+            this.TARGET_ERR_CNT_RI_PEC.build();
+            this.default_map.add_reg(this.TARGET_ERR_CNT_RI_PEC, 'h58);
+            this.TARGET_ERR_CNT_RI_LENGTH = new("TARGET_ERR_CNT_RI_LENGTH");
+            this.TARGET_ERR_CNT_RI_LENGTH.configure(this);
+
+            this.TARGET_ERR_CNT_RI_LENGTH.build();
+            this.default_map.add_reg(this.TARGET_ERR_CNT_RI_LENGTH, 'h5c);
+            this.TARGET_ERR_CNT_RI_READONLY = new("TARGET_ERR_CNT_RI_READONLY");
+            this.TARGET_ERR_CNT_RI_READONLY.configure(this);
+
+            this.TARGET_ERR_CNT_RI_READONLY.build();
+            this.default_map.add_reg(this.TARGET_ERR_CNT_RI_READONLY, 'h60);
+            this.TARGET_ERR_CNT_RI_UNSUPPORTED = new("TARGET_ERR_CNT_RI_UNSUPPORTED");
+            this.TARGET_ERR_CNT_RI_UNSUPPORTED.configure(this);
+
+            this.TARGET_ERR_CNT_RI_UNSUPPORTED.build();
+            this.default_map.add_reg(this.TARGET_ERR_CNT_RI_UNSUPPORTED, 'h64);
             this.RX_DESC_QUEUE_PORT = new("RX_DESC_QUEUE_PORT");
             this.RX_DESC_QUEUE_PORT.configure(this);
 
             this.RX_DESC_QUEUE_PORT.build();
-            this.default_map.add_reg(this.RX_DESC_QUEUE_PORT, 'h5c);
+            this.default_map.add_reg(this.RX_DESC_QUEUE_PORT, 'h68);
             this.RX_DATA_PORT = new("RX_DATA_PORT");
             this.RX_DATA_PORT.configure(this);
 
             this.RX_DATA_PORT.build();
-            this.default_map.add_reg(this.RX_DATA_PORT, 'h60);
+            this.default_map.add_reg(this.RX_DATA_PORT, 'h6c);
             this.TX_DESC_QUEUE_PORT = new("TX_DESC_QUEUE_PORT");
             this.TX_DESC_QUEUE_PORT.configure(this);
 
             this.TX_DESC_QUEUE_PORT.build();
-            this.default_map.add_reg(this.TX_DESC_QUEUE_PORT, 'h64);
+            this.default_map.add_reg(this.TX_DESC_QUEUE_PORT, 'h70);
             this.TX_DATA_PORT = new("TX_DATA_PORT");
             this.TX_DATA_PORT.configure(this);
 
             this.TX_DATA_PORT.build();
-            this.default_map.add_reg(this.TX_DATA_PORT, 'h68);
+            this.default_map.add_reg(this.TX_DATA_PORT, 'h74);
             this.IBI_PORT = new("IBI_PORT");
             this.IBI_PORT.configure(this);
 
             this.IBI_PORT.build();
-            this.default_map.add_reg(this.IBI_PORT, 'h6c);
+            this.default_map.add_reg(this.IBI_PORT, 'h78);
             this.QUEUE_SIZE = new("QUEUE_SIZE");
             this.QUEUE_SIZE.configure(this);
 
             this.QUEUE_SIZE.build();
-            this.default_map.add_reg(this.QUEUE_SIZE, 'h70);
+            this.default_map.add_reg(this.QUEUE_SIZE, 'h7c);
             this.IBI_QUEUE_SIZE = new("IBI_QUEUE_SIZE");
             this.IBI_QUEUE_SIZE.configure(this);
 
             this.IBI_QUEUE_SIZE.build();
-            this.default_map.add_reg(this.IBI_QUEUE_SIZE, 'h74);
+            this.default_map.add_reg(this.IBI_QUEUE_SIZE, 'h80);
             this.QUEUE_THLD_CTRL = new("QUEUE_THLD_CTRL");
             this.QUEUE_THLD_CTRL.configure(this);
 
             this.QUEUE_THLD_CTRL.build();
-            this.default_map.add_reg(this.QUEUE_THLD_CTRL, 'h78);
+            this.default_map.add_reg(this.QUEUE_THLD_CTRL, 'h84);
             this.DATA_BUFFER_THLD_CTRL = new("DATA_BUFFER_THLD_CTRL");
             this.DATA_BUFFER_THLD_CTRL.configure(this);
 
             this.DATA_BUFFER_THLD_CTRL.build();
-            this.default_map.add_reg(this.DATA_BUFFER_THLD_CTRL, 'h7c);
+            this.default_map.add_reg(this.DATA_BUFFER_THLD_CTRL, 'h88);
         endfunction : build
     endclass : I3CCSR__I3C_EC__TTI
 
@@ -6473,16 +6641,16 @@ package I3CCSR_uvm;
             this.SoCMgmtIf = new("SoCMgmtIf");
             this.SoCMgmtIf.configure(this);
             this.SoCMgmtIf.build();
-            this.default_map.add_submap(this.SoCMgmtIf.default_map, 'h180);
+            this.default_map.add_submap(this.SoCMgmtIf.default_map, 'h200);
             this.CtrlCfg = new("CtrlCfg");
             this.CtrlCfg.configure(this);
             this.CtrlCfg.build();
-            this.default_map.add_submap(this.CtrlCfg.default_map, 'h1e0);
+            this.default_map.add_submap(this.CtrlCfg.default_map, 'h260);
             this.TERMINATION_EXTCAP_HEADER = new("TERMINATION_EXTCAP_HEADER");
             this.TERMINATION_EXTCAP_HEADER.configure(this);
 
             this.TERMINATION_EXTCAP_HEADER.build();
-            this.default_map.add_reg(this.TERMINATION_EXTCAP_HEADER, 'h1e8);
+            this.default_map.add_reg(this.TERMINATION_EXTCAP_HEADER, 'h268);
         endfunction : build
     endclass : I3CCSR__I3C_EC
 

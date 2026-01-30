@@ -349,7 +349,12 @@ module i3c_target_fsm import i3c_pkg::*; #(
     end
   end
   // Last RX byte when we leave Private Write loop
-  assign rx_last_byte_o = (state_q == RxPWriteData) & (state_d inside {RxFByte, Idle});
+  // Fire when:
+  // 1. In RxPWriteData and next state is RxFByte or Idle (repeated start or stop during byte)
+  // 2. In RxPWriteTbit and next state is Idle (stop detected during T-bit - common case)
+  // 3. In RxPWriteTbit and next state is RxFByte (repeated start during T-bit)
+  assign rx_last_byte_o = ((state_q == RxPWriteData) & (state_d inside {RxFByte, Idle})) |
+                          ((state_q == RxPWriteTbit) & (state_d inside {RxFByte, Idle}));
 
   // TX FIFO ready when we start writing byte (enter TxPReadData)
   // Enterng the TXPReadData state, then asserting rready will cause a byte to be
@@ -532,7 +537,10 @@ module i3c_target_fsm import i3c_pkg::*; #(
       RxPWriteTbit: begin
         bus_rx_req_bit = !bus_start_det;
 
-        if (bus_rx_rsp_i.done) begin
+        if (bus_start_det) begin
+          // Repeated Start during T-bit - new address phase
+          state_d = RxFByte;
+        end else if (bus_rx_rsp_i.done) begin
           // Gate parity error detection with detection enable at the source
           te2_err_priv_wr = te2_err_det_en_i && (parity_bit != bus_rx_rsp_i.data[0]);
           state_d = RxPWriteData;
@@ -652,6 +660,9 @@ module i3c_target_fsm import i3c_pkg::*; #(
 
   always_ff @(posedge clk_i or negedge rst_ni) begin : virtual_device_sel_latch
     if (!rst_ni) begin
+      virtual_device_sel_o <= '0;
+    end else if (bus_start_det || bus_stop_det_i) begin
+      // Clear on Start/Repeated Start/Stop - transaction boundary
       virtual_device_sel_o <= '0;
     end else unique case(state_q)
       CheckFByte:

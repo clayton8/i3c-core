@@ -102,8 +102,8 @@ module tti
     // IBI status
     input logic [1:0] ibi_status_i,
     input logic ibi_status_we_i,
-    // Recovery status
-    input logic recovery_mode_enabled_i,
+    // Virtual recovery target selection - gates TTI interrupts during recovery transactions
+    input logic virtual_device_sel_i,
     // Private read status
     input logic tx_pr_end_i,
     input logic tx_pr_start_i,
@@ -126,7 +126,10 @@ module tti
     input logic te4_err_i,
     input logic te5_err_i,
     input logic framing_err_i,
-    input logic pec_err_i,
+    input logic ri_pec_err_i,
+    input logic ri_length_err_i,
+    input logic ri_readonly_err_i,
+    input logic ri_unsupported_err_i,
 
     // Interrupt
     output logic irq_o
@@ -312,8 +315,8 @@ module tti
 
   assign hwif_tti_o.STATUS.PROTOCOL_ERROR.next = err_i;
 
-  // Interrupts: [5:0] = TTI queue interrupts, [13:6] = TE error interrupts
-  logic [13:0] irqs;
+  // Interrupts: [5:0] = TTI queue interrupts, [14:6] = TE error interrupts, [16:15] = Recovery errors
+  logic [16:0] irqs;
 
   // Delay queue write monitor signals by 1 cycle to align them with
   // full/empty/threshold trigger update.
@@ -325,8 +328,8 @@ module tti
       rx_desc_queue_write_r <= '0;
       rx_data_queue_write_r <= '0;
     end else begin
-      rx_desc_queue_write_r <= rx_desc_queue_write_i & ~recovery_mode_enabled_i;
-      rx_data_queue_write_r <= rx_data_queue_write_i & ~recovery_mode_enabled_i;
+      rx_desc_queue_write_r <= rx_desc_queue_write_i & ~virtual_device_sel_i;
+      rx_data_queue_write_r <= rx_data_queue_write_i & ~virtual_device_sel_i;
     end
   end
 
@@ -404,7 +407,7 @@ module tti
   interrupt xintr4 (
     .clk_i          (clk_i),
     .rst_ni         (rst_ni),
-    .irq_i          (~recovery_mode_enabled_i & tx_pr_end_i),
+    .irq_i          (~virtual_device_sel_i & tx_pr_end_i),
     .clr_i          ('0),
     .irq_force_i    (hwif_tti_i.INTERRUPT_FORCE.TX_DESC_COMPLETE_FORCE.value),
     .sts_o          (hwif_tti_o.INTERRUPT_STATUS.TX_DESC_COMPLETE.next),
@@ -421,7 +424,7 @@ module tti
   interrupt xintr5 (
     .clk_i          (clk_i),
     .rst_ni         (rst_ni),
-    .irq_i          (~recovery_mode_enabled_i & tx_pr_start_i),
+    .irq_i          (~virtual_device_sel_i & tx_pr_start_i),
     .clr_i          ('0),
     .irq_force_i    (hwif_tti_i.INTERRUPT_FORCE.TX_DESC_STAT_FORCE.value),
     .sts_o          (hwif_tti_o.INTERRUPT_STATUS.TX_DESC_STAT.next),
@@ -544,19 +547,64 @@ module tti
     .irq_o          (irqs[12])
   );
 
-  // PEC_ERR: Recovery PEC/CRC error
-  interrupt xintr_pec (
+  // RI_PEC_ERR: Recovery Interface PEC/CRC error
+  interrupt xintr_ri_pec (
     .clk_i          (clk_i),
     .rst_ni         (rst_ni),
-    .irq_i          (pec_err_i),
+    .irq_i          (ri_pec_err_i),
     .clr_i          ('0),
-    .irq_force_i    (hwif_tti_i.TARGET_ERR_INTR_FORCE.PEC_ERR_FORCE.value),
-    .sts_o          (hwif_tti_o.TARGET_ERR_INTR_STATUS.PEC_ERR_STAT.next),
-    .sts_we_o       (hwif_tti_o.TARGET_ERR_INTR_STATUS.PEC_ERR_STAT.we),
-    .sts_i          (hwif_tti_i.TARGET_ERR_INTR_STATUS.PEC_ERR_STAT.value),
-    .sts_ena_i      (hwif_tti_i.TARGET_ERR_INTR_ENABLE.PEC_ERR_EN.value),
+    .irq_force_i    (hwif_tti_i.TARGET_ERR_INTR_FORCE.RI_PEC_ERR_FORCE.value),
+    .sts_o          (hwif_tti_o.TARGET_ERR_INTR_STATUS.RI_PEC_ERR_STAT.next),
+    .sts_we_o       (hwif_tti_o.TARGET_ERR_INTR_STATUS.RI_PEC_ERR_STAT.we),
+    .sts_i          (hwif_tti_i.TARGET_ERR_INTR_STATUS.RI_PEC_ERR_STAT.value),
+    .sts_ena_i      (hwif_tti_i.TARGET_ERR_INTR_ENABLE.RI_PEC_ERR_EN.value),
     .sig_ena_i      ('1),
     .irq_o          (irqs[13])
+  );
+
+  // RI_LENGTH_ERR: Recovery Interface length mismatch error
+  interrupt xintr_ri_length (
+    .clk_i          (clk_i),
+    .rst_ni         (rst_ni),
+    .irq_i          (ri_length_err_i),
+    .clr_i          ('0),
+    .irq_force_i    (hwif_tti_i.TARGET_ERR_INTR_FORCE.RI_LENGTH_ERR_FORCE.value),
+    .sts_o          (hwif_tti_o.TARGET_ERR_INTR_STATUS.RI_LENGTH_ERR_STAT.next),
+    .sts_we_o       (hwif_tti_o.TARGET_ERR_INTR_STATUS.RI_LENGTH_ERR_STAT.we),
+    .sts_i          (hwif_tti_i.TARGET_ERR_INTR_STATUS.RI_LENGTH_ERR_STAT.value),
+    .sts_ena_i      (hwif_tti_i.TARGET_ERR_INTR_ENABLE.RI_LENGTH_ERR_EN.value),
+    .sig_ena_i      ('1),
+    .irq_o          (irqs[14])
+  );
+
+  // RI_READONLY_ERR: Recovery Interface write-to-read-only error
+  interrupt xintr_ri_readonly (
+    .clk_i          (clk_i),
+    .rst_ni         (rst_ni),
+    .irq_i          (ri_readonly_err_i),
+    .clr_i          ('0),
+    .irq_force_i    (hwif_tti_i.TARGET_ERR_INTR_FORCE.RI_READONLY_ERR_FORCE.value),
+    .sts_o          (hwif_tti_o.TARGET_ERR_INTR_STATUS.RI_READONLY_ERR_STAT.next),
+    .sts_we_o       (hwif_tti_o.TARGET_ERR_INTR_STATUS.RI_READONLY_ERR_STAT.we),
+    .sts_i          (hwif_tti_i.TARGET_ERR_INTR_STATUS.RI_READONLY_ERR_STAT.value),
+    .sts_ena_i      (hwif_tti_i.TARGET_ERR_INTR_ENABLE.RI_READONLY_ERR_EN.value),
+    .sig_ena_i      ('1),
+    .irq_o          (irqs[15])
+  );
+
+  // RI_UNSUPPORTED_ERR: Recovery Interface unsupported command error
+  interrupt xintr_ri_unsupported (
+    .clk_i          (clk_i),
+    .rst_ni         (rst_ni),
+    .irq_i          (ri_unsupported_err_i),
+    .clr_i          ('0),
+    .irq_force_i    (hwif_tti_i.TARGET_ERR_INTR_FORCE.RI_UNSUPPORTED_ERR_FORCE.value),
+    .sts_o          (hwif_tti_o.TARGET_ERR_INTR_STATUS.RI_UNSUPPORTED_ERR_STAT.next),
+    .sts_we_o       (hwif_tti_o.TARGET_ERR_INTR_STATUS.RI_UNSUPPORTED_ERR_STAT.we),
+    .sts_i          (hwif_tti_i.TARGET_ERR_INTR_STATUS.RI_UNSUPPORTED_ERR_STAT.value),
+    .sts_ena_i      (hwif_tti_i.TARGET_ERR_INTR_ENABLE.RI_UNSUPPORTED_ERR_EN.value),
+    .sig_ena_i      ('1),
+    .irq_o          (irqs[16])
   );
 
   // =========================================================================
@@ -593,11 +641,24 @@ module tti
   assign hwif_tti_o.TARGET_ERR_CNT_FRAMING.CNT.next = hwif_tti_i.TARGET_ERR_CNT_FRAMING.CNT.value + 8'h01;
   assign hwif_tti_o.TARGET_ERR_CNT_FRAMING.CNT.we   = framing_err_i && (hwif_tti_i.TARGET_ERR_CNT_FRAMING.CNT.value != 8'hFF);
 
-  // PEC error counter
-  assign hwif_tti_o.TARGET_ERR_CNT_PEC.CNT.next = hwif_tti_i.TARGET_ERR_CNT_PEC.CNT.value + 8'h01;
-  assign hwif_tti_o.TARGET_ERR_CNT_PEC.CNT.we   = pec_err_i && (hwif_tti_i.TARGET_ERR_CNT_PEC.CNT.value != 8'hFF);
+  // Recovery Interface PEC error counter
+  assign hwif_tti_o.TARGET_ERR_CNT_RI_PEC.CNT.next = hwif_tti_i.TARGET_ERR_CNT_RI_PEC.CNT.value + 8'h01;
+  assign hwif_tti_o.TARGET_ERR_CNT_RI_PEC.CNT.we   = ri_pec_err_i && (hwif_tti_i.TARGET_ERR_CNT_RI_PEC.CNT.value != 8'hFF);
+
+  // Recovery Interface Length error counter
+  assign hwif_tti_o.TARGET_ERR_CNT_RI_LENGTH.CNT.next = hwif_tti_i.TARGET_ERR_CNT_RI_LENGTH.CNT.value + 8'h01;
+  assign hwif_tti_o.TARGET_ERR_CNT_RI_LENGTH.CNT.we   = ri_length_err_i && (hwif_tti_i.TARGET_ERR_CNT_RI_LENGTH.CNT.value != 8'hFF);
+
+  // Recovery Interface Read-only error counter
+  assign hwif_tti_o.TARGET_ERR_CNT_RI_READONLY.CNT.next = hwif_tti_i.TARGET_ERR_CNT_RI_READONLY.CNT.value + 8'h01;
+  assign hwif_tti_o.TARGET_ERR_CNT_RI_READONLY.CNT.we   = ri_readonly_err_i && (hwif_tti_i.TARGET_ERR_CNT_RI_READONLY.CNT.value != 8'hFF);
+
+  // Recovery Interface Unsupported error counter
+  assign hwif_tti_o.TARGET_ERR_CNT_RI_UNSUPPORTED.CNT.next = hwif_tti_i.TARGET_ERR_CNT_RI_UNSUPPORTED.CNT.value + 8'h01;
+  assign hwif_tti_o.TARGET_ERR_CNT_RI_UNSUPPORTED.CNT.we   = ri_unsupported_err_i && (hwif_tti_i.TARGET_ERR_CNT_RI_UNSUPPORTED.CNT.value != 8'hFF);
 
   // Interrupt output
   assign irq_o = |irqs;
 
 endmodule : tti
+

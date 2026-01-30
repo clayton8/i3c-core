@@ -324,6 +324,7 @@ module i3c
   logic                               tti_rx_wready;
   logic [                        7:0] tti_rx_wdata;
   logic                               tti_rx_flush;
+  logic                               tti_rx_wlast;
 
   // TTI TX queue
   logic                               tti_tx_full;
@@ -534,7 +535,10 @@ module i3c
   logic ibi_status_we;
 
   logic controller_error;
-  logic recovery_protocol_err;
+  logic ri_pec_err;
+  logic ri_length_err;
+  logic ri_readonly_err;
+  logic ri_unsupported_err;
 
   // Individual TE error signals for interrupt reporting
   logic te0_err;
@@ -546,7 +550,6 @@ module i3c
   logic framing_err;
 
   logic recovery_mode_enter;
-  logic recovery_mode_enabled;
   logic virtual_device_sel;
   logic xfer_in_progress;
 
@@ -663,6 +666,7 @@ module i3c
       .tti_rx_queue_wready_i(tti_rx_wready),
       .tti_rx_queue_wdata_o(tti_rx_wdata),
       .tti_rx_queue_flush_o(tti_rx_flush),
+      .tti_rx_queue_wlast_o(tti_rx_wlast),
 
       // TTI: TX Descriptor
       .tti_tx_desc_queue_full_i(tti_tx_desc_full),
@@ -760,7 +764,7 @@ module i3c
 
       .err_o(controller_error),
       .recovery_mode_enter_i(recovery_mode_enter),
-      .recovery_protocol_err_i(recovery_protocol_err),
+      .recovery_pec_err_i(ri_pec_err),
 
       .te0_err_o(te0_err),
       .te1_err_o(te1_err),
@@ -1058,7 +1062,7 @@ module i3c
 
       .bypass_i3c_core_i(bypass_i3c_core),
 
-      .recovery_mode_enabled_i(recovery_mode_enabled),
+      .virtual_device_sel_i(virtual_device_sel),
       .ibi_status_i(ibi_status),
       .ibi_status_we_i(ibi_status_we),
       .tx_pr_end_i(tti_tx_pr_end),
@@ -1081,7 +1085,10 @@ module i3c
       .te4_err_i(te4_err),
       .te5_err_i(te5_err),
       .framing_err_i(framing_err),
-      .pec_err_i(recovery_protocol_err),
+      .ri_pec_err_i(ri_pec_err),
+      .ri_length_err_i(ri_length_err),
+      .ri_readonly_err_i(ri_readonly_err),
+      .ri_unsupported_err_i(ri_unsupported_err),
 
       .irq_o (tti_irq)
   );
@@ -1202,6 +1209,7 @@ module i3c
       .ctl_tti_rx_data_queue_wready_o(tti_rx_wready),
       .ctl_tti_rx_data_queue_wdata_i(tti_rx_wdata),
       .ctl_tti_rx_data_queue_flush_i(tti_rx_flush),
+      .ctl_tti_rx_data_queue_wlast_i(tti_rx_wlast),
       .ctl_tti_rx_data_queue_start_thld_o(tti_rx_start_thld),
       .ctl_tti_rx_data_queue_start_thld_trig_o(tti_rx_start_thld_trig),
       .ctl_tti_rx_data_queue_ready_thld_o(tti_rx_ready_thld),
@@ -1245,11 +1253,16 @@ module i3c
       .ctl_bus_addr_i(rx_bus_addr),
       .ctl_bus_addr_valid_i(rx_bus_addr_valid),
       .recovery_mode_enter_o(recovery_mode_enter),
-      .recovery_mode_enabled_o(recovery_mode_enabled),
       .virtual_device_sel_i(virtual_device_sel),
       .xfer_in_progress_i(xfer_in_progress),
-      .pec_err_det_en_i(hwif_tti_out.TARGET_ERR_CTRL.PEC_ERR_DET_EN.value),
-      .protocol_err_o(recovery_protocol_err)
+      .pec_err_det_en_i(hwif_tti_out.TARGET_ERR_CTRL.RI_PEC_ERR_DET_EN.value),
+      .length_err_det_en_i(hwif_tti_out.TARGET_ERR_CTRL.RI_LENGTH_ERR_DET_EN.value),
+      .readonly_err_det_en_i(hwif_tti_out.TARGET_ERR_CTRL.RI_READONLY_ERR_DET_EN.value),
+      .unsupported_err_det_en_i(hwif_tti_out.TARGET_ERR_CTRL.RI_UNSUPPORTED_ERR_DET_EN.value),
+      .pec_err_o(ri_pec_err),
+      .length_err_o(ri_length_err),
+      .readonly_err_o(ri_readonly_err),
+      .unsupported_err_o(ri_unsupported_err)
   );
 
   // I3C PHY

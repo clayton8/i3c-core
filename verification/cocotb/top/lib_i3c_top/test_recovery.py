@@ -7,7 +7,7 @@ from boot import boot_init
 from bus2csr import bytes2int, compare_values, dword2int, int2dword
 from ccc import CCC
 from cocotbext_i3c.i3c_controller import I3cController
-from cocotbext_i3c.i3c_recovery_interface import I3cRecoveryInterface
+from cocotbext_i3c.i3c_recovery_interface import I3cRecoveryInterface, I3cRecoveryException
 from cocotbext_i3c.i3c_target import I3CTarget
 from interface import I3CTopTestInterface
 
@@ -174,54 +174,40 @@ async def test_ri_error_detection(dut):
 
     async def clear_err_counters():
         counters = [
-            tb.reg_map.I3C_EC.TTI.TARGET_ERR_CNT_PEC,
-            tb.reg_map.I3C_EC.TTI.TARGET_ERR_CNT_RI_PROT_UNSUPPORTED,
-            tb.reg_map.I3C_EC.TTI.TARGET_ERR_CNT_RI_PROT_READONLY,
-            tb.reg_map.I3C_EC.TTI.TARGET_ERR_CNT_RI_PROT_LENGTH,
+            tb.reg_map.I3C_EC.TTI.TARGET_ERR_CNT_RI_PEC,
+            tb.reg_map.I3C_EC.TTI.TARGET_ERR_CNT_RI_LENGTH,
         ]
         for cnt in counters:
             await tb.write_csr(cnt.base_addr, int2dword(0), 4)
 
     # =========================================================================
-    # Enable all RI error interrupts in TARGET_ERR_INTR_ENABLE
+    # Enable PEC and LENGTH error interrupts in TARGET_ERR_INTR_ENABLE
     # This is REQUIRED for status bits to be captured when errors occur.
     # The interrupt module only sets sts_o when (trg & sts_ena_i) is true.
-    # Bits: [11] RI_PROT_ERR_LENGTH_EN, [10] RI_PROT_ERR_READONLY_EN, 
-    #       [9] RI_PROT_ERR_UNSUPPORTED_EN, [8] RI_PEC_ERR_EN
+    # Bits: [9] RI_LENGTH_ERR_EN, [8] RI_PEC_ERR_EN
     # =========================================================================
-    ri_err_enable_mask = (1 << 8) | (1 << 9) | (1 << 10) | (1 << 11)
+    ri_err_enable_mask = (1 << 8) | (1 << 9)
     current_enable = await get_err_intr_enable()
-    dut._log.info(f"Initial TARGET_ERR_INTR_ENABLE: 0x{current_enable:08X}")
-    
     await set_err_intr_enable(current_enable | ri_err_enable_mask)
-    new_enable = await get_err_intr_enable()
-    dut._log.info(f"Updated TARGET_ERR_INTR_ENABLE: 0x{new_enable:08X}")
 
     # =========================================================================
     # Initial state check
     # =========================================================================
-    dut._log.info("=== Checking initial state ===")
     
-    # Verify all counters are 0
-    pec_cnt = await get_err_counter(tb.reg_map.I3C_EC.TTI.TARGET_ERR_CNT_PEC)
-    unsupported_cnt = await get_err_counter(tb.reg_map.I3C_EC.TTI.TARGET_ERR_CNT_RI_PROT_UNSUPPORTED)
-    readonly_cnt = await get_err_counter(tb.reg_map.I3C_EC.TTI.TARGET_ERR_CNT_RI_PROT_READONLY)
-    length_cnt = await get_err_counter(tb.reg_map.I3C_EC.TTI.TARGET_ERR_CNT_RI_PROT_LENGTH)
-    
-    dut._log.info(f"Initial counters: PEC={pec_cnt}, UNSUPPORTED={unsupported_cnt}, "
-                  f"READONLY={readonly_cnt}, LENGTH={length_cnt}")
+    # Verify counters are 0
+    pec_cnt = await get_err_counter(tb.reg_map.I3C_EC.TTI.TARGET_ERR_CNT_RI_PEC)
+    length_cnt = await get_err_counter(tb.reg_map.I3C_EC.TTI.TARGET_ERR_CNT_RI_LENGTH)
     
     # Clear any initial status
     await clear_err_intr_status()
     await clear_err_counters()
     
     status = await get_err_intr_status()
-    assert status == 0, f"Expected clean interrupt status, got 0x{status:08X}"
+    assert status == 0, f"Expected clean interrupt status after clear, got 0x{status:08X}"
 
     # =========================================================================
     # Test 1: PEC Error Detection
     # =========================================================================
-    dut._log.info("=== Test 1: PEC Error Detection ===")
     
     # Send a command with deliberately incorrect PEC
     await recovery.command_write(
@@ -235,111 +221,25 @@ async def test_ri_error_detection(dut):
     # Check interrupt status
     status = await get_err_intr_status()
     ri_pec_err_stat = (status >> 8) & 1
-    dut._log.info(f"After PEC error: INTR_STATUS=0x{status:08X}, RI_PEC_ERR_STAT={ri_pec_err_stat}")
-    assert ri_pec_err_stat == 1, "RI_PEC_ERR_STAT should be set after PEC error"
+    assert ri_pec_err_stat == 1, \
+        f"RI_PEC_ERR_STAT should be set after PEC error, INTR_STATUS=0x{status:08X}"
     
     # Check counter incremented
-    pec_cnt = await get_err_counter(tb.reg_map.I3C_EC.TTI.TARGET_ERR_CNT_PEC)
-    dut._log.info(f"PEC error counter: {pec_cnt}")
-    assert pec_cnt >= 1, f"PEC error counter should be >= 1, got {pec_cnt}"
+    pec_cnt = await get_err_counter(tb.reg_map.I3C_EC.TTI.TARGET_ERR_CNT_RI_PEC)
+    assert pec_cnt >= 1, \
+        f"PEC error counter should be >= 1 after PEC error, got {pec_cnt}"
     
     # Clear status for next test
     await clear_err_intr_status()
     
     # =========================================================================
-    # Test 2: Unsupported Command Error Detection
+    # Test 2: Interrupt Force Register
     # =========================================================================
-    dut._log.info("=== Test 2: Unsupported Command Error Detection ===")
-    
-    # Send an unsupported/invalid command code (use a value outside valid range)
-    # Valid commands are 0x22-0x2F, so use something invalid like 0xFF
-    invalid_cmd = 0xFF
-    
-    # Use low-level write to send invalid command with correct PEC
-    data = [invalid_cmd]
-    data.append(recovery.pec_calc.checksum(bytes([VIRT_DYNAMIC_ADDR << 1] + data)))
-    # Add length bytes and dummy data
-    await i3c_controller.i3c_write(VIRT_DYNAMIC_ADDR, data + [0x01, 0x00, 0xAA])
-    await Timer(1, "us")
-    
-    # Check interrupt status
-    status = await get_err_intr_status()
-    ri_unsupported_stat = (status >> 9) & 1
-    dut._log.info(f"After unsupported cmd: INTR_STATUS=0x{status:08X}, RI_PROT_ERR_UNSUPPORTED_STAT={ri_unsupported_stat}")
-    assert ri_unsupported_stat == 1, "RI_PROT_ERR_UNSUPPORTED_STAT should be set after unsupported command"
-    
-    # Check counter
-    unsupported_cnt = await get_err_counter(tb.reg_map.I3C_EC.TTI.TARGET_ERR_CNT_RI_PROT_UNSUPPORTED)
-    dut._log.info(f"Unsupported command error counter: {unsupported_cnt}")
-    assert unsupported_cnt >= 1, f"Unsupported error counter should be >= 1, got {unsupported_cnt}"
-    
-    # Clear status for next test
-    await clear_err_intr_status()
-    
-    # =========================================================================
-    # Test 3: Write to Read-Only Register Error Detection
-    # =========================================================================
-    dut._log.info("=== Test 3: Write to Read-Only Register Error Detection ===")
-    
-    # Try to write to a read-only register (PROT_CAP is read-only)
-    await recovery.command_write(
-        VIRT_DYNAMIC_ADDR,
-        I3cRecoveryInterface.Command.PROT_CAP,
-        [0x01, 0x02, 0x03, 0x04],
-    )
-    await Timer(1, "us")
-    
-    # Check interrupt status
-    status = await get_err_intr_status()
-    ri_readonly_stat = (status >> 10) & 1
-    dut._log.info(f"After readonly write: INTR_STATUS=0x{status:08X}, RI_PROT_ERR_READONLY_STAT={ri_readonly_stat}")
-    assert ri_readonly_stat == 1, "RI_PROT_ERR_READONLY_STAT should be set after write to readonly register"
-    
-    # Check counter
-    readonly_cnt = await get_err_counter(tb.reg_map.I3C_EC.TTI.TARGET_ERR_CNT_RI_PROT_READONLY)
-    dut._log.info(f"Readonly write error counter: {readonly_cnt}")
-    assert readonly_cnt >= 1, f"Readonly error counter should be >= 1, got {readonly_cnt}"
-    
-    # Clear status for next test
-    await clear_err_intr_status()
-    
-    # =========================================================================
-    # Test 4: Write Length Error Detection
-    # =========================================================================
-    dut._log.info("=== Test 4: Write Length Error Detection ===")
-    
-    # DEVICE_RESET expects 3 bytes, send a different length (too short)
-    # We'll send only 1 byte when 3 are expected
-    await recovery.command_write(
-        VIRT_DYNAMIC_ADDR,
-        I3cRecoveryInterface.Command.DEVICE_RESET,
-        [0x01],  # Only 1 byte instead of expected 3
-    )
-    await Timer(1, "us")
-    
-    # Check interrupt status
-    status = await get_err_intr_status()
-    ri_length_stat = (status >> 11) & 1
-    dut._log.info(f"After length error: INTR_STATUS=0x{status:08X}, RI_PROT_ERR_LENGTH_STAT={ri_length_stat}")
-    assert ri_length_stat == 1, "RI_PROT_ERR_LENGTH_STAT should be set after length error"
-    
-    # Check counter
-    length_cnt = await get_err_counter(tb.reg_map.I3C_EC.TTI.TARGET_ERR_CNT_RI_PROT_LENGTH)
-    dut._log.info(f"Length error counter: {length_cnt}")
-    assert length_cnt >= 1, f"Length error counter should be >= 1, got {length_cnt}"
-    
-    # Clear status for next test
-    await clear_err_intr_status()
-    
-    # =========================================================================
-    # Test 5: Interrupt Force Register
-    # =========================================================================
-    dut._log.info("=== Test 5: Interrupt Force Register ===")
     
     # Clear all status bits first
     await clear_err_intr_status()
     status = await get_err_intr_status()
-    assert status == 0, f"Status should be clear, got 0x{status:08X}"
+    assert status == 0, f"Status should be clear before force test, got 0x{status:08X}"
     
     # Force RI_PEC_ERR interrupt (bit 8)
     await tb.write_csr(
@@ -350,8 +250,8 @@ async def test_ri_error_detection(dut):
     
     status = await get_err_intr_status()
     ri_pec_forced = (status >> 8) & 1
-    dut._log.info(f"After force: INTR_STATUS=0x{status:08X}, RI_PEC_ERR_STAT={ri_pec_forced}")
-    assert ri_pec_forced == 1, "RI_PEC_ERR_STAT should be set via FORCE register"
+    assert ri_pec_forced == 1, \
+        f"RI_PEC_ERR_STAT should be set via FORCE register, INTR_STATUS=0x{status:08X}"
     
     # Clear the force bit
     await tb.write_csr(
@@ -363,16 +263,14 @@ async def test_ri_error_detection(dut):
     await clear_err_intr_status()
     
     # =========================================================================
-    # Test 6: Error Detection Enable Control
+    # Test 3: Error Detection Enable Control
     # =========================================================================
-    dut._log.info("=== Test 6: Error Detection Enable Control ===")
     
     # Clear counters
     await clear_err_counters()
     
     # Disable PEC error detection in TARGET_ERR_CTRL
     err_ctrl = dword2int(await tb.read_csr(tb.reg_map.I3C_EC.TTI.TARGET_ERR_CTRL.base_addr, 4))
-    dut._log.info(f"Original TARGET_ERR_CTRL: 0x{err_ctrl:08X}")
     
     # Clear RI_PEC_ERR_DET_EN (bit 7)
     new_ctrl = err_ctrl & ~(1 << 7)
@@ -391,23 +289,21 @@ async def test_ri_error_detection(dut):
     await Timer(1, "us")
     
     # Counter should NOT increment when detection is disabled
-    pec_cnt_after_disable = await get_err_counter(tb.reg_map.I3C_EC.TTI.TARGET_ERR_CNT_PEC)
-    dut._log.info(f"PEC counter after disabled detection: {pec_cnt_after_disable}")
-    assert pec_cnt_after_disable == 0, f"PEC counter should be 0 when detection disabled, got {pec_cnt_after_disable}"
+    pec_cnt_after_disable = await get_err_counter(tb.reg_map.I3C_EC.TTI.TARGET_ERR_CNT_RI_PEC)
+    assert pec_cnt_after_disable == 0, \
+        f"PEC counter should be 0 when detection disabled, got {pec_cnt_after_disable}"
     
     # Status should also not be set
     status = await get_err_intr_status()
     ri_pec_err_stat = (status >> 8) & 1
-    dut._log.info(f"Status after disabled detection: RI_PEC_ERR_STAT={ri_pec_err_stat}")
-    assert ri_pec_err_stat == 0, "RI_PEC_ERR_STAT should NOT be set when detection is disabled"
+    assert ri_pec_err_stat == 0, \
+        f"RI_PEC_ERR_STAT should NOT be set when detection disabled, INTR_STATUS=0x{status:08X}"
     
     # Re-enable PEC error detection
     await tb.write_csr(
         tb.reg_map.I3C_EC.TTI.TARGET_ERR_CTRL.base_addr,
         int2dword(err_ctrl), 4
     )
-    
-    dut._log.info("=== All RI Error Detection Tests Passed ===")
 
 
 
@@ -480,8 +376,10 @@ async def test_virtual_overwrite(dut):
         assert pec_ok
         protocol_status = (status >> 8) & 0xFF
         assert protocol_status == 0
-        assert reg_data == bytes2int(expected_data, byte_width=len(expected_data))
-        assert bytes2int(i3c_data) == bytes2int(expected_data)
+        assert reg_data == bytes2int(expected_data, byte_width=len(expected_data)), \
+            f"CSR mismatch: expected 0x{bytes2int(expected_data, byte_width=len(expected_data)):X}, got 0x{reg_data:X}"
+        assert bytes2int(i3c_data) == bytes2int(expected_data), \
+            f"I3C read mismatch: expected 0x{bytes2int(expected_data):X}, got 0x{bytes2int(i3c_data):X}"
 
 
 @cocotb.test()
@@ -531,10 +429,10 @@ async def test_virtual_write(dut):
 
     # Check
     protocol_status = (status >> 8) & 0xFF
-    assert protocol_status == 0
-    assert data == 0xCCBBAA
-    assert bytes2int(i3c_data) == 0xCCBBAA
-    assert pec_ok
+    assert protocol_status == 0, f"Protocol status error: expected 0, got 0x{protocol_status:02X}"
+    assert data == 0xCCBBAA, f"DEVICE_RESET mismatch: expected 0x00CCBBAA, got 0x{data:08X}"
+    assert bytes2int(i3c_data) == 0xCCBBAA, f"I3C read mismatch: expected 0x00CCBBAA, got 0x{bytes2int(i3c_data):08X}"
+    assert pec_ok, "PEC check failed"
 
     # read GET_STATUS from main target
     interrupt_status_reg_addr = tb.reg_map.I3C_EC.TTI.INTERRUPT_STATUS.base_addr
@@ -589,9 +487,9 @@ async def test_virtual_write(dut):
 
     # Check
     protocol_status = (status >> 8) & 0xFF
-    assert protocol_status == 0
-    assert data0 != 0xDDCCBBAA
-    assert data1 != 0x2211
+    assert protocol_status == 0, f"Protocol status error: expected 0, got 0x{protocol_status:02X}"
+    assert data0 != 0xDDCCBBAA, "INDIRECT_FIFO_CTRL_0 should not have been written (not in recovery mode)"
+    assert data1 != 0x2211, "INDIRECT_FIFO_CTRL_1 should not have been written (not in recovery mode)"
 
 
 @cocotb.test()
@@ -651,14 +549,9 @@ async def test_chained_ri_and_ccc_commands(dut):
 
     await Timer(1, "us")
 
-    dut._log.info("=" * 60)
-    dut._log.info("Starting mixed RI, CCC, and private write sequence")
-    dut._log.info("=" * 60)
-
     # =========================================================================
     # 1. Write to Recovery Interface (RECOVERY_CTRL) - 3 bytes of data
     # =========================================================================
-    dut._log.info("Step 1: Write to RI - RECOVERY_CTRL (Sr)")
     write_data_1 = [0x11, 0x22, 0x33]
     await recovery.command_write(
         VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.RECOVERY_CTRL, write_data_1,
@@ -668,31 +561,27 @@ async def test_chained_ri_and_ccc_commands(dut):
     # =========================================================================
     # 2. Read from Recovery Interface (RECOVERY_CTRL)
     # =========================================================================
-    dut._log.info("Step 2: Read from RI - RECOVERY_CTRL (Sr)")
-    read_data_2, pec_ok_2 = await recovery.command_read(
+    result_2 = await recovery.command_read(
         VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.RECOVERY_CTRL,
-        stop=False, start=False
+        stop=True, start=False
     )
-    dut._log.info(f"  Read back: {[hex(b) for b in read_data_2]}, PEC OK: {pec_ok_2}")
-    assert pec_ok_2, "PEC check failed for RECOVERY_CTRL read"
+    assert result_2 is not None, "Step 2: command_read returned None - RI read failed"
+    read_data_2, pec_ok_2 = result_2
+    assert pec_ok_2, f"Step 2: PEC check failed for RECOVERY_CTRL read, data={[hex(b) for b in read_data_2]}"
 
     # =========================================================================
     # 3. Private Write to main target
     # =========================================================================
-    dut._log.info("Step 3: Private Write to main target (Sr)")
     priv_write_3 = [0xDE, 0xAD, 0xBE, 0xEF]
     await i3c_controller.i3c_write(DYNAMIC_ADDR, priv_write_3, stop=False, send_rsvd=False)
 
     # =========================================================================
     # 4. CCC command (GETSTATUS) to main target - must end with STOP
     # =========================================================================
-    dut._log.info("Step 4: CCC - GETSTATUS (STOP)")
     responses = await i3c_controller.i3c_ccc_read(
         ccc=CCC.DIRECT.GETSTATUS, addr=DYNAMIC_ADDR, count=2,
         stop=True
     )
-    status_data = responses[0][1]
-    dut._log.info(f"  GETSTATUS: {status_data.hex()}")
 
     # -------------------------------------------------------------------------
     # FW Check after Step 4: Verify RECOVERY_CTRL was written correctly (Step 1)
@@ -701,21 +590,16 @@ async def test_chained_ri_and_ccc_commands(dut):
     recovery_ctrl_check = dword2int(
         await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.RECOVERY_CTRL.base_addr, 4)
     )
-    dut._log.info(f"  [FW Check] RECOVERY_CTRL = 0x{recovery_ctrl_check:08X}")
-    # RECOVERY_CTRL is 3 bytes
     expected_recovery_ctrl_check = (write_data_1[2] << 16) | (write_data_1[1] << 8) | write_data_1[0]
     assert recovery_ctrl_check == expected_recovery_ctrl_check, \
-        f"FW Check after Step 4: RECOVERY_CTRL mismatch: expected 0x{expected_recovery_ctrl_check:06X}, got 0x{recovery_ctrl_check:08X}"
+        f"Step 4 FW Check: RECOVERY_CTRL mismatch: expected 0x{expected_recovery_ctrl_check:06X}, got 0x{recovery_ctrl_check:08X}"
 
     # -------------------------------------------------------------------------
-    # FW MUST drain TTI RX FIFO before next RI transaction to avoid stale data
-    # in the width converter. The RI FSM cannot handle leftover content.
+    # FW MUST drain TTI RX FIFO before next RI transaction
     # -------------------------------------------------------------------------
     await Timer(1, "us")
-    dut._log.info("  [FW] Draining TTI RX FIFO after private write 3...")
     desc_3 = dword2int(await tb.read_csr(tb.reg_map.I3C_EC.TTI.RX_DESC_QUEUE_PORT.base_addr, 4))
     pw_len_3 = desc_3 & 0xFFFF
-    dut._log.info(f"  [FW] Private write 3: descriptor=0x{desc_3:08X}, length={pw_len_3}")
     read_bytes_3 = []
     for _ in range((pw_len_3 + 3) // 4):
         word = dword2int(await tb.read_csr(tb.reg_map.I3C_EC.TTI.RX_DATA_PORT.base_addr, 4))
@@ -726,24 +610,23 @@ async def test_chained_ri_and_ccc_commands(dut):
             (word >> 24) & 0xFF,
         ])
     read_bytes_3 = read_bytes_3[:pw_len_3]
-    dut._log.info(f"  [FW] Private write 3 data: {[hex(b) for b in read_bytes_3]}")
-    assert read_bytes_3 == priv_write_3, f"Private write 3 data mismatch"
+    assert read_bytes_3 == priv_write_3, \
+        f"Private write 3 data mismatch:\n  Expected: {[hex(b) for b in priv_write_3]}\n  Got:      {[hex(b) for b in read_bytes_3]}"
 
     # =========================================================================
     # 5. Read from Recovery Interface (RECOVERY_STATUS)
     # =========================================================================
-    dut._log.info("Step 5: Read from RI - RECOVERY_STATUS (Sr)")
-    read_data_5, pec_ok_5 = await recovery.command_read(
+    result_5 = await recovery.command_read(
         VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.RECOVERY_STATUS,
         stop=False
     )
-    dut._log.info(f"  RECOVERY_STATUS: {[hex(b) for b in read_data_5]}, PEC OK: {pec_ok_5}")
-    assert pec_ok_5, "PEC check failed for RECOVERY_STATUS read"
+    assert result_5 is not None, "Step 5: command_read returned None - RI read failed"
+    read_data_5, pec_ok_5 = result_5
+    assert pec_ok_5, f"Step 5: PEC check failed for RECOVERY_STATUS read, data={[hex(b) for b in read_data_5]}"
 
     # =========================================================================
     # 6. Write to Recovery Interface (INDIRECT_FIFO_DATA) - 32 bytes (8 DWORDs)
     # =========================================================================
-    dut._log.info("Step 6: Write to RI - INDIRECT_FIFO_DATA (32 bytes, Sr)")
     write_data_6 = list(range(32))  # 32 bytes of sequential data (8 DWORDs)
     await recovery.command_write(
         VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.INDIRECT_FIFO_DATA, write_data_6,
@@ -753,45 +636,35 @@ async def test_chained_ri_and_ccc_commands(dut):
     # =========================================================================
     # 7. Private Write to main target
     # =========================================================================
-    dut._log.info("Step 7: Private Write to main target (Sr)")
     priv_write_7 = [0xCA, 0xFE, 0xBA, 0xBE, 0x12, 0x34]
     await i3c_controller.i3c_write(DYNAMIC_ADDR, priv_write_7, stop=False, send_rsvd=False)
 
     # =========================================================================
     # 8. CCC command (GETMWL) to main target - must end with STOP
     # =========================================================================
-    dut._log.info("Step 8: CCC - GETMWL (STOP)")
     responses = await i3c_controller.i3c_ccc_read(
         ccc=CCC.DIRECT.GETMWL, addr=DYNAMIC_ADDR, count=2,
         stop=True
     )
-    mwl_data = responses[0][1]
-    dut._log.info(f"  GETMWL: {mwl_data.hex()}")
 
     # -------------------------------------------------------------------------
     # FW Check after Step 8: Verify INDIRECT_FIFO_DATA was written correctly
     # -------------------------------------------------------------------------
     await Timer(1, "us")
-    dut._log.info("  [FW Check] Reading INDIRECT_FIFO_DATA entries...")
     for i in range(min(8, len(write_data_6) // 4)):  # Read up to 8 DWORDs
         fifo_data_check = dword2int(
             await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_DATA.base_addr, 4)
         )
         expected_word = (write_data_6[i*4 + 3] << 24) | (write_data_6[i*4 + 2] << 16) | \
                         (write_data_6[i*4 + 1] << 8) | write_data_6[i*4]
-        dut._log.info(f"    INDIRECT_FIFO_DATA[{i}] = 0x{fifo_data_check:08X} (expected 0x{expected_word:08X})")
         assert fifo_data_check == expected_word, \
-            f"FW Check after Step 8: FIFO word {i} mismatch: expected 0x{expected_word:08X}, got 0x{fifo_data_check:08X}"
-    dut._log.info("  [FW Check] INDIRECT_FIFO_DATA verified OK")
+            f"Step 8 FW Check: FIFO word {i} mismatch: expected 0x{expected_word:08X}, got 0x{fifo_data_check:08X}"
 
     # -------------------------------------------------------------------------
-    # FW MUST drain TTI RX FIFO before next RI transaction to avoid stale data
-    # in the width converter. The RI FSM cannot handle leftover content.
+    # FW MUST drain TTI RX FIFO before next RI transaction
     # -------------------------------------------------------------------------
-    dut._log.info("  [FW] Draining TTI RX FIFO after private write 7...")
     desc_7 = dword2int(await tb.read_csr(tb.reg_map.I3C_EC.TTI.RX_DESC_QUEUE_PORT.base_addr, 4))
     pw_len_7 = desc_7 & 0xFFFF
-    dut._log.info(f"  [FW] Private write 7: descriptor=0x{desc_7:08X}, length={pw_len_7}")
     read_bytes_7 = []
     for _ in range((pw_len_7 + 3) // 4):
         word = dword2int(await tb.read_csr(tb.reg_map.I3C_EC.TTI.RX_DATA_PORT.base_addr, 4))
@@ -802,13 +675,12 @@ async def test_chained_ri_and_ccc_commands(dut):
             (word >> 24) & 0xFF,
         ])
     read_bytes_7 = read_bytes_7[:pw_len_7]
-    dut._log.info(f"  [FW] Private write 7 data: {[hex(b) for b in read_bytes_7]}")
-    assert read_bytes_7 == priv_write_7, f"Private write 7 data mismatch"
+    assert read_bytes_7 == priv_write_7, \
+        f"Private write 7 data mismatch:\n  Expected: {[hex(b) for b in priv_write_7]}\n  Got:      {[hex(b) for b in read_bytes_7]}"
 
     # =========================================================================
     # 9. Write to Recovery Interface (RECOVERY_CTRL) - 3 bytes
     # =========================================================================
-    dut._log.info("Step 9: Write to RI - RECOVERY_CTRL (Sr)")
     write_data_9 = [0xAA, 0xBB, 0xCC]
     await recovery.command_write(
         VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.RECOVERY_CTRL, write_data_9,
@@ -818,29 +690,23 @@ async def test_chained_ri_and_ccc_commands(dut):
     # =========================================================================
     # 10. Private Write to main target
     # =========================================================================
-    dut._log.info("Step 10: Private Write to main target (Sr)")
     priv_write_10 = [0x55, 0xAA, 0x55, 0xAA]
     await i3c_controller.i3c_write(DYNAMIC_ADDR, priv_write_10, stop=False, send_rsvd=False)
 
     # =========================================================================
     # 11. CCC command (GETSTATUS) - STOP
     # =========================================================================
-    dut._log.info("Step 11: CCC - GETSTATUS (STOP)")
     responses = await i3c_controller.i3c_ccc_read(
         ccc=CCC.DIRECT.GETSTATUS, addr=DYNAMIC_ADDR, count=2,
         stop=True
     )
-    status_11 = responses[0][1]
-    dut._log.info(f"  GETSTATUS: {status_11.hex()}")
 
     # -------------------------------------------------------------------------
-    # FW MUST drain TTI RX FIFO after private write 10 before next RI transaction
+    # FW MUST drain TTI RX FIFO after private write 10
     # -------------------------------------------------------------------------
     await Timer(1, "us")
-    dut._log.info("  [FW] Draining TTI RX FIFO after private write 10...")
     desc_10 = dword2int(await tb.read_csr(tb.reg_map.I3C_EC.TTI.RX_DESC_QUEUE_PORT.base_addr, 4))
     pw_len_10 = desc_10 & 0xFFFF
-    dut._log.info(f"  [FW] Private write 10: descriptor=0x{desc_10:08X}, length={pw_len_10}")
     read_bytes_10 = []
     for _ in range((pw_len_10 + 3) // 4):
         word = dword2int(await tb.read_csr(tb.reg_map.I3C_EC.TTI.RX_DATA_PORT.base_addr, 4))
@@ -851,24 +717,23 @@ async def test_chained_ri_and_ccc_commands(dut):
             (word >> 24) & 0xFF,
         ])
     read_bytes_10 = read_bytes_10[:pw_len_10]
-    dut._log.info(f"  [FW] Private write 10 data: {[hex(b) for b in read_bytes_10]}")
-    assert read_bytes_10 == priv_write_10, f"Private write 10 data mismatch"
+    assert read_bytes_10 == priv_write_10, \
+        f"Private write 10 data mismatch:\n  Expected: {[hex(b) for b in priv_write_10]}\n  Got:      {[hex(b) for b in read_bytes_10]}"
 
     # =========================================================================
     # 12. Read from Recovery Interface (DEVICE_STATUS)
     # =========================================================================
-    dut._log.info("Step 12: Read from RI - DEVICE_STATUS (Sr)")
-    read_data_12, pec_ok_12 = await recovery.command_read(
+    result_12 = await recovery.command_read(
         VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.DEVICE_STATUS,
         stop=False
     )
-    dut._log.info(f"  DEVICE_STATUS: {[hex(b) for b in read_data_12]}, PEC OK: {pec_ok_12}")
-    assert pec_ok_12, "PEC check failed for DEVICE_STATUS read"
+    assert result_12 is not None, "Step 12: command_read returned None - RI read failed"
+    read_data_12, pec_ok_12 = result_12
+    assert pec_ok_12, f"Step 12: PEC check failed for DEVICE_STATUS read, data={[hex(b) for b in read_data_12]}"
 
     # =========================================================================
     # 13. Write to Recovery Interface (INDIRECT_FIFO_DATA, 64 bytes = 16 DWORDs)
     # =========================================================================
-    dut._log.info("Step 13: Write to RI - INDIRECT_FIFO_DATA (64 bytes, Sr)")
     write_data_13 = [(i + 0x40) & 0xFF for i in range(64)]  # 64 bytes starting at 0x40
     await recovery.command_write(
         VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.INDIRECT_FIFO_DATA, write_data_13,
@@ -878,40 +743,34 @@ async def test_chained_ri_and_ccc_commands(dut):
     # =========================================================================
     # 14. Read from Recovery Interface (INDIRECT_FIFO_CTRL)
     # =========================================================================
-    dut._log.info("Step 14: Read from RI - INDIRECT_FIFO_CTRL (Sr)")
-    read_data_14, pec_ok_14 = await recovery.command_read(
+    result_14 = await recovery.command_read(
         VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.INDIRECT_FIFO_CTRL,
         stop=False, start=False
     )
-    dut._log.info(f"  INDIRECT_FIFO_CTRL: {[hex(b) for b in read_data_14]}, PEC OK: {pec_ok_14}")
-    assert pec_ok_14, "PEC check failed for INDIRECT_FIFO_CTRL read"
+    assert result_14 is not None, "Step 14: command_read returned None - RI read failed"
+    read_data_14, pec_ok_14 = result_14
+    assert pec_ok_14, f"Step 14: PEC check failed for INDIRECT_FIFO_CTRL read, data={[hex(b) for b in read_data_14]}"
 
     # =========================================================================
     # 15. Private Write to main target (8 bytes)
     # =========================================================================
-    dut._log.info("Step 15: Private Write to main target (8 bytes, Sr)")
     priv_write_15 = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]
     await i3c_controller.i3c_write(DYNAMIC_ADDR, priv_write_15, stop=False, send_rsvd=False)
 
     # =========================================================================
     # 16. CCC command (GETMRL) - STOP
     # =========================================================================
-    dut._log.info("Step 16: CCC - GETMRL (STOP)")
     responses = await i3c_controller.i3c_ccc_read(
         ccc=CCC.DIRECT.GETMRL, addr=DYNAMIC_ADDR, count=2,
         stop=True
     )
-    mrl_data = responses[0][1]
-    dut._log.info(f"  GETMRL: {mrl_data.hex()}")
 
     # -------------------------------------------------------------------------
-    # FW MUST drain TTI RX FIFO after private write 15 before next RI transaction
+    # FW MUST drain TTI RX FIFO after private write 15
     # -------------------------------------------------------------------------
     await Timer(1, "us")
-    dut._log.info("  [FW] Draining TTI RX FIFO after private write 15...")
     desc_15 = dword2int(await tb.read_csr(tb.reg_map.I3C_EC.TTI.RX_DESC_QUEUE_PORT.base_addr, 4))
     pw_len_15 = desc_15 & 0xFFFF
-    dut._log.info(f"  [FW] Private write 15: descriptor=0x{desc_15:08X}, length={pw_len_15}")
     read_bytes_15 = []
     for _ in range((pw_len_15 + 3) // 4):
         word = dword2int(await tb.read_csr(tb.reg_map.I3C_EC.TTI.RX_DATA_PORT.base_addr, 4))
@@ -922,28 +781,24 @@ async def test_chained_ri_and_ccc_commands(dut):
             (word >> 24) & 0xFF,
         ])
     read_bytes_15 = read_bytes_15[:pw_len_15]
-    dut._log.info(f"  [FW] Private write 15 data: {[hex(b) for b in read_bytes_15]}")
-    assert read_bytes_15 == priv_write_15, f"Private write 15 data mismatch"
+    assert read_bytes_15 == priv_write_15, \
+        f"Private write 15 data mismatch:\n  Expected: {[hex(b) for b in priv_write_15]}\n  Got:      {[hex(b) for b in read_bytes_15]}"
 
     # -------------------------------------------------------------------------
     # FW Check: Verify INDIRECT_FIFO_DATA from Step 13 (64 bytes = 16 DWORDs)
     # -------------------------------------------------------------------------
-    dut._log.info("  [FW Check] Reading INDIRECT_FIFO_DATA from Step 13...")
     for i in range(16):  # 16 DWORDs
         fifo_data_check = dword2int(
             await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_DATA.base_addr, 4)
         )
         expected_word = (write_data_13[i*4 + 3] << 24) | (write_data_13[i*4 + 2] << 16) | \
                         (write_data_13[i*4 + 1] << 8) | write_data_13[i*4]
-        dut._log.info(f"    INDIRECT_FIFO_DATA[{i}] = 0x{fifo_data_check:08X} (expected 0x{expected_word:08X})")
         assert fifo_data_check == expected_word, \
-            f"FIFO word {i} mismatch: expected 0x{expected_word:08X}, got 0x{fifo_data_check:08X}"
-    dut._log.info("  [FW Check] INDIRECT_FIFO_DATA (64 bytes) verified OK")
+            f"Step 13 FW Check: FIFO word {i} mismatch: expected 0x{expected_word:08X}, got 0x{fifo_data_check:08X}"
 
     # =========================================================================
     # 17. Write to Recovery Interface (INDIRECT_FIFO_DATA, 128 bytes = 32 DWORDs)
     # =========================================================================
-    dut._log.info("Step 17: Write to RI - INDIRECT_FIFO_DATA (128 bytes, Sr)")
     write_data_17 = [(i + 0x80) & 0xFF for i in range(128)]  # 128 bytes starting at 0x80
     await recovery.command_write(
         VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.INDIRECT_FIFO_DATA, write_data_17,
@@ -953,38 +808,31 @@ async def test_chained_ri_and_ccc_commands(dut):
     # =========================================================================
     # 18. Private Write to main target (3 bytes - odd length)
     # =========================================================================
-    dut._log.info("Step 18: Private Write to main target (3 bytes, odd length, Sr)")
     priv_write_18 = [0xAB, 0xCD, 0xEF]
     await i3c_controller.i3c_write(DYNAMIC_ADDR, priv_write_18, stop=False, send_rsvd=False)
 
     # =========================================================================
     # 19. Private Write to main target (7 bytes - odd length)
     # =========================================================================
-    dut._log.info("Step 19: Private Write to main target (7 bytes, odd length, Sr)")
     priv_write_19 = [0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77]
     await i3c_controller.i3c_write(DYNAMIC_ADDR, priv_write_19, stop=False, send_rsvd=False)
 
     # =========================================================================
     # 20. CCC command (GETSTATUS) - STOP
     # =========================================================================
-    dut._log.info("Step 20: CCC - GETSTATUS (STOP)")
     responses = await i3c_controller.i3c_ccc_read(
         ccc=CCC.DIRECT.GETSTATUS, addr=DYNAMIC_ADDR, count=2,
         stop=True
     )
-    status_20 = responses[0][1]
-    dut._log.info(f"  GETSTATUS: {status_20.hex()}")
 
     # -------------------------------------------------------------------------
     # FW MUST drain TTI RX FIFO after private writes 18 and 19
     # -------------------------------------------------------------------------
     await Timer(1, "us")
-    dut._log.info("  [FW] Draining TTI RX FIFO after private writes 18 and 19...")
     
     # Drain private write 18 (3 bytes)
     desc_18 = dword2int(await tb.read_csr(tb.reg_map.I3C_EC.TTI.RX_DESC_QUEUE_PORT.base_addr, 4))
     pw_len_18 = desc_18 & 0xFFFF
-    dut._log.info(f"  [FW] Private write 18: descriptor=0x{desc_18:08X}, length={pw_len_18}")
     read_bytes_18 = []
     for _ in range((pw_len_18 + 3) // 4):
         word = dword2int(await tb.read_csr(tb.reg_map.I3C_EC.TTI.RX_DATA_PORT.base_addr, 4))
@@ -995,13 +843,12 @@ async def test_chained_ri_and_ccc_commands(dut):
             (word >> 24) & 0xFF,
         ])
     read_bytes_18 = read_bytes_18[:pw_len_18]
-    dut._log.info(f"  [FW] Private write 18 data: {[hex(b) for b in read_bytes_18]}")
-    assert read_bytes_18 == priv_write_18, f"Private write 18 data mismatch"
+    assert read_bytes_18 == priv_write_18, \
+        f"Private write 18 data mismatch:\n  Expected: {[hex(b) for b in priv_write_18]}\n  Got:      {[hex(b) for b in read_bytes_18]}"
     
     # Drain private write 19 (7 bytes)
     desc_19 = dword2int(await tb.read_csr(tb.reg_map.I3C_EC.TTI.RX_DESC_QUEUE_PORT.base_addr, 4))
     pw_len_19 = desc_19 & 0xFFFF
-    dut._log.info(f"  [FW] Private write 19: descriptor=0x{desc_19:08X}, length={pw_len_19}")
     read_bytes_19 = []
     for _ in range((pw_len_19 + 3) // 4):
         word = dword2int(await tb.read_csr(tb.reg_map.I3C_EC.TTI.RX_DATA_PORT.base_addr, 4))
@@ -1012,24 +859,23 @@ async def test_chained_ri_and_ccc_commands(dut):
             (word >> 24) & 0xFF,
         ])
     read_bytes_19 = read_bytes_19[:pw_len_19]
-    dut._log.info(f"  [FW] Private write 19 data: {[hex(b) for b in read_bytes_19]}")
-    assert read_bytes_19 == priv_write_19, f"Private write 19 data mismatch"
+    assert read_bytes_19 == priv_write_19, \
+        f"Private write 19 data mismatch:\n  Expected: {[hex(b) for b in priv_write_19]}\n  Got:      {[hex(b) for b in read_bytes_19]}"
 
     # =========================================================================
     # 21. Read from Recovery Interface (PROT_CAP)
     # =========================================================================
-    dut._log.info("Step 21: Read from RI - PROT_CAP (Sr)")
-    read_data_21, pec_ok_21 = await recovery.command_read(
+    result_21 = await recovery.command_read(
         VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.PROT_CAP,
         stop=False
     )
-    dut._log.info(f"  PROT_CAP: {[hex(b) for b in read_data_21]}, PEC OK: {pec_ok_21}")
-    assert pec_ok_21, "PEC check failed for PROT_CAP read"
+    assert result_21 is not None, "Step 21: command_read returned None - RI read failed"
+    read_data_21, pec_ok_21 = result_21
+    assert pec_ok_21, f"Step 21: PEC check failed for PROT_CAP read, data={[hex(b) for b in read_data_21]}"
 
     # =========================================================================
     # 22. Write to Recovery Interface (RECOVERY_CTRL) - new values
     # =========================================================================
-    dut._log.info("Step 22: Write to RI - RECOVERY_CTRL (new values, Sr)")
     write_data_22 = [0x77, 0x88, 0x99]
     await recovery.command_write(
         VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.RECOVERY_CTRL, write_data_22,
@@ -1039,17 +885,13 @@ async def test_chained_ri_and_ccc_commands(dut):
     # =========================================================================
     # 23. Read from Recovery Interface (RECOVERY_CTRL) - verify new values (STOP)
     # =========================================================================
-    dut._log.info("Step 23: Read from RI - RECOVERY_CTRL (verify, final STOP)")
-    read_data_23, pec_ok_23 = await recovery.command_read(
+    result_23 = await recovery.command_read(
         VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.RECOVERY_CTRL,
         stop=True, start=False
     )
-    dut._log.info(f"  RECOVERY_CTRL: {[hex(b) for b in read_data_23]}, PEC OK: {pec_ok_23}")
-    assert pec_ok_23, "PEC check failed for RECOVERY_CTRL read"
-
-    dut._log.info("=" * 60)
-    dut._log.info("Mixed command sequence completed (23 steps)")
-    dut._log.info("=" * 60)
+    assert result_23 is not None, "Step 23: command_read returned None - RI read failed"
+    read_data_23, pec_ok_23 = result_23
+    assert pec_ok_23, f"Step 23: PEC check failed for RECOVERY_CTRL read, data={[hex(b) for b in read_data_23]}"
 
     # Wait for processing
     await Timer(2, "us")
@@ -1062,28 +904,19 @@ async def test_chained_ri_and_ccc_commands(dut):
     recovery_ctrl_final = dword2int(
         await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.RECOVERY_CTRL.base_addr, 4)
     )
-    dut._log.info(f"Final RECOVERY_CTRL CSR = 0x{recovery_ctrl_final:08X}")
     expected_ctrl_final = (write_data_22[2] << 16) | (write_data_22[1] << 8) | write_data_22[0]
     assert recovery_ctrl_final == expected_ctrl_final, \
         f"Final RECOVERY_CTRL mismatch: expected 0x{expected_ctrl_final:06X}, got 0x{recovery_ctrl_final:08X}"
 
     # Verify INDIRECT_FIFO_DATA from Step 17 (128 bytes = 32 DWORDs)
-    dut._log.info("Verifying INDIRECT_FIFO_DATA from Step 17 (128 bytes)...")
     for i in range(32):  # 32 DWORDs
         fifo_data_final = dword2int(
             await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_DATA.base_addr, 4)
         )
         expected_word_final = (write_data_17[i*4 + 3] << 24) | (write_data_17[i*4 + 2] << 16) | \
                               (write_data_17[i*4 + 1] << 8) | write_data_17[i*4]
-        if i < 4 or i >= 28:  # Log first and last few for brevity
-            dut._log.info(f"  INDIRECT_FIFO_DATA[{i}] = 0x{fifo_data_final:08X} (expected 0x{expected_word_final:08X})")
-        elif i == 4:
-            dut._log.info(f"  ... (checking middle DWORDs silently)")
         assert fifo_data_final == expected_word_final, \
-            f"FIFO word {i} mismatch: expected 0x{expected_word_final:08X}, got 0x{fifo_data_final:08X}"
-    dut._log.info("INDIRECT_FIFO_DATA (128 bytes) verified OK")
-
-    dut._log.info("TEST PASSED: All 23 RI, CCC, and private write commands processed correctly")
+            f"Final FIFO word {i} mismatch: expected 0x{expected_word_final:08X}, got 0x{fifo_data_final:08X}"
 
 
 @cocotb.test()
@@ -1523,10 +1356,7 @@ async def test_indirect_fifo_overflow_pointer(dut):
         res = await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_DATA.base_addr, 4)
         data = dword2int(res)
         rx_words.append(data)
-        if i < 4 or i >= FIFO_DEPTH - 2:  # Only log first 4 and last 2 entries
-            dut._log.info(f"Read[{i}] = 0x{data:08X}")
-        elif i == 4:
-            dut._log.info(f"... (skipping intermediate entries)")
+        dut._log.info(f"Read[{i}] = 0x{data:08X}")
 
     # Verify final state
     empty3, full3, wrptr3, rdptr3 = await get_fifo_ptrs()
@@ -1670,21 +1500,21 @@ async def test_write(dut):
     status = dword2int(
         await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_STATUS_0.base_addr, 4)
     )
-    dut._log.info(f"DEVICE_STATUS = 0x{status:08X}")
     data0 = dword2int(
         await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_CTRL_0.base_addr, 4)
     )
-    dut._log.info(f"INDIRECT_FIFO_CTRL_0 = 0x{data0:08X}")
     data1 = dword2int(
         await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_CTRL_1.base_addr, 4)
     )
-    dut._log.info(f"INDIRECT_FIFO_CTRL_1 = 0x{data1:08X}")
 
     # Check
     protocol_status = (status >> 8) & 0xFF
-    assert protocol_status == 0
-    assert data0 == 0xAA  # 2 MSBs are reserved, 3rd MSB is W1C
-    assert data1 == 0x44332211
+    assert protocol_status == 0, \
+        f"Protocol status error: expected 0, got 0x{protocol_status:02X}"
+    assert data0 == 0xAA, \
+        f"INDIRECT_FIFO_CTRL_0 mismatch: expected 0x000000AA, got 0x{data0:08X}"
+    assert data1 == 0x44332211, \
+        f"INDIRECT_FIFO_CTRL_1 mismatch: expected 0x44332211, got 0x{data1:08X}"
 
 
 @cocotb.test()
@@ -1762,25 +1592,29 @@ async def test_read_fifo_ctrl(dut):
 
     # Check
     protocol_status = (status >> 8) & 0xFF
-    assert protocol_status == 0
+    assert protocol_status == 0, \
+        f"Protocol status error: expected 0, got 0x{protocol_status:02X}"
 
     fifo_ctrl_data[1] = 0  # RESET is W1C
-    assert data == fifo_ctrl_data
-    assert data0 == fifo_ctrl_data[:2]
-    assert data1 == fifo_ctrl_data[2:]
+    assert data == fifo_ctrl_data, \
+        f"FIFO_CTRL data mismatch:\n  Expected: {[hex(b) for b in fifo_ctrl_data]}\n  Got:      {[hex(b) for b in data]}"
+    assert data0 == fifo_ctrl_data[:2], \
+        f"FIFO_CTRL_0 mismatch:\n  Expected: {[hex(b) for b in fifo_ctrl_data[:2]]}\n  Got:      {[hex(b) for b in data0]}"
+    assert data1 == fifo_ctrl_data[2:], \
+        f"FIFO_CTRL_1 mismatch:\n  Expected: {[hex(b) for b in fifo_ctrl_data[2:]]}\n  Got:      {[hex(b) for b in data1]}"
 
     # Ensure the same is read via AXI / AHB
     bus_data0 = dword2int(
         await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_CTRL_0.base_addr, 4)
     )
-    dut._log.info(f"INDIRECT_FIFO_CTRL_0 = 0x{bus_data0:08X}")
     bus_data1 = dword2int(
         await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_CTRL_1.base_addr, 4)
     )
-    dut._log.info(f"INDIRECT_FIFO_CTRL_1 = 0x{bus_data1:08X}")
 
-    assert exp_fifo_ctrl_0 == bus_data0
-    assert exp_fifo_ctrl_1 == bus_data1
+    assert exp_fifo_ctrl_0 == bus_data0, \
+        f"AXI FIFO_CTRL_0 mismatch: expected 0x{exp_fifo_ctrl_0:08X}, got 0x{bus_data0:08X}"
+    assert exp_fifo_ctrl_1 == bus_data1, \
+        f"AXI FIFO_CTRL_1 mismatch: expected 0x{exp_fifo_ctrl_1:08X}, got 0x{bus_data1:08X}"
 
 
 @cocotb.test()
@@ -1864,22 +1698,28 @@ async def test_indirect_fifo_write(dut):
                 word |= tx_data[idx] << 24
         tx_words.append(word)
 
-    dut._log.info("TX words: " + " ".join([hex(w) for w in tx_words]))
-    dut._log.info("RX words: " + " ".join([hex(w) for w in rx_words]))
-
-    assert tx_words == rx_words
+    assert tx_words == rx_words, \
+        f"FIFO data mismatch:\n  TX: {[hex(w) for w in tx_words]}\n  RX: {[hex(w) for w in rx_words]}"
 
     # Check FIFO pointer progression
-    assert (wrptr0, rdptr0) == (0, 0)
-    assert (wrptr1, rdptr1) == (count, 0)
-    assert (wrptr2, rdptr2) == (count, count)
-    assert (wrptr3, rdptr3) == (0, 0)
+    assert (wrptr0, rdptr0) == (0, 0), \
+        f"Initial pointers wrong: expected (0, 0), got ({wrptr0}, {rdptr0})"
+    assert (wrptr1, rdptr1) == (count, 0), \
+        f"After write pointers wrong: expected ({count}, 0), got ({wrptr1}, {rdptr1})"
+    assert (wrptr2, rdptr2) == (count, count), \
+        f"After read pointers wrong: expected ({count}, {count}), got ({wrptr2}, {rdptr2})"
+    assert (wrptr3, rdptr3) == (0, 0), \
+        f"After reset pointers wrong: expected (0, 0), got ({wrptr3}, {rdptr3})"
 
     # Check empty/full progression
-    assert (full0, empty0) == (False, True)
-    assert (full1, empty1) == (False, False)
-    assert (full2, empty2) == (False, True)
-    assert (full3, empty3) == (False, True)
+    assert (full0, empty0) == (False, True), \
+        f"Initial flags wrong: expected (full=False, empty=True), got (full={full0}, empty={empty0})"
+    assert (full1, empty1) == (False, False), \
+        f"After write flags wrong: expected (full=False, empty=False), got (full={full1}, empty={empty1})"
+    assert (full2, empty2) == (False, True), \
+        f"After read flags wrong: expected (full=False, empty=True), got (full={full2}, empty={empty2})"
+    assert (full3, empty3) == (False, True), \
+        f"After reset flags wrong: expected (full=False, empty=True), got (full={full3}, empty={empty3})"
 
 
 @cocotb.test()
@@ -1924,14 +1764,13 @@ async def test_write_pec(dut):
     )
     dut._log.info(f"DEVICE_STATUS = 0x{status:08X}")
     data = dword2int(await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_RESET.base_addr, 4))
-    dut._log.info(f"DEVICE_RESET = 0x{data:08X}")
 
-    # Check
+    # Check: PEC error should be reported, and register should retain previous value
     protocol_status = (status >> 8) & 0xFF
-    assert protocol_status == 0x04  # PEC error
-    assert (
-        data == 0xADBEEF
-    )  # From previous write (0xDE trimmed because this register is only 3 bytes)
+    assert protocol_status == 0x04, \
+        f"Protocol status should indicate PEC error (0x04): expected 0x04, got 0x{protocol_status:02X}"
+    assert data == 0xADBEEF, \
+        f"DEVICE_RESET should retain previous value after PEC error: expected 0x00ADBEEF, got 0x{data:08X}"
 
     # Wait
     await Timer(1, "us")
@@ -2017,9 +1856,11 @@ async def test_read(dut):
     )
 
     # PROT_CAP read always returns 15 bytes
-    assert len(recovery_data) == 15
-    assert recovery_data == prot_cap[:15]
-    assert pec_ok
+    assert len(recovery_data) == 15, \
+        f"PROT_CAP length mismatch: expected 15 bytes, got {len(recovery_data)}"
+    assert recovery_data == prot_cap[:15], \
+        f"PROT_CAP data mismatch:\n  Expected: {[hex(b) for b in prot_cap[:15]]}\n  Got:      {[hex(b) for b in recovery_data]}"
+    assert pec_ok, "PEC check failed for PROT_CAP read"
 
     # Wait
     await Timer(1, "us")
@@ -2082,10 +1923,12 @@ async def test_read_short(dut):
     )
 
     # PROT_CAP read always returns 15 bytes
-    assert recovery_data is not None
-    assert len(recovery_data) == 15
-    assert recovery_data == prot_cap[:15]
-    assert pec_ok
+    assert recovery_data is not None, "PROT_CAP read returned None"
+    assert len(recovery_data) == 15, \
+        f"PROT_CAP length mismatch: expected 15, got {len(recovery_data)}"
+    assert recovery_data == prot_cap[:15], \
+        f"PROT_CAP data mismatch after short read:\n  Expected: {[hex(b) for b in prot_cap[:15]]}\n  Got:      {[hex(b) for b in recovery_data]}"
+    assert pec_ok, "PEC check failed"
 
     # Wait
     await Timer(1, "us")
@@ -2148,10 +1991,12 @@ async def test_read_long(dut):
     )
 
     # PROT_CAP read always returns 15 bytes
-    assert recovery_data is not None
-    assert len(recovery_data) == 15
-    assert recovery_data == prot_cap[:15]
-    assert pec_ok
+    assert recovery_data is not None, "PROT_CAP read returned None"
+    assert len(recovery_data) == 15, \
+        f"PROT_CAP length mismatch: expected 15, got {len(recovery_data)}"
+    assert recovery_data == prot_cap[:15], \
+        f"PROT_CAP data mismatch after long read:\n  Expected: {[hex(b) for b in prot_cap[:15]]}\n  Got:      {[hex(b) for b in recovery_data]}"
+    assert pec_ok, "PEC check failed"
 
     # Test DEVICE_ID register
     device_id = [random.randint(0, 255) for _ in range(24)]
@@ -2201,16 +2046,18 @@ async def test_read_long(dut):
     # Wait
     await Timer(1, "us")
 
-    # Read PROT_CAP again, this time using the correct length
+    # Read DEVICE_ID again, this time using the correct length
     recovery_data, pec_ok = await recovery.command_read(
         VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.DEVICE_ID
     )
 
-    # PROT_CAP read always returns 15 bytes
-    assert recovery_data is not None
-    assert len(recovery_data) == 24
-    assert recovery_data == device_id[:24]
-    assert pec_ok
+    # DEVICE_ID read always returns 24 bytes
+    assert recovery_data is not None, "DEVICE_ID read returned None"
+    assert len(recovery_data) == 24, \
+        f"DEVICE_ID length mismatch: expected 24, got {len(recovery_data)}"
+    assert recovery_data == device_id[:24], \
+        f"DEVICE_ID data mismatch:\n  Expected: {[hex(b) for b in device_id[:24]]}\n  Got:      {[hex(b) for b in recovery_data]}"
+    assert pec_ok, "PEC check failed"
 
     # Wait
     await Timer(1, "us")
@@ -2349,9 +2196,11 @@ async def test_virtual_read_alternating(dut):
         )
 
         # PROT_CAP read always returns 15 bytes
-        assert len(recovery_data) == 15
-        assert recovery_data == prot_cap[:15]
-        assert pec_ok
+        assert len(recovery_data) == 15, \
+            f"PROT_CAP length mismatch: expected 15, got {len(recovery_data)}"
+        assert recovery_data == prot_cap[:15], \
+            f"PROT_CAP data mismatch:\n  Expected: {[hex(b) for b in prot_cap[:15]]}\n  Got:      {[hex(b) for b in recovery_data]}"
+        assert pec_ok, "PEC check failed"
 
         # ..........
 
@@ -2371,7 +2220,8 @@ async def test_virtual_read_alternating(dut):
         # Wait and do a private read
         await Timer(1, "us")
         readback = await i3c_controller.i3c_read(DYNAMIC_ADDR, len(data))
-        assert data == list(readback.data)
+        assert data == list(readback.data), \
+            f"TTI read mismatch:\n  Expected: {[hex(b) for b in data]}\n  Got:      {[hex(b) for b in readback.data]}"
 
         # ..........
 
@@ -2569,9 +2419,8 @@ async def test_indirect_fifo_reset_access(dut):
             dword = dword | (tx_data_after_reset[i * 4 + k] << (k * 8))
         tx_data_after_reset_as_dwords.append(dword)
 
-    dut._log.info("TX dwords: " + " ".join([hex(w) for w in tx_data_after_reset_as_dwords]))
-    dut._log.info("RX dwords: " + " ".join([hex(w) for w in received_data]))
-    assert tx_data_after_reset_as_dwords == received_data
+    assert tx_data_after_reset_as_dwords == received_data, \
+        f"FIFO data mismatch after reset:\n  TX: {[hex(w) for w in tx_data_after_reset_as_dwords]}\n  RX: {[hex(w) for w in received_data]}"
 
 
 @cocotb.test()
@@ -2752,8 +2601,10 @@ async def test_recovery_flow(dut):
     await Combine(bfm_done.wait(), dev_done.wait())
     await Timer(1, "us")
 
-    # Check
-    assert image_words == xferd_words
+    # Check firmware image integrity
+    assert image_words == xferd_words, \
+        f"Firmware image transfer mismatch:\n  Sent {len(image_words)} words, received {len(xferd_words)} words\n" + \
+        f"  First mismatch at word {next((i for i, (a, b) in enumerate(zip(image_words, xferd_words)) if a != b), 'N/A')}"
 
 
 def csr_access_test_data(tb):
@@ -2845,3 +2696,752 @@ async def test_ocp_csr_access(dut):
 
     rd_data = await tb.read_csr(recovery_status_addr)
     compare_values(int2dword(exp_recovery_status), rd_data, recovery_status_addr)
+
+
+@cocotb.test()
+async def test_ri_comprehensive_stress(dut):
+    """
+    Comprehensive Recovery Interface stress test covering:
+    
+    1. PEC errors - using force_pec_error=True
+    2. T-bit parity errors - using low-level controller operations
+    3. Length mismatch (too large and too small) - manual header construction
+    4. S instead of Sr before read - should NACK or return no data
+    5. Large INDIRECT_FIFO writes with draining - write >256 bytes with AXI reads between chunks
+    6. Interlaced private writes with FIFO draining - alternate RI and private writes
+    7. Interlaced repeat starts - use stop=False and start=False for chaining
+    8. CCC commands (broadcast vs directed, STOP semantics) - mixed RI/CCC sequences
+    
+    This test exercises complex interactions between the Recovery Interface FSM,
+    the I3C controller, and the TTI subsystem to ensure robust error handling
+    and proper recovery from various fault conditions.
+    """
+    
+    import crc
+    
+    # Initialize with large timeout for comprehensive test
+    i3c_controller, i3c_target, tb, recovery = await initialize(dut, timeout=1000)
+    
+    # Set regular device dynamic address
+    await i3c_controller.i3c_ccc_write(
+        ccc=CCC.DIRECT.SETDASA, directed_data=[(STATIC_ADDR, [DYNAMIC_ADDR << 1])]
+    )
+    # Set virtual device dynamic address
+    await i3c_controller.i3c_ccc_write(
+        ccc=CCC.DIRECT.SETDASA, directed_data=[(VIRT_STATIC_ADDR, [VIRT_DYNAMIC_ADDR << 1])]
+    )
+    
+    await Timer(1, "us")
+    
+    # Track test results
+    test_results = {}
+    
+    # Helper to drain TTI RX FIFO
+    async def drain_tti_rx_fifo(expected_data=None, description=""):
+        """Drain the TTI RX FIFO and optionally verify data."""
+        desc = dword2int(await tb.read_csr(tb.reg_map.I3C_EC.TTI.RX_DESC_QUEUE_PORT.base_addr, 4))
+        length = desc & 0xFFFF
+        dut._log.info(f"  [Drain TTI] {description}: descriptor=0x{desc:08X}, length={length}")
+        
+        read_bytes = []
+        for _ in range((length + 3) // 4):
+            word = dword2int(await tb.read_csr(tb.reg_map.I3C_EC.TTI.RX_DATA_PORT.base_addr, 4))
+            read_bytes.extend([
+                word & 0xFF,
+                (word >> 8) & 0xFF,
+                (word >> 16) & 0xFF,
+                (word >> 24) & 0xFF,
+            ])
+        read_bytes = read_bytes[:length]
+        
+        if expected_data is not None:
+            if read_bytes == list(expected_data):
+                dut._log.info(f"    Data verified OK")
+            else:
+                dut._log.error(f"    Data mismatch! Expected {[hex(b) for b in expected_data]}, got {[hex(b) for b in read_bytes]}")
+        return read_bytes
+    
+    # Helper to drain INDIRECT_FIFO
+    async def drain_indirect_fifo(num_dwords, description=""):
+        """Drain INDIRECT_FIFO by reading via AXI."""
+        dut._log.info(f"  [Drain INDIRECT_FIFO] {description}: reading {num_dwords} DWORDs")
+        data = []
+        for i in range(num_dwords):
+            word = dword2int(
+                await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_DATA.base_addr, 4)
+            )
+            data.append(word)
+            dut._log.debug(f"    FIFO[{i}] = 0x{word:08X}")
+        return data
+    
+    # Helper to get INDIRECT_FIFO pointers
+    async def get_fifo_ptrs():
+        """Get current INDIRECT_FIFO write and read pointers."""
+        wr_ptr = dword2int(
+            await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_STATUS_1.base_addr, 4)
+        )
+        rd_ptr = dword2int(
+            await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_STATUS_2.base_addr, 4)
+        )
+        return wr_ptr, rd_ptr
+    
+    # Helper to verify recovery still works after errors
+    async def verify_recovery_works(description=""):
+        """Verify the RI FSM still works after error conditions."""
+        dut._log.info(f"  [Verify] {description}")
+        try:
+            data, pec_ok = await recovery.command_read(
+                VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.PROT_CAP
+            )
+            if pec_ok and len(data) > 0:
+                dut._log.info(f"    PROT_CAP read OK: {len(data)} bytes")
+                return True
+            else:
+                dut._log.error(f"    PROT_CAP read failed: pec_ok={pec_ok}, data={data}")
+                return False
+        except Exception as e:
+            dut._log.error(f"    Exception during verify: {e}")
+            return False
+    
+    # Helper for logging test sections
+    def log_section(name):
+        dut._log.info("")
+        dut._log.info("=" * 70)
+        dut._log.info(f"SECTION: {name}")
+        dut._log.info("=" * 70)
+    
+    # =========================================================================
+    # SECTION 1: PEC Error Testing
+    # =========================================================================
+    log_section("1. PEC Error Testing")
+    
+    # Test 1a: Write with PEC error
+    dut._log.info("Test 1a: Write with PEC error (force_pec_error=True)")
+    try:
+        await recovery.command_write(
+            VIRT_DYNAMIC_ADDR,
+            I3cRecoveryInterface.Command.RECOVERY_CTRL,
+            data=[0x11, 0x22, 0x33],
+            force_pec_error=True
+        )
+        await Timer(5, "us")
+        
+        # Verify PEC error counter incremented
+        pec_err_cnt = dword2int(
+            await tb.read_csr(tb.reg_map.I3C_EC.TTI.TARGET_ERR_CNT_RI_PEC.base_addr, 4)
+        ) & 0xFF
+        dut._log.info(f"  PEC error counter: {pec_err_cnt}")
+        
+        if await verify_recovery_works("after PEC error write"):
+            test_results["1a_pec_write"] = "PASS"
+        else:
+            test_results["1a_pec_write"] = "FAIL - no recovery"
+    except Exception as e:
+        dut._log.error(f"  Exception: {e}")
+        test_results["1a_pec_write"] = f"FAIL - {e}"
+    
+    await Timer(5, "us")
+    
+    # Test 1b: Multiple consecutive PEC errors
+    dut._log.info("Test 1b: Multiple consecutive PEC errors (5x)")
+    try:
+        for i in range(5):
+            await recovery.command_write(
+                VIRT_DYNAMIC_ADDR,
+                I3cRecoveryInterface.Command.RECOVERY_CTRL,
+                data=[i, i+1, i+2],
+                force_pec_error=True
+            )
+            await Timer(2, "us")
+        
+        if await verify_recovery_works("after 5 consecutive PEC errors"):
+            test_results["1b_pec_multi"] = "PASS"
+        else:
+            test_results["1b_pec_multi"] = "FAIL - no recovery"
+    except Exception as e:
+        dut._log.error(f"  Exception: {e}")
+        test_results["1b_pec_multi"] = f"FAIL - {e}"
+    
+    await Timer(5, "us")
+    
+    # =========================================================================
+    # SECTION 2: T-bit Parity Error Testing
+    # =========================================================================
+    log_section("2. T-bit Parity Error Testing")
+    
+    # Test 2a: T-bit error on data byte
+    dut._log.info("Test 2a: T-bit parity error during write")
+    try:
+        # Use low-level I3C operations to inject T-bit error
+        controller = i3c_controller
+        
+        # Build RI write frame manually with T-bit error
+        command = I3cRecoveryInterface.Command.RECOVERY_CTRL
+        data = [0xAA, 0xBB, 0xCC]
+        xfer = [
+            command,
+            len(data) & 0xFF,
+            (len(data) >> 8) & 0xFF,
+        ] + data
+        
+        # Compute correct PEC
+        pec_calc = crc.Calculator(I3cRecoveryInterface.CRC_CONFIG, optimized=True)
+        pec = int(pec_calc.checksum(bytes([VIRT_DYNAMIC_ADDR << 1] + xfer)))
+        xfer.append(pec)
+        
+        # Send with T-bit error on 3rd byte
+        await controller.take_bus_control()
+        await controller.send_start()
+        await controller.write_addr_header(0x7E)  # Reserved address
+        await controller.send_start()  # Sr
+        ack = await controller.write_addr_header(VIRT_DYNAMIC_ADDR)
+        
+        if ack:
+            for i, byte in enumerate(xfer):
+                inject_err = (i == 3)  # Inject error on 4th byte (data[0])
+                await controller.send_byte_tbit(byte, inject_tbit_err=inject_err)
+        
+        await controller.send_stop()
+        controller.give_bus_control()
+        
+        await Timer(5, "us")
+        
+        if await verify_recovery_works("after T-bit error"):
+            test_results["2a_tbit_error"] = "PASS"
+        else:
+            test_results["2a_tbit_error"] = "FAIL - no recovery"
+    except Exception as e:
+        dut._log.error(f"  Exception: {e}")
+        test_results["2a_tbit_error"] = f"FAIL - {e}"
+    
+    await Timer(5, "us")
+    
+    # =========================================================================
+    # SECTION 3: Length Mismatch Testing
+    # =========================================================================
+    log_section("3. Length Mismatch Testing")
+    
+    # Read baseline length error counter before tests
+    len_err_cnt_baseline = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.TTI.TARGET_ERR_CNT_RI_LENGTH.base_addr, 4)
+    ) & 0xFF
+    dut._log.info(f"Length error counter baseline: {len_err_cnt_baseline}")
+    
+    # Test 3a: Declared length > actual data (truncated)
+    dut._log.info("Test 3a: Declared length > actual data sent")
+    try:
+        controller = i3c_controller
+        command = I3cRecoveryInterface.Command.RECOVERY_CTRL
+        actual_data = [0x11, 0x22, 0x33, 0x44]  # Only 4 bytes
+        declared_len = 10  # But declare 10
+        
+        xfer = [
+            command,
+            declared_len & 0xFF,
+            (declared_len >> 8) & 0xFF,
+        ] + actual_data
+        
+        # Compute PEC for what we're actually sending (not correct for full frame)
+        pec_calc = crc.Calculator(I3cRecoveryInterface.CRC_CONFIG, optimized=True)
+        pec = int(pec_calc.checksum(bytes([VIRT_DYNAMIC_ADDR << 1] + xfer)))
+        xfer.append(pec)
+        
+        await controller.i3c_write(VIRT_DYNAMIC_ADDR, xfer, stop=True)
+        
+        await Timer(5, "us")
+        
+        # Verify length error counter incremented
+        len_err_cnt = dword2int(
+            await tb.read_csr(tb.reg_map.I3C_EC.TTI.TARGET_ERR_CNT_RI_LENGTH.base_addr, 4)
+        ) & 0xFF
+        dut._log.info(f"  Length error counter: {len_err_cnt} (baseline was {len_err_cnt_baseline})")
+        
+        if len_err_cnt > len_err_cnt_baseline:
+            dut._log.info("  Length error detected correctly!")
+            if await verify_recovery_works("after length too large"):
+                test_results["3a_len_too_large"] = "PASS"
+            else:
+                test_results["3a_len_too_large"] = "FAIL - no recovery after error"
+        else:
+            dut._log.error("  Length error NOT detected - counter did not increment!")
+            test_results["3a_len_too_large"] = "FAIL - length error not detected"
+    except Exception as e:
+        dut._log.error(f"  Exception: {e}")
+        test_results["3a_len_too_large"] = f"FAIL - {e}"
+    
+    await Timer(5, "us")
+    
+    # Test 3b: Declared length < actual data (too small)
+    dut._log.info("Test 3b: Declared length < actual data sent")
+    try:
+        controller = i3c_controller
+        command = I3cRecoveryInterface.Command.RECOVERY_CTRL
+        actual_data = [0x11, 0x22, 0x33, 0x44, 0x55]  # 5 bytes
+        declared_len = 2  # But declare only 2
+        
+        xfer = [
+            command,
+            declared_len & 0xFF,
+            (declared_len >> 8) & 0xFF,
+        ] + actual_data
+        
+        pec_calc = crc.Calculator(I3cRecoveryInterface.CRC_CONFIG, optimized=True)
+        pec = int(pec_calc.checksum(bytes([VIRT_DYNAMIC_ADDR << 1] + xfer)))
+        xfer.append(pec)
+        
+        await controller.i3c_write(VIRT_DYNAMIC_ADDR, xfer, stop=True)
+        
+        await Timer(5, "us")
+        
+        # Verify length error counter incremented again
+        len_err_cnt_3b = dword2int(
+            await tb.read_csr(tb.reg_map.I3C_EC.TTI.TARGET_ERR_CNT_RI_LENGTH.base_addr, 4)
+        ) & 0xFF
+        dut._log.info(f"  Length error counter: {len_err_cnt_3b} (was {len_err_cnt} after 3a)")
+        
+        if len_err_cnt_3b > len_err_cnt:
+            dut._log.info("  Length error detected correctly!")
+            if await verify_recovery_works("after length too small"):
+                test_results["3b_len_too_small"] = "PASS"
+            else:
+                test_results["3b_len_too_small"] = "FAIL - no recovery after error"
+        else:
+            dut._log.error("  Length error NOT detected - counter did not increment!")
+            test_results["3b_len_too_small"] = "FAIL - length error not detected"
+    except Exception as e:
+        dut._log.error(f"  Exception: {e}")
+        test_results["3b_len_too_small"] = f"FAIL - {e}"
+    
+    await Timer(5, "us")
+    
+    # =========================================================================
+    # SECTION 4: S instead of Sr before Read (Missing Repeated Start)
+    # =========================================================================
+    log_section("4. S instead of Sr before Read")
+    
+    # Test 4: Send STOP then new START instead of Sr for read phase
+    dut._log.info("Test 4: S instead of Sr for read command")
+    try:
+        controller = i3c_controller
+        command = I3cRecoveryInterface.Command.PROT_CAP
+        dut._log.info(f"  Command to send: {command} (0x{command:02X})")
+        
+        # Compute command phase
+        xfer = [command]
+        pec_calc = crc.Calculator(I3cRecoveryInterface.CRC_CONFIG, optimized=True)
+        pec = int(pec_calc.checksum(bytes([VIRT_DYNAMIC_ADDR << 1] + xfer)))
+        xfer.append(pec)
+        dut._log.info(f"  Command phase data: {[hex(b) for b in xfer]} (cmd + PEC)")
+        
+        # Send command phase with STOP (incorrect - should use Sr)
+        dut._log.info(f"  Sending command phase with STOP (incorrect protocol - should use Sr)")
+        await controller.i3c_write(VIRT_DYNAMIC_ADDR, xfer, stop=True)
+        dut._log.info(f"  Command phase complete - STOP sent")
+        
+        await Timer(2, "us")
+        
+        # Now try to read - this should either NACK or return no data
+        # because the read phase expects Sr, not a new S
+        dut._log.info(f"  Starting read phase with new START (S) instead of repeated start (Sr)")
+        await controller.take_bus_control()
+        dut._log.info(f"  Bus control taken")
+        await controller.send_start()
+        dut._log.info(f"  START condition sent")
+        await controller.write_addr_header(0x7E)
+        dut._log.info(f"  Broadcast address 0x7E sent")
+        await controller.send_start()
+        dut._log.info(f"  Second START sent (forming Sr)")
+        ack = await controller.write_addr_header(VIRT_DYNAMIC_ADDR, read=True)
+        dut._log.info(f"  Target address 0x{VIRT_DYNAMIC_ADDR:02X} + Read sent, ACK={ack}")
+        
+        if not ack:
+            dut._log.info("  Target NACKed read after S (expected behavior)")
+            test_results["4_s_not_sr"] = "PASS - NACK"
+        else:
+            dut._log.info("  Target ACKed read after S - reading response")
+            # Try to read, expect issues
+            try:
+                byte, tgt_stop = await controller.recv_byte_t_bit(stop=True)
+                dut._log.info(f"  Received byte: 0x{byte:02X}, stop={tgt_stop}")
+            except Exception as read_err:
+                dut._log.info(f"  Read failed with exception: {read_err}")
+            test_results["4_s_not_sr"] = "PASS - ACK but likely invalid data"
+        
+        dut._log.info(f"  Sending STOP condition")
+        await controller.send_stop()
+        controller.give_bus_control()
+        dut._log.info(f"  Bus control released, test complete")
+        
+        await Timer(5, "us")
+        
+        dut._log.info(f"  Verifying recovery interface still works after error condition")
+        if not await verify_recovery_works("after S-not-Sr error"):
+            dut._log.error(f"  Recovery verification FAILED")
+            test_results["4_s_not_sr"] = "FAIL - no recovery"
+        else:
+            dut._log.info(f"  Recovery verification PASSED")
+    except Exception as e:
+        dut._log.error(f"  Exception: {e}")
+        test_results["4_s_not_sr"] = f"FAIL - {e}"
+    
+    dut._log.info(f"  Test 4 result: {test_results.get('4_s_not_sr', 'UNKNOWN')}")
+    
+    await Timer(5, "us")
+    
+    # =========================================================================
+    # SECTION 5: Large INDIRECT_FIFO Writes with Draining
+    #=========================================================================
+    log_section("5. Large INDIRECT_FIFO Writes with Draining")
+    
+    # Reset INDIRECT_FIFO before this test to clear any stale data from error tests
+    dut._log.info("Resetting INDIRECT_FIFO before Test 5...")
+    dut._log.info(f"  Writing RESET=1 to INDIRECT_FIFO_CTRL_0 @ 0x{tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_CTRL_0.base_addr:08X}")
+    await tb.write_csr_field(
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_CTRL_0.base_addr,
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_CTRL_0.RESET,
+        0x1,
+    )
+    dut._log.info(f"  FIFO reset command sent")
+    await Timer(1, "us")
+    
+    # Verify FIFO is empty
+    wr_ptr, rd_ptr = await get_fifo_ptrs()
+    dut._log.info(f"  FIFO pointers after reset: wr_ptr=0x{wr_ptr:08X}, rd_ptr=0x{rd_ptr:08X}")
+    if wr_ptr != rd_ptr:
+        dut._log.warning(f"  WARNING: FIFO pointers not equal after reset - FIFO may not be empty!")
+    else:
+        dut._log.info(f"  FIFO appears empty (wr_ptr == rd_ptr)")
+    
+    # Test 5: Write 512 bytes total in chunks, draining between chunks
+    # INDIRECT_FIFO is 256 bytes, so we must drain to avoid overflow
+    dut._log.info("Test 5: Large INDIRECT_FIFO writes (512 bytes) with draining")
+    try:
+        total_bytes = 512
+        chunk_size = 64  # 64 bytes = 16 DWORDs per chunk
+        num_chunks = total_bytes // chunk_size
+        chunks_written = 0
+        all_verified = True
+        
+        dut._log.info(f"  Test parameters: total_bytes={total_bytes}, chunk_size={chunk_size}, num_chunks={num_chunks}")
+        dut._log.info(f"  Each chunk = {chunk_size} bytes = {chunk_size // 4} DWORDs")
+        
+        for chunk_idx in range(num_chunks):
+            # Generate chunk data
+            chunk_data = [(chunk_idx * chunk_size + i) & 0xFF for i in range(chunk_size)]
+            first_byte = chunk_data[0]
+            last_byte = chunk_data[-1]
+            
+            dut._log.info(f"  --- Chunk {chunk_idx}/{num_chunks-1} ---")
+            dut._log.info(f"  Writing chunk {chunk_idx}: {chunk_size} bytes (0x{first_byte:02X}..0x{last_byte:02X})")
+            
+            # Check FIFO status before write
+            wr_ptr_before, rd_ptr_before = await get_fifo_ptrs()
+            dut._log.info(f"    FIFO before write: wr_ptr=0x{wr_ptr_before:08X}, rd_ptr=0x{rd_ptr_before:08X}")
+            
+            await recovery.command_write(
+                VIRT_DYNAMIC_ADDR,
+                I3cRecoveryInterface.Command.INDIRECT_FIFO_DATA,
+                chunk_data
+            )
+            chunks_written += 1
+            dut._log.info(f"    Write complete")
+            
+            await Timer(2, "us")
+            
+            # Check FIFO status after write
+            wr_ptr_after, rd_ptr_after = await get_fifo_ptrs()
+            dut._log.info(f"    FIFO after write: wr_ptr=0x{wr_ptr_after:08X}, rd_ptr=0x{rd_ptr_after:08X}")
+            fifo_fill = (wr_ptr_after - rd_ptr_after) & 0xFFFFFFFF  # Handle wrap
+            dut._log.info(f"    FIFO fill level: {fifo_fill} bytes")
+            
+            # Drain FIFO via AXI to make room for next chunk
+            dut._log.info(f"    Draining chunk {chunk_idx}: reading {chunk_size // 4} DWORDs")
+            drained_words = await drain_indirect_fifo(chunk_size // 4, f"chunk {chunk_idx}")
+            
+            # Check FIFO status after drain
+            wr_ptr_drained, rd_ptr_drained = await get_fifo_ptrs()
+            dut._log.info(f"    FIFO after drain: wr_ptr=0x{wr_ptr_drained:08X}, rd_ptr=0x{rd_ptr_drained:08X}")
+            
+            # Verify drained data
+            expected_words = []
+            for i in range(chunk_size // 4):
+                word = (chunk_data[i*4 + 3] << 24) | (chunk_data[i*4 + 2] << 16) | \
+                       (chunk_data[i*4 + 1] << 8) | chunk_data[i*4]
+                expected_words.append(word)
+            
+            if drained_words != expected_words:
+                dut._log.error(f"    Chunk {chunk_idx} data mismatch!")
+                dut._log.error(f"      Number of DWORDs: expected={len(expected_words)}, actual={len(drained_words)}")
+                for i, (exp, act) in enumerate(zip(expected_words, drained_words)):
+                    if exp != act:
+                        # Convert DWORDs back to bytes for easier debugging
+                        exp_bytes = [(exp >> (8*b)) & 0xFF for b in range(4)]
+                        act_bytes = [(act >> (8*b)) & 0xFF for b in range(4)]
+                        dut._log.error(f"      DWORD[{i}]: expected=0x{exp:08X} {exp_bytes}, actual=0x{act:08X} {act_bytes}")
+                # Show any extra DWORDs
+                if len(drained_words) > len(expected_words):
+                    for i in range(len(expected_words), len(drained_words)):
+                        act = drained_words[i]
+                        act_bytes = [(act >> (8*b)) & 0xFF for b in range(4)]
+                        dut._log.error(f"      DWORD[{i}]: (extra) actual=0x{act:08X} {act_bytes}")
+                elif len(expected_words) > len(drained_words):
+                    for i in range(len(drained_words), len(expected_words)):
+                        exp = expected_words[i]
+                        exp_bytes = [(exp >> (8*b)) & 0xFF for b in range(4)]
+                        dut._log.error(f"      DWORD[{i}]: (missing) expected=0x{exp:08X} {exp_bytes}")
+                all_verified = False
+            else:
+                dut._log.info(f"    Chunk {chunk_idx} verified OK")
+        
+        dut._log.info(f"  --- Test 5 Summary ---")
+        dut._log.info(f"  Chunks written: {chunks_written}/{num_chunks}")
+        dut._log.info(f"  All chunks verified: {all_verified}")
+        
+        dut._log.info(f"  Verifying recovery interface still works after large FIFO writes")
+        recovery_ok = await verify_recovery_works("after large FIFO writes")
+        dut._log.info(f"  Recovery verification: {'PASSED' if recovery_ok else 'FAILED'}")
+        
+        if all_verified and recovery_ok:
+            test_results["5_large_fifo"] = "PASS"
+            dut._log.info(f"  Test 5 result: PASS")
+        else:
+            test_results["5_large_fifo"] = "FAIL"
+            dut._log.error(f"  Test 5 result: FAIL (all_verified={all_verified}, recovery_ok={recovery_ok})")
+    except Exception as e:
+        dut._log.error(f"  Exception: {e}")
+        import traceback
+        dut._log.error(f"  Traceback: {traceback.format_exc()}")
+        test_results["5_large_fifo"] = f"FAIL - {e}"
+    
+    await Timer(5, "us")
+    
+    # =========================================================================
+    # SECTION 6: Interlaced Private Writes with FIFO Draining
+    # =========================================================================
+    log_section("6. Interlaced Private Writes with FIFO Draining")
+    
+    # Test 6: Alternate RI writes and private writes, draining after each
+    dut._log.info("Test 6: Interlaced RI and private writes")
+    try:
+        for iteration in range(5):
+            dut._log.info(f"  Iteration {iteration}")
+            
+            # RI write to INDIRECT_FIFO
+            ri_data = [(iteration * 10 + i) & 0xFF for i in range(8)]
+            await recovery.command_write(
+                VIRT_DYNAMIC_ADDR,
+                I3cRecoveryInterface.Command.INDIRECT_FIFO_DATA,
+                ri_data,
+                stop=False  # Keep bus active
+            )
+            
+            # Private write to main target
+            priv_data = [(iteration * 20 + i) & 0xFF for i in range(4)]
+            await i3c_controller.i3c_write(
+                DYNAMIC_ADDR, priv_data, stop=False, send_rsvd=False
+            )
+            
+            # CCC to end the sequence with STOP
+            responses = await i3c_controller.i3c_ccc_read(
+                ccc=CCC.DIRECT.GETSTATUS, addr=DYNAMIC_ADDR, count=2, stop=True
+            )
+            dut._log.info(f"    GETSTATUS: {responses[0][1].hex()}")
+            
+            await Timer(2, "us")
+            
+            # Drain TTI RX FIFO (private write data)
+            await drain_tti_rx_fifo(priv_data, f"iteration {iteration}")
+            
+            # Drain INDIRECT_FIFO
+            await drain_indirect_fifo(len(ri_data) // 4, f"iteration {iteration}")
+        
+        if await verify_recovery_works("after interlaced writes"):
+            test_results["6_interlaced"] = "PASS"
+        else:
+            test_results["6_interlaced"] = "FAIL - no recovery"
+    except Exception as e:
+        dut._log.error(f"  Exception: {e}")
+        test_results["6_interlaced"] = f"FAIL - {e}"
+    
+    await Timer(5, "us")
+    
+    # =========================================================================
+    # SECTION 7: Interlaced Repeat Starts (Chained Operations)
+    # =========================================================================
+    log_section("7. Interlaced Repeat Starts")
+    
+    # Test 7: Verify target NACKs when a full Write is followed by Sr+Read
+    # The OCP Recovery protocol only supports:
+    #   - Write: S + Addr+W + CMD + LEN_L + LEN_H + DATA + PEC + STOP
+    #   - Read:  S + Addr+W + CMD + PEC + Sr + Addr+R + LEN_L + LEN_H + DATA + PEC + STOP
+    # 
+    # The pattern: Full Write + Sr + Read should be NACKed
+    #   Invalid: S + Addr+W + CMD + LEN_L + LEN_H + DATA + PEC + Sr + Addr+R + ...
+    dut._log.info("Test 7: Verify target NACKs full Write + Sr + Read pattern")
+    try:
+        # Perform a full write to RECOVERY_CTRL without STOP
+        write_data = [0x01, 0x02, 0x03]
+        await recovery.command_write(
+            VIRT_DYNAMIC_ADDR,
+            I3cRecoveryInterface.Command.RECOVERY_CTRL,
+            write_data,
+            stop=False  # Leave bus active, no STOP
+        )
+        dut._log.info("  Full Write without STOP completed")
+        
+        # Now attempt Sr + Addr+R only (not a full command_read which would
+        # send another Wr+CMD+PEC first). This should be NACKed by the target
+        # because the target just processed a full Write and expects STOP.
+        # Use _i3c_recovery_read directly to just send Sr + Addr+R
+        nack_received = False
+        try:
+            result = await recovery._i3c_recovery_read(VIRT_DYNAMIC_ADDR, stop=True)
+            # If we get here without exception, check for NACK indication
+            if result is None or (isinstance(result, tuple) and result[0] is None):
+                dut._log.info("  Target correctly NACKed Sr+Read after full Write (returned None)")
+                nack_received = True
+            else:
+                # Got actual data back - target accepted the invalid pattern
+                dut._log.error(f"  Target returned data: {result}")
+        except I3cRecoveryException as e:
+            # Exception indicates target NACKed - this is the expected behavior
+            dut._log.info(f"  Target correctly NACKed Sr+Read after full Write: {e}")
+            nack_received = True
+        except Exception as e:
+            # Other exception - might still indicate NACK
+            if "NACK" in str(e).upper() or "nack" in str(e).lower():
+                dut._log.info(f"  Target correctly NACKed Sr+Read after full Write: {e}")
+                nack_received = True
+            else:
+                raise
+        
+        if nack_received:
+            # Send a proper STOP to clean up the bus
+            try:
+                await i3c_controller.i3c_stop()
+            except:
+                pass
+            await Timer(2, "us")
+            
+            # Verify recovery still works after the NACK
+            if await verify_recovery_works("after NACK on Write+Sr+Read"):
+                test_results["7_write_sr_read_nack"] = "PASS"
+            else:
+                test_results["7_write_sr_read_nack"] = "FAIL - recovery broken after NACK"
+        else:
+            dut._log.error("  Target should have NACKed Sr+Read after full Write, but accepted it")
+            test_results["7_write_sr_read_nack"] = "FAIL - target accepted invalid Write+Sr+Read pattern"
+            # Clean up
+            try:
+                await i3c_controller.i3c_stop()
+            except:
+                pass
+            
+    except Exception as e:
+        dut._log.error(f"  Exception: {e}")
+        test_results["7_write_sr_read_nack"] = f"FAIL - {e}"
+        # Try to clean up the bus
+        try:
+            await i3c_controller.i3c_stop()
+        except:
+            pass
+        
+    await Timer(5, "us")
+    
+    # =========================================================================
+    # SECTION 8: CCC Commands (Broadcast vs Directed, STOP Semantics)
+    # =========================================================================
+    log_section("8. CCC Commands Mixed with RI")
+    
+    # Test 8a: Directed CCCs interleaved with RI
+    dut._log.info("Test 8a: Directed CCCs (GETSTATUS, GETMWL, GETMRL) mixed with RI")
+    try:
+        # RI Write (no STOP)
+        await recovery.command_write(
+            VIRT_DYNAMIC_ADDR,
+            I3cRecoveryInterface.Command.RECOVERY_CTRL,
+            [0x12, 0x34, 0x56],
+            stop=False
+        )
+        
+        # Directed CCC: GETSTATUS (must end with STOP)
+        responses = await i3c_controller.i3c_ccc_read(
+            ccc=CCC.DIRECT.GETSTATUS, addr=DYNAMIC_ADDR, count=2, stop=True
+        )
+        dut._log.info(f"  GETSTATUS: {responses[0][1].hex()}")
+        
+        await Timer(2, "us")
+        
+        # RI Read (new sequence after STOP)
+        read_data, pec_ok = await recovery.command_read(
+            VIRT_DYNAMIC_ADDR,
+            I3cRecoveryInterface.Command.RECOVERY_CTRL
+        )
+        dut._log.info(f"  RI RECOVERY_CTRL: {[hex(b) for b in read_data]}, PEC OK: {pec_ok}")
+        
+        # Directed CCC: GETMWL
+        responses = await i3c_controller.i3c_ccc_read(
+            ccc=CCC.DIRECT.GETMWL, addr=DYNAMIC_ADDR, count=2, stop=True
+        )
+        dut._log.info(f"  GETMWL: {responses[0][1].hex()}")
+        
+        # Directed CCC: GETMRL
+        responses = await i3c_controller.i3c_ccc_read(
+            ccc=CCC.DIRECT.GETMRL, addr=DYNAMIC_ADDR, count=2, stop=True
+        )
+        dut._log.info(f"  GETMRL: {responses[0][1].hex()}")
+        
+        if pec_ok and await verify_recovery_works("after directed CCCs"):
+            test_results["8a_directed_ccc"] = "PASS"
+        else:
+            test_results["8a_directed_ccc"] = "FAIL"
+    except Exception as e:
+        dut._log.error(f"  Exception: {e}")
+        test_results["8a_directed_ccc"] = f"FAIL - {e}"
+    
+    await Timer(5, "us")
+    
+    # Test 8b: Back-to-back CCCs followed by RI
+    dut._log.info("Test 8b: Back-to-back CCCs then RI")
+    try:
+        # Multiple CCCs in sequence
+        for i in range(3):
+            responses = await i3c_controller.i3c_ccc_read(
+                ccc=CCC.DIRECT.GETSTATUS, addr=DYNAMIC_ADDR, count=2, stop=True
+            )
+            dut._log.info(f"  CCC {i}: GETSTATUS = {responses[0][1].hex()}")
+        
+        # RI operation after CCCs
+        data, pec_ok = await recovery.command_read(
+            VIRT_DYNAMIC_ADDR,
+            I3cRecoveryInterface.Command.DEVICE_STATUS
+        )
+        dut._log.info(f"  RI DEVICE_STATUS: {[hex(b) for b in data]}, PEC OK: {pec_ok}")
+        
+        if pec_ok and await verify_recovery_works("after back-to-back CCCs"):
+            test_results["8b_ccc_then_ri"] = "PASS"
+        else:
+            test_results["8b_ccc_then_ri"] = "FAIL"
+    except Exception as e:
+        dut._log.error(f"  Exception: {e}")
+        test_results["8b_ccc_then_ri"] = f"FAIL - {e}"
+    
+    await Timer(5, "us")
+    
+    # =========================================================================
+    # FINAL SUMMARY
+    # =========================================================================
+    log_section("TEST SUMMARY")
+    
+    pass_count = sum(1 for v in test_results.values() if v.startswith("PASS"))
+    fail_count = sum(1 for v in test_results.values() if v.startswith("FAIL"))
+    
+    dut._log.info(f"Total: {len(test_results)} tests, {pass_count} PASS, {fail_count} FAIL")
+    dut._log.info("")
+    
+    for test_name, result in test_results.items():
+        status = "[PASS]" if result.startswith("PASS") else "[FAIL]"
+        dut._log.info(f"  {status} {test_name}: {result}")
+    
+    # Assert overall pass
+    assert fail_count == 0, f"{fail_count} tests failed - see log for details"

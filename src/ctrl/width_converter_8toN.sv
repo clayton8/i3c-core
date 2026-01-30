@@ -7,6 +7,7 @@
     receiver over I3C into N-bit words to be stored in TTI RX queue.
     The module has a "flush" capability which allows it to output partially
     assembled N-bit words on request.
+    Use soft_reset_ni to discard accumulated bytes (e.g., for error recovery).
 */
 
 module width_converter_8toN #(

@@ -70,6 +70,7 @@ module controller_standby
     input logic rx_queue_wready_i,
     output logic [TtiRxDataWidth-1:0] rx_queue_wdata_o,
     output logic rx_queue_flush_o,
+    output logic rx_queue_wlast_o,
 
     // TTI: TX Data
     input logic tx_queue_full_i,
@@ -181,7 +182,7 @@ module controller_standby
 
     output logic err_o,
     input  logic recovery_mode_enter_i,
-    input  logic recovery_protocol_err_i,
+    input  logic recovery_pec_err_i,
 
     // Individual TE error outputs for interrupt reporting
     output logic te0_err_o,
@@ -218,6 +219,7 @@ module controller_standby
   logic [TtiRxDataWidth-1:0] i2c_rx_queue_wdata_o;
   logic i3c_rx_queue_flush_o;
   logic i2c_rx_queue_flush_o;
+  logic i3c_rx_queue_wlast_o;
   logic i3c_tx_desc_queue_rready_o;
   logic i2c_tx_desc_queue_rready_o;
   logic i3c_tx_queue_rready_o;
@@ -246,6 +248,7 @@ module controller_standby
     rx_queue_wvalid_o = sel_i2c_i3c ? i3c_rx_queue_wvalid_o : i2c_rx_queue_wvalid_o;
     rx_queue_wdata_o = sel_i2c_i3c ? i3c_rx_queue_wdata_o : i2c_rx_queue_wdata_o;
     rx_queue_flush_o = sel_i2c_i3c ? i3c_rx_queue_flush_o : i2c_rx_queue_flush_o;
+    rx_queue_wlast_o = sel_i2c_i3c ? i3c_rx_queue_wlast_o : 1'b0;
     tx_desc_queue_rready_o = sel_i2c_i3c ? i3c_tx_desc_queue_rready_o : i2c_tx_desc_queue_rready_o;
     tx_queue_rready_o = sel_i2c_i3c ? i3c_tx_queue_rready_o : i2c_tx_queue_rready_o;
     tx_queue_flush_o = sel_i2c_i3c ? i3c_tx_queue_flush_o : 1'b0;
@@ -267,13 +270,13 @@ module controller_standby
   logic protocol_err;
   logic get_status_done;
 
-  // Protocol error for GETSTATUS: includes I3C protocol errors and Recovery PEC errors
-  // Note: recovery_protocol_err is already gated at source in recovery_receiver.sv
+  // Protocol error for GETSTATUS: I3C protocol errors only
+  // Recovery Interface errors are reported separately in OCP Recovery DEVICE_STATUS
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (~rst_ni) begin
       err_o <= '0;
     end else begin
-      if (protocol_err | recovery_protocol_err_i) err_o <= 1'b1;
+      if (protocol_err) err_o <= 1'b1;
       if (get_status_done) err_o <= 1'b0;
     end
   end
@@ -429,6 +432,7 @@ module controller_standby
       .rx_queue_wvalid_o(i3c_rx_queue_wvalid_o),
       .rx_queue_wdata_o(i3c_rx_queue_wdata_o),
       .rx_queue_flush_o(i3c_rx_queue_flush_o),
+      .rx_queue_wlast_o(i3c_rx_queue_wlast_o),
       .tx_queue_rvalid_i(tx_queue_rvalid_i),
       .tx_queue_depth_i(tx_queue_depth_i),
       .tx_queue_rready_o(i3c_tx_queue_rready_o),

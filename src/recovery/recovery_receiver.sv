@@ -1,276 +1,1529 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+//==============================================================================
+// Module: recovery_receiver
+//
+// Description:
+//   OCP Secure Firmware Recovery Protocol Receiver and Transmitter.
+//   Implements the OCP Recovery Interface v1.1 protocol for secure firmware
+//   recovery over I3C. Handles both WRITE and READ commands, including
+//   protocol parsing, PEC validation, command execution, and response
+//   generation.
+//
+// FSM Flow:
+//   WRITE: Idle -> RxCmd -> RxLenL -> RxLenH -> RxData -> RxPec -> 
+//          CmdDispatch -> Exec* -> Done
+//   READ:  Idle -> RxCmd -> RxPec -> CmdDispatch -> TxDesc -> TxLenL -> 
+//          TxLenH -> TxData -> TxPec -> Done
+//
+// Frame Formats:
+//   WRITE: S + Addr+W + CMD + LEN_L + LEN_H + DATA[0..N-1] + PEC + P
+//   READ:  S + Addr+W + CMD + PEC + Sr + Addr+R + LEN_L + LEN_H + DATA + PEC
+//
+// Supported Commands (OCP Recovery v1.1):
+//   34: PROT_CAP           (R)  - Protocol capabilities
+//   35: DEVICE_ID          (R)  - Device identification
+//   36: DEVICE_STATUS      (R)  - Device status
+//   37: DEVICE_RESET       (W)  - Device reset control
+//   38: RECOVERY_CTRL      (W)  - Recovery control
+//   39: RECOVERY_STATUS    (R)  - Recovery status
+//   40: HW_STATUS          (R)  - Hardware status
+//   45: INDIRECT_FIFO_CTRL (W)  - Indirect FIFO control
+//   46: INDIRECT_FIFO_STATUS(R) - Indirect FIFO status
+//   47: INDIRECT_FIFO_DATA (W)  - Firmware data to FIFO
+//
+//==============================================================================
+
 module recovery_receiver
   import i3c_pkg::*;
+  import I3CCSR_pkg::*;
 #(
     parameter int unsigned TtiRxDescDataWidth = 32,
-    parameter int unsigned TtiTxDescDataWidth = 32
+    parameter int unsigned TtiTxDescDataWidth = 32,
+    parameter int unsigned TtiRxDataDataWidth = 32,
+    parameter int unsigned CsrDataWidth       = 32,
+    parameter int unsigned IndirectFifoDepth  = 64
 ) (
-    input logic clk_i,  // Clock
-    input logic rst_ni, // Reset (active low)
-    input logic recovery_enable_i,
-    input logic bypass_i3c_core_i,
-    input logic pec_err_det_en_i,  // PEC error detection enable
+    //--------------------------------------------------------------------------
+    // Clock and Reset
+    //--------------------------------------------------------------------------
+    input  logic clk_i,
+    input  logic rst_ni,
 
-    // TTI RX descriptor
+    //--------------------------------------------------------------------------
+    // Configuration
+    //--------------------------------------------------------------------------
+    input  logic bypass_i3c_core_i,
+    input  logic pec_err_det_en_i,
+    input  logic length_err_det_en_i,
+    input  logic readonly_err_det_en_i,
+    input  logic unsupported_err_det_en_i,
+    input  logic recovery_mode_csr_active_i,
+
+    //--------------------------------------------------------------------------
+    // TTI RX Descriptor Interface
+    //--------------------------------------------------------------------------
     input  logic                          desc_valid_i,
     output logic                          desc_ready_o,
     input  logic [TtiRxDescDataWidth-1:0] desc_data_i,
 
-    // TTI RX data
-    input  logic       data_valid_i,
-    output logic       data_ready_o,
-    input  logic [7:0] data_data_i,
+    //--------------------------------------------------------------------------
+    // TTI RX Data Interface (byte stream from controller)
+    //--------------------------------------------------------------------------
+    input  logic       rx_data_valid_i,
+    output logic       rx_data_ready_o,
+    input  logic [7:0] rx_data_i,
+    input  logic       rx_data_last_i,
 
-    // TTI RX data queue mux control and data flow monitor
-    output logic data_queue_select_o,
-    output logic data_queue_flush_o,
-    input  logic data_queue_flow_i,
+    //--------------------------------------------------------------------------
+    // TTI RX Queue Control
+    //--------------------------------------------------------------------------
+    output logic rx_data_queue_select_o,
+    output logic rx_data_queue_flush_o,
+    output logic conv_soft_reset_o,  // Assert during Error to reset width converters
+    input  logic rx_data_queue_flow_i,
 
-    // Bus condition detection
-    input logic bus_start_i,
-    input logic bus_stop_i,
+    //--------------------------------------------------------------------------
+    // TTI RX Data Queue (32-bit word interface for execution)
+    //--------------------------------------------------------------------------
+    output logic                          tti_rx_rreq_o,
+    input  logic                          tti_rx_rack_i,
+    input  logic [TtiRxDataDataWidth-1:0] tti_rx_rdata_i,
+    output logic                          tti_rx_sel_o,
+    output logic                          rx_data_queue_clr_o,
+    output logic                          rx_desc_queue_clr_o,
+    output logic                          tx_data_queue_clr_o,
+    output logic                          tx_desc_queue_clr_o,
 
-    // PEC computation control
+    //--------------------------------------------------------------------------
+    // Indirect FIFO Interface
+    //--------------------------------------------------------------------------
+    output logic                    indirect_rx_wvalid_o,
+    input  logic                    indirect_rx_wready_i,
+    output logic [CsrDataWidth-1:0] indirect_rx_wdata_o,
+    output logic                    indirect_rx_rreq_o,
+    input  logic                    indirect_rx_rack_i,
+    input  logic [CsrDataWidth-1:0] indirect_rx_rdata_i,
+    input  logic                    indirect_rx_full_i,
+    input  logic                    indirect_rx_empty_i,
+    output logic                    indirect_rx_clr_o,
+
+    //--------------------------------------------------------------------------
+    // Bus Condition Signals
+    //--------------------------------------------------------------------------
+    input  logic bus_start_i,
+    input  logic bus_stop_i,
+
+    //--------------------------------------------------------------------------
+    // RX PEC Interface
+    //--------------------------------------------------------------------------
     input  logic [7:0] pec_crc_i,
     output logic       pec_enable_o,
 
-    // Received command interface
-    output logic        cmd_valid_o,
-    output logic        cmd_is_rd_o,
-    output logic [ 7:0] cmd_cmd_o,
-    output logic [15:0] cmd_len_o,
-    output logic        cmd_error_o,
-    input  logic        cmd_done_i,
-    // virtual device
-    input  logic        virtual_device_tx_i
+    //--------------------------------------------------------------------------
+    // TTI TX Descriptor Interface
+    //--------------------------------------------------------------------------
+    output logic                          tx_desc_valid_o,
+    input  logic                          tx_desc_ready_i,
+    output logic [TtiTxDescDataWidth-1:0] tx_desc_data_o,
+
+    //--------------------------------------------------------------------------
+    // TTI TX Data Interface
+    //--------------------------------------------------------------------------
+    output logic       tx_data_valid_o,
+    input  logic       tx_data_ready_i,
+    output logic [7:0] tx_data_o,
+
+    //--------------------------------------------------------------------------
+    // TTI TX Queue Control
+    //--------------------------------------------------------------------------
+    output logic tx_data_queue_select_o,
+    output logic tx_start_trig_o,
+
+    //--------------------------------------------------------------------------
+    // TX PEC Interface
+    //--------------------------------------------------------------------------
+    input  logic [7:0] tx_pec_crc_i,
+    output logic       tx_pec_enable_o,
+    output logic       tx_pec_soft_rst_n_o,
+
+    //--------------------------------------------------------------------------
+    // Control Signals
+    //--------------------------------------------------------------------------
+    input  logic host_abort_i,
+    input  logic virtual_target_start_i,
+
+    //--------------------------------------------------------------------------
+    // Status Outputs
+    //--------------------------------------------------------------------------
+    output logic payload_available_o,
+    output logic image_activated_o,
+    output logic pec_err_o,
+    output logic length_err_o,
+    output logic readonly_err_o,
+    output logic unsupported_err_o,
+    output logic exec_pending_o,
+    output logic recovery_mode_enter_o,
+
+    //--------------------------------------------------------------------------
+    // Recovery CSR Interface
+    //--------------------------------------------------------------------------
+    input  I3CCSR__I3C_EC__SecFwRecoveryIf__out_t hwif_rec_i,
+    output I3CCSR__I3C_EC__SecFwRecoveryIf__in_t  hwif_rec_o,
+
+    //--------------------------------------------------------------------------
+    // SoC Management CSR Interface (Bypass Mode)
+    //--------------------------------------------------------------------------
+    input  I3CCSR__I3C_EC__SoCMgmtIf__out_t hwif_socmgmt_i,
+    output I3CCSR__I3C_EC__SoCMgmtIf__in_t  hwif_socmgmt_o
 );
 
-  // Internal signals
-  logic        bus_start_r;
+  //============================================================================
+  //
+  // SECTION 1: PARAMETERS AND TYPE DEFINITIONS
+  //
+  //============================================================================
 
-  logic        rx_flow;
-  logic [15:0] dcnt;
-
-  logic [ 7:0] len_lsb;
-  logic [ 7:0] len_msb;
-
-  logic [ 7:0] pec_recv;
-  logic [ 7:0] pec_calc;
-  logic        pec_match;
-
-  assign rx_flow = data_valid_i & data_ready_o;
-
-  // FSM States
+  //----------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
+  // Protocol Error Codes (OCP Secure Firmware Recovery spec v1.1)
+  // Used in DEVICE_STATUS.PROT_ERROR field to report protocol violations
+  //----------------------------------------------------------------------------
   typedef enum logic [7:0] {
-    Idle    = 'h0,
-    RxCmd   = 'h10,
-    RxLenL  = 'h11,
-    RxLenH  = 'h12,
-    RxData  = 'h20,
-    RxPec   = 'h30,
-    CmdIsRd = 'h38,
-    Cmd     = 'h40,
-    Busy    = 'h41
+    PROTOCOL_OK              = 8'h00,
+    PROTOCOL_ERROR_READONLY  = 8'h01,  // Write to read-only command
+    PROTOCOL_ERROR_PARAMETER = 8'h02,  // Parameter error (reserved for future use)
+    PROTOCOL_ERROR_LENGTH    = 8'h03,  // Length write error
+    PROTOCOL_ERROR_CRC       = 8'h04   // CRC/PEC error
+  } protocol_error_e;
+
+  //----------------------------------------------------------------------------
+  // OCP Recovery Command Codes
+  //----------------------------------------------------------------------------
+  typedef enum logic [7:0] {
+    CMD_PROT_CAP             = 8'd34,
+    CMD_DEVICE_ID            = 8'd35,
+    CMD_DEVICE_STATUS        = 8'd36,
+    CMD_DEVICE_RESET         = 8'd37,
+    CMD_RECOVERY_CTRL        = 8'd38,
+    CMD_RECOVERY_STATUS      = 8'd39,
+    CMD_HW_STATUS            = 8'd40,
+    CMD_INDIRECT_CTRL        = 8'd41,
+    CMD_INDIRECT_STATUS      = 8'd42,
+    CMD_INDIRECT_DATA        = 8'd43,
+    CMD_VENDOR               = 8'd44,
+    CMD_INDIRECT_FIFO_CTRL   = 8'd45,
+    CMD_INDIRECT_FIFO_STATUS = 8'd46,
+    CMD_INDIRECT_FIFO_DATA   = 8'd47
+  } command_e;
+
+  //----------------------------------------------------------------------------
+  // CSR Selector Enumeration
+  //----------------------------------------------------------------------------
+  typedef enum logic [7:0] {
+    CSR_INVALID = 0,
+    CSR_PROT_CAP_0,
+    CSR_PROT_CAP_1,
+    CSR_PROT_CAP_2,
+    CSR_PROT_CAP_3,
+    CSR_DEVICE_ID_0,
+    CSR_DEVICE_ID_1,
+    CSR_DEVICE_ID_2,
+    CSR_DEVICE_ID_3,
+    CSR_DEVICE_ID_4,
+    CSR_DEVICE_ID_5,
+    CSR_DEVICE_STATUS_0,
+    CSR_DEVICE_STATUS_1,
+    CSR_DEVICE_RESET,
+    CSR_RECOVERY_CTRL,
+    CSR_RECOVERY_STATUS,
+    CSR_HW_STATUS,
+    CSR_INDIRECT_FIFO_CTRL_0,
+    CSR_INDIRECT_FIFO_CTRL_1,
+    CSR_INDIRECT_FIFO_STATUS_0,
+    CSR_INDIRECT_FIFO_STATUS_1,
+    CSR_INDIRECT_FIFO_STATUS_2,
+    CSR_INDIRECT_FIFO_STATUS_3,
+    CSR_INDIRECT_FIFO_STATUS_4,
+    CSR_INDIRECT_FIFO_DATA
+  } csr_e;
+
+  //----------------------------------------------------------------------------
+  // FSM State Definitions
+  //----------------------------------------------------------------------------
+  typedef enum logic [7:0] {
+    Idle          = 8'h00,
+    RxCmd         = 8'h10,
+    RxLenL        = 8'h11,
+    RxLenH        = 8'h12,
+    RxData        = 8'h20,
+    RxPec         = 8'h30,
+    CmdDispatch   = 8'h40,
+    ExecCsrWrite  = 8'h41,
+    ExecFifoWrite = 8'h50,
+    TxDesc        = 8'h60,
+    TxLenL        = 8'h61,
+    TxLenH        = 8'h62,
+    TxData        = 8'h63,
+    TxPec         = 8'h64,
+    Done          = 8'hD0,
+    Error         = 8'hE1
   } state_e;
 
+  //============================================================================
+  //
+  // SECTION 2: SIGNAL DECLARATIONS
+  //
+  //============================================================================
+
+  //----------------------------------------------------------------------------
+  // FSM Signals
+  //----------------------------------------------------------------------------
   state_e state_q, state_d;
+  
+  // FSM trigger signals (active for one cycle)
+  logic capture_cmd;
+  logic capture_len_lsb;
+  logic capture_len_msb;
+  logic capture_pec;
+  logic set_cmd_is_rd;
+  logic latch_pec_from_len;
+  logic load_csr_sel;
+  logic inc_csr_sel;
+  logic load_csr_length;
 
-  logic recovery_enable;
-  logic bypass_i3c_core;
+  //----------------------------------------------------------------------------
+  // Command Header Signals
+  //----------------------------------------------------------------------------
+  command_e    cmd_cmd;           // Command code
+  logic        cmd_is_rd;         // READ command flag
 
-  assign recovery_enable = ~recovery_enable_i;
-  assign bypass_i3c_core = bypass_i3c_core_i;
+  logic [7:0]  len_lsb;           // Length LSB
+  logic [7:0]  len_msb;           // Length MSB
+  logic [15:0] cmd_len;           // Combined length
 
-  // State transition
+  //----------------------------------------------------------------------------
+  // PEC Signals
+  //----------------------------------------------------------------------------
+  logic [7:0] pec_recv;           // Received PEC byte
+  logic [7:0] pec_calc;           // Calculated PEC
+  logic [7:0] pec_crc_latched;    // Latched CRC value
+  logic       pec_enable_q;       // Delayed PEC enable
+
+  //----------------------------------------------------------------------------
+  // Counter Signals
+  //----------------------------------------------------------------------------
+  logic [15:0] dcnt, dcnt_next;                     // Data word counter
+  logic [1:0]  bcnt, bcnt_next;                     // Byte counter (0-3)
+  logic [15:0] payload_byte_cnt, payload_byte_cnt_next;  // Payload byte counter
+  logic [1:0]  pec_rx_byte_cnt;                     // PEC byte counter
+
+  //----------------------------------------------------------------------------
+  // Length Validation Signals
+  //----------------------------------------------------------------------------
+  logic [3:0]  desc_error;
+  logic        all_data_received;
+
+  // Raw length error detection (no enable masking)
+  logic        length_underrun_err_raw;   // Fewer bytes received than expected
+  logic        length_overrun_err_raw;    // More bytes received than expected  
+
+  // Enabled length errors (masked with length_err_det_en_i)
+  logic        length_underrun_err_en;    // Enabled underrun error
+  logic        length_overrun_err_en;     // Enabled overrun error
+
+  //----------------------------------------------------------------------------
+  // Bus Condition Signals
+  //----------------------------------------------------------------------------
+  logic rx_flow;
+
+  //----------------------------------------------------------------------------
+  // CSR Access Signals
+  //----------------------------------------------------------------------------
+  csr_e        csr_sel, csr_end;
+  csr_e        csr_sel_next, csr_end_next;
+  logic [31:0] csr_data, csr_data_next;
+  logic [15:0] csr_length, csr_length_next;
+  logic        csr_writeable;
+  logic [TtiRxDataDataWidth-1:0] prev_tti_rx_rdata;
+
+  //----------------------------------------------------------------------------
+  // CSR Composite Data Signals
+  //----------------------------------------------------------------------------
+  logic [31:0] prot_cap_2, prot_cap_3;
+  logic [31:0] device_id_0;
+  logic [31:0] device_status_0, device_status_1;
+  logic [31:0] device_reset;
+  logic [31:0] recovery_ctrl, recovery_status;
+  logic [31:0] hw_status;
+  logic [31:0] indirect_fifo_ctrl_0, indirect_fifo_ctrl_1;
+  logic [31:0] indirect_fifo_status_0;
+
+  //----------------------------------------------------------------------------
+  // CSR Write Enable Signals
+  //----------------------------------------------------------------------------
+  logic device_reset_we;
+  logic indirect_fifo_ctrl_0_we;
+  logic recovery_ctrl_we;
+
+  //----------------------------------------------------------------------------
+  // RX Interface Signals
+  //----------------------------------------------------------------------------
+  logic rx_data_queue_select_reg;
+
+  //----------------------------------------------------------------------------
+  // Indirect FIFO Signals
+  //----------------------------------------------------------------------------
+  logic [31:0] fifo_size, fifo_ptr_top;
+  logic [31:0] fifo_wrptr, fifo_rdptr;
+  logic        fifo_wrptr_inc, fifo_rdptr_inc;
+  logic        fifo_ptr_clr;
+  logic        fifo_reg_reset_clear;
+
+  //----------------------------------------------------------------------------
+  // Protocol Status Signals
+  //----------------------------------------------------------------------------
+  protocol_error_e status_protocol, status_protocol_next;
+  logic            status_protocol_we;
+
+  //----------------------------------------------------------------------------
+  // Payload and Transfer Signals
+  //----------------------------------------------------------------------------
+  logic payload_available_q;
+  logic fifo_xfer_done;
+  logic payload_high_en;
+  logic bypass_xfer_done;
+
+  //----------------------------------------------------------------------------
+  // Bypass Mode Signals
+  //----------------------------------------------------------------------------
+  logic       sw_device_reset_ctrl_swmod;
+  logic       sw_recovery_ctrl_activate_rec_img_swmod;
+  logic       sw_indirect_fifo_ctrl_reset_swmod;
+  logic [7:0] sw_device_reset_ctrl_value;
+  logic [7:0] sw_recovery_ctrl_activate_rec_img_value;
+  logic [7:0] sw_indirect_fifo_ctrl_reset_value;
+
+  //----------------------------------------------------------------------------
+  // Error Detection Signals
+  //----------------------------------------------------------------------------
+  // Raw PEC error detection (no enable masking)
+  logic        pec_err_raw;           // PEC mismatch detected
+  
+  // Enabled PEC error (masked with pec_err_det_en_i)
+  logic        pec_err_en;            // Enabled PEC error
+  
+  // Raw command validation errors (no enable masking)
+  logic        readonly_err_raw;      // Write to read-only command detected
+  logic        unsupported_err_raw;   // Unsupported/out-of-range command detected
+  
+  // Enabled command validation errors
+  logic        readonly_err_en;       // Enabled read-only error
+  logic        unsupported_err_en;    // Enabled unsupported error
+  
+  // FSM-generated error signals (set when enabled error detected in correct state)
+  logic        pec_err;               // PEC error detected in CmdDispatch
+  logic        length_underrun_err;   // Underrun detected in RxData
+  logic        length_overrun_err;    // Overrun detected in RxPec
+  logic        readonly_err;          // Read-only error detected in CmdDispatch
+  logic        unsupported_err;       // Unsupported error detected in CmdDispatch
+  logic        premature_stop;        // Premature bus stop detected (combinational)
+  logic        premature_stop_q;      // Registered premature stop for Error state exit
+
+  //============================================================================
+  //
+  // SECTION 3: STATIC ASSIGNMENTS
+  //
+  //============================================================================
+
+  // RX interface
+  assign rx_flow      = rx_data_valid_i & rx_data_ready_o;
+  assign cmd_len      = {len_msb, len_lsb};
+  assign desc_ready_o = 1'b1;
+  assign tti_rx_sel_o = 1'b1;
+
+  // TX queue control
+  assign tx_data_queue_select_o = 1'b1;
+  assign tx_start_trig_o        = 1'b0;
+
+  // Queue clear signals
+  assign rx_data_queue_clr_o = (state_q == Error);
+  assign rx_desc_queue_clr_o = (state_q == Error);
+  assign tx_data_queue_clr_o = 1'b0;
+  assign tx_desc_queue_clr_o = 1'b0;
+
+  // Status outputs
+  assign payload_available_o = payload_available_q;
+  // exec_pending is combinational - high during all execution states to prevent
+  // recovery_pending from deasserting between xfer_pending and exec states
+  assign exec_pending_o      = state_q inside {CmdDispatch, ExecCsrWrite, ExecFifoWrite,
+                                                TxDesc, TxLenL, TxLenH, TxData, TxPec};
+  assign image_activated_o   = (hwif_rec_i.RECOVERY_CTRL.ACTIVATE_REC_IMG.value == 8'h0F);
+
+  // Length validation - Raw detection (always active, no state qualification)
+  assign all_data_received       = (payload_byte_cnt == cmd_len);
+  assign length_underrun_err_raw = (rx_data_last_i || bus_stop_i) && (payload_byte_cnt < cmd_len);
+  assign length_overrun_err_raw  = (pec_rx_byte_cnt > 1);
+
+  // Length validation - Enabled errors (masked with length_err_det_en_i)
+  assign length_underrun_err_en = length_underrun_err_raw && length_err_det_en_i;
+  assign length_overrun_err_en  = length_overrun_err_raw && length_err_det_en_i;
+
+  // PEC validation - Raw detection
+  assign pec_err_raw = (pec_calc != pec_recv);
+  
+  // PEC validation - Enabled error
+  assign pec_err_en = pec_err_raw && pec_err_det_en_i;
+
+  // Command validation - Raw detection (evaluated in CmdDispatch)
+  // Read-only commands: PROT_CAP, DEVICE_ID, DEVICE_STATUS, HW_STATUS, INDIRECT_STATUS, INDIRECT_FIFO_STATUS
+  assign readonly_err_raw = !cmd_is_rd && (
+    (cmd_cmd == CMD_PROT_CAP) ||
+    (cmd_cmd == CMD_DEVICE_ID) ||
+    (cmd_cmd == CMD_DEVICE_STATUS) ||
+    (cmd_cmd == CMD_HW_STATUS) ||
+    (cmd_cmd == CMD_INDIRECT_STATUS) ||
+    (cmd_cmd == CMD_INDIRECT_FIFO_STATUS)
+  );
+  
+  // Unsupported command: out of valid range OR recovery-only command when not in recovery mode
+  assign unsupported_err_raw = 
+    ((cmd_cmd > CMD_INDIRECT_FIFO_DATA) || (cmd_cmd < CMD_PROT_CAP)) ||
+    (~recovery_mode_csr_active_i && (cmd_cmd > CMD_RECOVERY_STATUS));
+  
+  // Command validation - Enabled errors
+  assign readonly_err_en    = readonly_err_raw && readonly_err_det_en_i;
+  assign unsupported_err_en = unsupported_err_raw && unsupported_err_det_en_i;
+
+
+
+  //============================================================================
+  //
+  // SECTION 4: FSM STATE MACHINE
+  //
+  //============================================================================
+
+  //----------------------------------------------------------------------------
+  // State Register
+  //----------------------------------------------------------------------------
   always_ff @(posedge clk_i or negedge rst_ni)
     if (!rst_ni) state_q <= Idle;
-    else begin
-      if (recovery_enable | bypass_i3c_core) state_q <= Idle;
-      else state_q <= state_d;
-    end
+    else         state_q <= state_d;
 
+  //----------------------------------------------------------------------------
+  // Premature Stop Register
+  //----------------------------------------------------------------------------
+  // Capture premature_stop for one cycle so Error state can see it and exit.
+  // Clear when leaving Error state (entering Done).
+  always_ff @(posedge clk_i or negedge rst_ni)
+    if (!rst_ni)             premature_stop_q <= 1'b0;
+    else if (premature_stop) premature_stop_q <= 1'b1;
+    else if (state_q == Done) premature_stop_q <= 1'b0;
+
+  //----------------------------------------------------------------------------
+  // Recovery Mode Enter Pulse
+  //----------------------------------------------------------------------------
+  // Generate a single-cycle pulse when transitioning from Idle to RxCmd.
+  // This signals the start of a new recovery command to downstream logic.
+  assign recovery_mode_enter_o = (state_q == Idle) && (state_d == RxCmd);
+
+  //----------------------------------------------------------------------------
+  // Next State Logic
+  //----------------------------------------------------------------------------
   always_comb begin
-    state_d = state_q;
+    // Default values
+    state_d           = state_q;
+    capture_cmd       = 1'b0;
+    capture_len_lsb   = 1'b0;
+    capture_len_msb   = 1'b0;
+    capture_pec       = 1'b0;
+    set_cmd_is_rd     = 1'b0;
+    latch_pec_from_len= 1'b0;
+    load_csr_sel      = 1'b0;
+    inc_csr_sel       = 1'b0;
+    load_csr_length   = 1'b0;
+    
+    // Error signal defaults
+    pec_err               = 1'b0;
+    length_underrun_err   = 1'b0;
+    length_overrun_err    = 1'b0;
+    readonly_err          = 1'b0;
+    unsupported_err       = 1'b0;
+    premature_stop        = 1'b0;
+
     unique case (state_q)
+      //------------------------------------------------------------------------
+      // Idle: Wait for new transaction
+      //------------------------------------------------------------------------
       Idle: begin
-        if (bus_start_i || bus_start_r || virtual_device_tx_i) state_d = RxCmd;
+        if (virtual_target_start_i) state_d = RxCmd;
       end
 
+      //------------------------------------------------------------------------
+      // RxCmd: Receive command byte
+      //------------------------------------------------------------------------
       RxCmd: begin
-        if (rx_flow) state_d = RxLenL;
-        else if (bus_stop_i) state_d = Idle;
+        if (rx_flow) begin
+          capture_cmd = 1'b1;
+          state_d     = RxLenL;
+        end
+        else if (bus_start_i) begin
+          set_cmd_is_rd = 1'b1;
+          state_d       = CmdDispatch;
+        end
       end
 
+      //------------------------------------------------------------------------
+      // RxLenL: Receive length LSB (WRITE) or PEC byte (READ)
+      //------------------------------------------------------------------------
       RxLenL: begin
-        if (rx_flow) state_d = RxLenH;
-        else if (bus_stop_i) state_d = Idle;
+        if (rx_flow) begin
+          capture_len_lsb = 1'b1;
+          state_d         = RxLenH;
+        end
       end
 
+      //------------------------------------------------------------------------
+      // RxLenH: Receive length MSB or detect restart for READ
+      //------------------------------------------------------------------------
       RxLenH: begin
-        if (rx_flow) state_d = RxData;
-        else if (bus_start_i) state_d = CmdIsRd;
-        else if (bus_stop_i) state_d = Idle;
+        if (bus_start_i) begin
+          set_cmd_is_rd      = 1'b1;
+          latch_pec_from_len = 1'b1;
+          state_d            = CmdDispatch;
+        end
+        else if (rx_flow) begin
+          capture_len_msb = 1'b1;
+          state_d         = RxData;
+        end
       end
 
+      //------------------------------------------------------------------------
+      // RxData: Collect payload bytes until expected length reached
+      //------------------------------------------------------------------------
       RxData: begin
-        if ((data_queue_flow_i & dcnt == 1) | (dcnt == 0)) state_d = RxPec;
-        else if (bus_stop_i) state_d = Idle;
+        if (all_data_received) state_d = RxPec;
+        else if (length_underrun_err_en) begin
+          length_underrun_err = 1'b1;
+          state_d = Error;
+        end
       end
 
+      //------------------------------------------------------------------------
+      // RxPec: Capture PEC byte (validation deferred to CmdDispatch)
+      //------------------------------------------------------------------------
       RxPec: begin
-        if (rx_flow) state_d = Cmd;
-        else if (bus_stop_i) state_d = Idle;
+        if (rx_flow) capture_pec = 1'b1;
+        
+        if (length_overrun_err_en) begin
+          length_overrun_err = 1'b1;
+          state_d = Error;
+        end
+        else if (rx_data_last_i) begin
+          state_d = CmdDispatch;
+        end
       end
 
-      CmdIsRd: state_d = Cmd;
-
-      Cmd: state_d = Busy;
-
-      Busy: begin
-        if (cmd_done_i) state_d = Idle;
+      //------------------------------------------------------------------------
+      // CmdDispatch: Validate command and route to appropriate execution state
+      //------------------------------------------------------------------------
+      CmdDispatch: begin
+        load_csr_sel    = 1'b1;
+        load_csr_length = 1'b1;
+        
+        // Set error signals for enabled errors detected in this state
+        pec_err             = pec_err_en;
+        readonly_err        = readonly_err_en;
+        unsupported_err     = unsupported_err_en;
+        
+        if (pec_err || readonly_err || unsupported_err)
+          state_d = Error;
+        else if (!cmd_is_rd) begin
+          state_d = (cmd_cmd == CMD_INDIRECT_FIFO_DATA) ? ExecFifoWrite : ExecCsrWrite;
+        end
+        else 
+          state_d = TxDesc;
       end
 
+      //------------------------------------------------------------------------
+      // ExecCsrWrite: Write received data to target CSR
+      //------------------------------------------------------------------------
+      ExecCsrWrite: begin
+        if (tti_rx_rack_i) inc_csr_sel = 1'b1;
+        if (tti_rx_rack_i && (dcnt == 1)) state_d = Done;
+      end
+
+      //------------------------------------------------------------------------
+      // ExecFifoWrite: Stream firmware data to indirect FIFO
+      //------------------------------------------------------------------------
+      ExecFifoWrite: begin
+        if ((tti_rx_rack_i && (dcnt == 1)) ||
+            (bypass_i3c_core_i && hwif_socmgmt_i.REC_INTF_CFG.REC_PAYLOAD_DONE.value && 
+             ~indirect_rx_empty_i))
+          state_d = Done;
+      end
+
+      //------------------------------------------------------------------------
+      // TxDesc: Send TX descriptor
+      //------------------------------------------------------------------------
+      TxDesc: begin
+        if (host_abort_i)        state_d = Done;
+        else if (tx_desc_ready_i) state_d = TxLenL;
+      end
+
+      //------------------------------------------------------------------------
+      // TxLenL: Send response length LSB
+      //------------------------------------------------------------------------
+      TxLenL: begin
+        if (host_abort_i)        state_d = Done;
+        else if (tx_data_ready_i) state_d = TxLenH;
+      end
+
+      //------------------------------------------------------------------------
+      // TxLenH: Send response length MSB
+      //------------------------------------------------------------------------
+      TxLenH: begin
+        if (host_abort_i)        state_d = Done;
+        else if (tx_data_ready_i) state_d = TxData;
+      end
+
+      //------------------------------------------------------------------------
+      // TxData: Send CSR data bytes
+      //------------------------------------------------------------------------
+      TxData: begin
+        if (tx_data_ready_i && tx_data_valid_o && (bcnt == 3)) inc_csr_sel = 1'b1;
+        if (host_abort_i) state_d = Done;
+        else if (tx_data_ready_i && tx_data_valid_o && (dcnt == 1)) state_d = TxPec;
+      end
+
+      //------------------------------------------------------------------------
+      // TxPec: Send PEC byte
+      //------------------------------------------------------------------------
+      TxPec: begin
+        if (tx_data_ready_i && tx_data_valid_o) state_d = Done;
+      end
+
+      //------------------------------------------------------------------------
+      // Error: Stay until bus transaction completes to drain remaining bytes
+      //------------------------------------------------------------------------
+      Error: begin
+        // Wait for the I3C bus transaction to end before proceeding to Done.
+        // This ensures we drain all incoming bytes during the error condition.
+        // Converters are reset via conv_soft_reset_o which is asserted in Error.
+        // Exit on Stop, Repeated Start, or if we entered due to premature stop
+        // (premature_stop_q is set since the stop pulse already occurred).
+        if (bus_stop_i || bus_start_i || premature_stop_q)
+          state_d = Done;
+        // else stay in Error, continue accepting and discarding bytes
+      end
+
+      //------------------------------------------------------------------------
+      // Done/Default: Terminal states
+      //------------------------------------------------------------------------
+      Done:    state_d = Idle;
       default: state_d = Idle;
     endcase
+
+    //--------------------------------------------------------------------------
+    // Global Premature Bus Stop Detection
+    // A premature stop occurs when bus_stop_i is seen in any state where the
+    // protocol transaction has not completed normally. This is a protocol error.
+    // We go to Error state to properly clear FIFOs and converters. The
+    // premature_stop signal is registered so the Error state can see it and
+    // exit immediately (since the bus_stop_i pulse has already passed).
+    //
+    // Special case: In RxPec, bus_stop_i coincides with rx_data_last_i when the
+    // PEC byte is successfully received - this is normal completion, not premature.
+    //--------------------------------------------------------------------------
+    if (bus_stop_i && state_q inside {RxCmd, RxLenL, RxLenH, RxData, RxPec,
+                                       CmdDispatch, ExecCsrWrite, ExecFifoWrite}) begin
+      // In RxPec, if rx_data_last_i is also asserted, this is normal completion
+      if (!(state_q == RxPec && rx_data_last_i)) begin
+        premature_stop      = 1'b1;
+        state_d             = Error;
+        
+        if (length_underrun_err_en) begin
+          length_underrun_err = 1'b1;  // Report as length error (underrun)
+        end
+      end
+    end
   end
 
-  // Bus start condition latch. Needed as next start may come before the
-  // FSM is finished.
-  always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni) bus_start_r <= '0;
-    else
-      if (bypass_i3c_core | recovery_enable) bus_start_r <= '0;
-      else begin
-        unique case (state_q)
-          CmdIsRd, Cmd, Busy: begin
-            if (bus_start_i) bus_start_r <= '1;
-          end
-          default: bus_start_r <= '0;
-        endcase
-      end
+  //============================================================================
+  //
+  // SECTION 5: RX PATH LOGIC
+  //
+  //============================================================================
 
-  // Data ready
-  always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni) data_ready_o <= '0;
-    else
-      if (bypass_i3c_core | recovery_enable) data_ready_o <= '0;
-      else begin
-        unique case (state_q)
-          RxCmd:   data_ready_o <= 1'b1;
-          RxPec:   if (rx_flow) data_ready_o <= '0;
-          default: data_ready_o <= data_ready_o;
-        endcase
-      end
+  //----------------------------------------------------------------------------
+  // RX Data Ready Control
+  //----------------------------------------------------------------------------
+  // Ready to receive during all RX states AND during Error (to drain bus).
+  // During Error, bytes are accepted but discarded via converter soft reset.
+  assign rx_data_ready_o = state_q inside {RxCmd, RxLenL, RxLenH, RxData, RxPec, Error};
 
-  // Data queue mux select
+  //----------------------------------------------------------------------------
+  // RX Queue Select Control
+  // Select=1: Receiver consumes bytes directly (header/PEC)
+  // Select=0: Bytes go to queue (payload)
+  //----------------------------------------------------------------------------
   always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni) data_queue_select_o <= 1'b1;
-    else begin
-      if (bypass_i3c_core | recovery_enable) data_queue_select_o <= 1'b1;
-      else if (state_q == RxData) data_queue_select_o <= (data_queue_flow_i & dcnt == 1);
-    end
+    if (!rst_ni) rx_data_queue_select_reg <= 1'b1;
+    else if (state_q == Idle) rx_data_queue_select_reg <= 1'b1;
+    else if (state_q == RxLenH && rx_flow) rx_data_queue_select_reg <= 1'b0;
+    else if (state_q == RxPec) rx_data_queue_select_reg <= 1'b1;
 
-  // Data queue flush signal. Flush if data length is not divisible by 4
+  assign rx_data_queue_select_o = (state_q == RxPec) ? 1'b1 : rx_data_queue_select_reg;
+
+  //----------------------------------------------------------------------------
+  // RX Queue Flush/Clear Control
+  //----------------------------------------------------------------------------
   always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni) data_queue_flush_o <= 1'b0;
-    else begin
-      if (bypass_i3c_core | recovery_enable) data_queue_flush_o <= 1'b1;
-      else data_queue_flush_o <= (state_q == Cmd) && |(len_lsb[1:0]);
-    end
+    if (!rst_ni) rx_data_queue_flush_o <= 1'b0;
+    else         rx_data_queue_flush_o <= (state_q == CmdDispatch) && |(payload_byte_cnt[1:0]);
 
-  // Data counter
-  always_ff @(posedge clk_i)
+  // Assert soft reset to width converters during Error state (combinational for immediate effect)
+  assign conv_soft_reset_o = (state_q == Error);
+
+  //============================================================================
+  //
+  // SECTION 6: COMMAND HEADER CAPTURE
+  //
+  //============================================================================
+
+  //----------------------------------------------------------------------------
+  // Command Byte
+  //----------------------------------------------------------------------------
+  always_ff @(posedge clk_i or negedge rst_ni)
+    if (!rst_ni)          cmd_cmd <= command_e'(8'h0);
+    else if (capture_cmd) cmd_cmd <= command_e'(rx_data_i);
+
+  //----------------------------------------------------------------------------
+  // Length Bytes
+  //----------------------------------------------------------------------------
+  always_ff @(posedge clk_i or negedge rst_ni)
+    if (!rst_ni)               len_lsb <= 8'h0;
+    else if (latch_pec_from_len) len_lsb <= 8'h0;
+    else if (capture_len_lsb)   len_lsb <= rx_data_i;
+
+  always_ff @(posedge clk_i or negedge rst_ni)
+    if (!rst_ni)               len_msb <= 8'h0;
+    else if (latch_pec_from_len) len_msb <= 8'h0;
+    else if (capture_len_msb)   len_msb <= rx_data_i;
+
+  //----------------------------------------------------------------------------
+  // Command Type (READ/WRITE)
+  //----------------------------------------------------------------------------
+  always_ff @(posedge clk_i or negedge rst_ni)
+    if (!rst_ni)           cmd_is_rd <= 1'b0;
+    else if (state_q == Idle) cmd_is_rd <= 1'b0;
+    else if (set_cmd_is_rd)  cmd_is_rd <= 1'b1;
+
+  //============================================================================
+  //
+  // SECTION 7: COUNTERS
+  //
+  //============================================================================
+
+  //----------------------------------------------------------------------------
+  // Data Word Counter (dcnt)
+  //----------------------------------------------------------------------------
+  always_comb begin
+    dcnt_next = dcnt;
     unique case (state_q)
-      RxLenL:  if (rx_flow) dcnt[7:0] <= data_data_i;
-      RxLenH:  if (rx_flow) dcnt[15:8] <= data_data_i;
-      RxData:  if (data_queue_flow_i) dcnt <= dcnt - 1;
-      default: dcnt <= dcnt;
+      Idle:                        dcnt_next = 16'h0;
+      CmdDispatch:                 dcnt_next = (|payload_byte_cnt[1:0]) ? 
+                                               16'(payload_byte_cnt / 4 + 1) : 
+                                               16'(payload_byte_cnt / 4);
+      ExecCsrWrite, ExecFifoWrite: dcnt_next = tti_rx_rack_i ? (dcnt - 16'h1) : dcnt;
+      TxDesc:                      dcnt_next = csr_length;
+      TxData:                      dcnt_next = (tx_data_valid_o && tx_data_ready_i) ? 
+                                               (dcnt - 16'h1) : dcnt;
+      default: ;
     endcase
+  end
 
-  // Command header & PEC capture
+  always_ff @(posedge clk_i or negedge rst_ni)
+    if (!rst_ni) dcnt <= 16'h0;
+    else         dcnt <= dcnt_next;
+
+  //----------------------------------------------------------------------------
+  // Byte Counter (bcnt)
+  //----------------------------------------------------------------------------
+  always_comb begin
+    bcnt_next = bcnt;
+    unique case (state_q)
+      Idle:   bcnt_next = 2'h0;
+      TxData: bcnt_next = (tx_data_valid_o && tx_data_ready_i) ? (bcnt + 2'h1) : bcnt;
+      default: ;
+    endcase
+  end
+
+  always_ff @(posedge clk_i or negedge rst_ni)
+    if (!rst_ni) bcnt <= 2'h0;
+    else         bcnt <= bcnt_next;
+
+  //----------------------------------------------------------------------------
+  // Payload Byte Counter
+  //----------------------------------------------------------------------------
+  always_comb begin
+    payload_byte_cnt_next = payload_byte_cnt;
+    unique case (state_q)
+      Idle, RxCmd, RxLenL, RxLenH: payload_byte_cnt_next = 16'h0;
+      RxData: payload_byte_cnt_next = rx_data_queue_flow_i ? 
+                                      (payload_byte_cnt + 16'h1) : payload_byte_cnt;
+      default: ;
+    endcase
+  end
+
+  always_ff @(posedge clk_i or negedge rst_ni)
+    if (!rst_ni) payload_byte_cnt <= 16'h0;
+    else         payload_byte_cnt <= payload_byte_cnt_next;
+
+  //----------------------------------------------------------------------------
+  // PEC Byte Counter
+  //----------------------------------------------------------------------------
+  always_ff @(posedge clk_i or negedge rst_ni)
+    if (!rst_ni)             pec_rx_byte_cnt <= 2'h0;
+    else if (state_q != RxPec) pec_rx_byte_cnt <= 2'h0;
+    else if (rx_flow)         pec_rx_byte_cnt <= pec_rx_byte_cnt + 2'h1;
+
+  //============================================================================
+  //
+  // SECTION 8: PEC VALIDATION
+  //
+  //============================================================================
+
+  //----------------------------------------------------------------------------
+  // PEC Enable - gate CRC calculation for relevant bytes only
+  //----------------------------------------------------------------------------
+  assign pec_enable_o = (state_q inside {RxCmd, RxLenL, RxLenH}) ? rx_flow :
+                        (state_q == RxData) ? rx_data_queue_flow_i : 1'b0;
+
+  always_ff @(posedge clk_i or negedge rst_ni)
+    if (!rst_ni) pec_enable_q <= 1'b0;
+    else         pec_enable_q <= pec_enable_o;
+
+  //----------------------------------------------------------------------------
+  // PEC CRC Latch
+  //----------------------------------------------------------------------------
+  always_ff @(posedge clk_i or negedge rst_ni)
+    if (!rst_ni)        pec_crc_latched <= 8'h0;
+    else if (bus_start_i) pec_crc_latched <= 8'h0;
+    else if (pec_enable_q) pec_crc_latched <= pec_crc_i;
+
+  //----------------------------------------------------------------------------
+  // PEC Receive Capture
+  //----------------------------------------------------------------------------
+  always_ff @(posedge clk_i or negedge rst_ni)
+    if (!rst_ni)               pec_recv <= 8'h0;
+    else if (latch_pec_from_len) pec_recv <= len_lsb;
+    else if (capture_pec)       pec_recv <= rx_data_i;
+
+  //----------------------------------------------------------------------------
+  // PEC Calculated Value
+  //----------------------------------------------------------------------------
+  always_ff @(posedge clk_i or negedge rst_ni)
+    if (!rst_ni) pec_calc <= 8'h0;
+    else if (state_q == RxLenL && rx_flow) pec_calc <= pec_crc_latched;
+    else if (state_q == RxPec && rx_flow)  pec_calc <= pec_crc_latched;
+
+  //============================================================================
+  //
+  // SECTION 9: LENGTH VALIDATION
+  //
+  //============================================================================
+
+  always_ff @(posedge clk_i or negedge rst_ni)
+    if (!rst_ni)               desc_error <= 4'h0;
+    else if (state_q == Idle)  desc_error <= 4'h0;
+    else if (desc_valid_i)     desc_error <= desc_data_i[31:28];
+
+
+
+  //============================================================================
+  //
+  // SECTION 10: TX PATH LOGIC
+  //
+  //============================================================================
+
+  //----------------------------------------------------------------------------
+  // TX Descriptor
+  //----------------------------------------------------------------------------
+  assign tx_desc_valid_o = (state_q == TxDesc);
+  assign tx_desc_data_o  = {{(TtiTxDescDataWidth-16){1'b0}}, csr_length + 16'd3};
+
+  //----------------------------------------------------------------------------
+  // TX Data Valid
+  //----------------------------------------------------------------------------
+  assign tx_data_valid_o = state_q inside {TxLenL, TxLenH, TxData, TxPec};
+
+  //----------------------------------------------------------------------------
+  // TX Data Mux
+  //----------------------------------------------------------------------------
+  always_comb begin
+    tx_data_o = 8'h0;
+    unique case (state_q)
+      TxLenL: tx_data_o = csr_length[7:0];
+      TxLenH: tx_data_o = csr_length[15:8];
+      TxPec:  tx_data_o = tx_pec_crc_i;
+      TxData: begin
+        unique case (bcnt)
+          2'd0:    tx_data_o = csr_data[7:0];
+          2'd1:    tx_data_o = csr_data[15:8];
+          2'd2:    tx_data_o = csr_data[23:16];
+          2'd3:    tx_data_o = csr_data[31:24];
+          default: ;
+        endcase
+      end
+      default: ;
+    endcase
+  end
+
+  //----------------------------------------------------------------------------
+  // TX PEC Enable
+  //----------------------------------------------------------------------------
+  assign tx_pec_enable_o = (state_q inside {TxLenL, TxLenH, TxData}) && 
+                           tx_data_valid_o && tx_data_ready_i;
+
+  //----------------------------------------------------------------------------
+  // TX PEC Soft Reset - keep active from RxCmd to capture address byte for CRC
+  //----------------------------------------------------------------------------
+  assign tx_pec_soft_rst_n_o = state_q inside {RxCmd, RxLenL, RxLenH, RxData, RxPec, 
+                                                CmdDispatch, TxDesc, TxLenL, TxLenH, 
+                                                TxData, TxPec};
+
+  //============================================================================
+  //
+  // SECTION 11: CSR SELECTOR LOGIC
+  //
+  //============================================================================
+
+  //----------------------------------------------------------------------------
+  // CSR Selector Decode
+  //----------------------------------------------------------------------------
+  always_comb begin
+    csr_sel_next = CSR_INVALID;
+    csr_end_next = CSR_INVALID;
+    
+    unique case (cmd_cmd)
+      CMD_PROT_CAP:             begin csr_sel_next = CSR_PROT_CAP_0;           csr_end_next = CSR_PROT_CAP_3; end
+      CMD_DEVICE_ID:            begin csr_sel_next = CSR_DEVICE_ID_0;          csr_end_next = CSR_DEVICE_ID_5; end
+      CMD_DEVICE_STATUS:        begin csr_sel_next = CSR_DEVICE_STATUS_0;      csr_end_next = CSR_DEVICE_STATUS_1; end
+      CMD_DEVICE_RESET:         begin csr_sel_next = CSR_DEVICE_RESET;         csr_end_next = CSR_DEVICE_RESET; end
+      CMD_RECOVERY_CTRL:        begin csr_sel_next = CSR_RECOVERY_CTRL;        csr_end_next = CSR_RECOVERY_CTRL; end
+      CMD_RECOVERY_STATUS:      begin csr_sel_next = CSR_RECOVERY_STATUS;      csr_end_next = CSR_RECOVERY_STATUS; end
+      CMD_HW_STATUS:            begin csr_sel_next = CSR_HW_STATUS;            csr_end_next = CSR_HW_STATUS; end
+      CMD_INDIRECT_FIFO_CTRL:   begin csr_sel_next = CSR_INDIRECT_FIFO_CTRL_0; csr_end_next = CSR_INDIRECT_FIFO_CTRL_1; end
+      CMD_INDIRECT_FIFO_STATUS: begin csr_sel_next = CSR_INDIRECT_FIFO_STATUS_0; csr_end_next = CSR_INDIRECT_FIFO_STATUS_4; end
+      CMD_INDIRECT_FIFO_DATA:   begin csr_sel_next = CSR_INDIRECT_FIFO_DATA;   csr_end_next = CSR_INDIRECT_FIFO_DATA; end
+      default: ;
+    endcase
+  end
+
+  always_ff @(posedge clk_i or negedge rst_ni)
+    if (!rst_ni) begin
+      csr_sel <= CSR_INVALID;
+      csr_end <= CSR_INVALID;
+    end
+    else if (load_csr_sel) begin
+      csr_sel <= csr_sel_next;
+      csr_end <= csr_end_next;
+    end
+    else if (inc_csr_sel && (csr_sel < csr_end)) begin
+      csr_sel <= csr_e'(csr_sel + 8'd1);
+    end
+
+  //----------------------------------------------------------------------------
+  // CSR Length Decode
+  //----------------------------------------------------------------------------
+  always_comb begin
+    csr_length_next = 16'd4;
+    unique case (cmd_cmd)
+      CMD_PROT_CAP:             csr_length_next = 16'd15;
+      CMD_DEVICE_ID:            csr_length_next = 16'd24;
+      CMD_DEVICE_STATUS:        csr_length_next = 16'd7;
+      CMD_DEVICE_RESET:         csr_length_next = 16'd3;
+      CMD_RECOVERY_CTRL:        csr_length_next = 16'd3;
+      CMD_RECOVERY_STATUS:      csr_length_next = 16'd2;
+      CMD_HW_STATUS:            csr_length_next = 16'd4;
+      CMD_INDIRECT_FIFO_CTRL:   csr_length_next = 16'd6;
+      CMD_INDIRECT_FIFO_STATUS: csr_length_next = 16'd20;
+      default: ;
+    endcase
+  end
+
+  always_ff @(posedge clk_i or negedge rst_ni)
+    if (!rst_ni)           csr_length <= 16'h0;
+    else if (load_csr_length) csr_length <= csr_length_next;
+
+  //----------------------------------------------------------------------------
+  // CSR Writeable Flag
+  //----------------------------------------------------------------------------
+  always_comb begin
+    csr_writeable = 1'b0;
+    unique case (csr_sel)
+      CSR_DEVICE_RESET, CSR_RECOVERY_CTRL, 
+      CSR_INDIRECT_FIFO_CTRL_0, CSR_INDIRECT_FIFO_CTRL_1: csr_writeable = 1'b1;
+      default: ;
+    endcase
+  end
+
+  //============================================================================
+  //
+  // SECTION 12: CSR READ DATA
+  //
+  //============================================================================
+
+  //----------------------------------------------------------------------------
+  // Composite CSR Values
+  //----------------------------------------------------------------------------
+  assign prot_cap_2 = {
+    hwif_rec_i.PROT_CAP_2.AGENT_CAPS.value,
+    hwif_rec_i.PROT_CAP_2.REC_PROT_VERSION.value
+  };
+
+  assign prot_cap_3 = {
+    8'h0,
+    hwif_rec_i.PROT_CAP_3.HEARTBEAT_PERIOD.value,
+    hwif_rec_i.PROT_CAP_3.MAX_RESP_TIME.value,
+    hwif_rec_i.PROT_CAP_3.NUM_OF_CMS_REGIONS.value
+  };
+
+  assign device_id_0 = {
+    hwif_rec_i.DEVICE_ID_0.DATA.value,
+    hwif_rec_i.DEVICE_ID_0.VENDOR_SPECIFIC_STR_LENGTH.value,
+    hwif_rec_i.DEVICE_ID_0.DESC_TYPE.value
+  };
+
+  assign device_status_0 = {
+    hwif_rec_i.DEVICE_STATUS_0.REC_REASON_CODE.value,
+    hwif_rec_i.DEVICE_STATUS_0.PROT_ERROR.value,
+    hwif_rec_i.DEVICE_STATUS_0.DEV_STATUS.value
+  };
+
+  assign device_status_1 = {
+    hwif_rec_i.DEVICE_STATUS_1.VENDOR_STATUS.value,
+    hwif_rec_i.DEVICE_STATUS_1.VENDOR_STATUS_LENGTH.value,
+    hwif_rec_i.DEVICE_STATUS_1.HEARTBEAT.value
+  };
+
+  assign device_reset = {
+    8'h0,
+    hwif_rec_i.DEVICE_RESET.IF_CTRL.value,
+    hwif_rec_i.DEVICE_RESET.FORCED_RECOVERY.value,
+    hwif_rec_i.DEVICE_RESET.RESET_CTRL.value
+  };
+
+  assign recovery_ctrl = {
+    8'h0,
+    hwif_rec_i.RECOVERY_CTRL.ACTIVATE_REC_IMG.value,
+    hwif_rec_i.RECOVERY_CTRL.REC_IMG_SEL.value,
+    hwif_rec_i.RECOVERY_CTRL.CMS.value
+  };
+
+  assign recovery_status = {
+    16'h0,
+    hwif_rec_i.RECOVERY_STATUS.VENDOR_SPECIFIC_STATUS.value,
+    hwif_rec_i.RECOVERY_STATUS.REC_IMG_INDEX.value,
+    hwif_rec_i.RECOVERY_STATUS.DEV_REC_STATUS.value
+  };
+
+  assign hw_status = {
+    hwif_rec_i.HW_STATUS.VENDOR_HW_STATUS_LEN.value,
+    hwif_rec_i.HW_STATUS.CTEMP.value,
+    hwif_rec_i.HW_STATUS.VENDOR_HW_STATUS.value,
+    hwif_rec_i.HW_STATUS.RESERVED_7_3.value,
+    hwif_rec_i.HW_STATUS.FATAL_ERR.value,
+    hwif_rec_i.HW_STATUS.SOFT_ERR.value,
+    hwif_rec_i.HW_STATUS.TEMP_CRITICAL.value
+  };
+
+  assign indirect_fifo_ctrl_0 = {
+    hwif_rec_i.INDIRECT_FIFO_CTRL_1.IMAGE_SIZE.value[15:0],
+    hwif_rec_i.INDIRECT_FIFO_CTRL_0.RESET.value,
+    hwif_rec_i.INDIRECT_FIFO_CTRL_0.CMS.value
+  };
+
+  assign indirect_fifo_ctrl_1 = {
+    16'h0,
+    hwif_rec_i.INDIRECT_FIFO_CTRL_1.IMAGE_SIZE.value[31:16]
+  };
+
+  assign indirect_fifo_status_0 = {
+    16'd0, 5'd0,
+    hwif_rec_i.INDIRECT_FIFO_STATUS_0.REGION_TYPE.value,
+    6'd0,
+    hwif_rec_i.INDIRECT_FIFO_STATUS_0.FULL.value,
+    hwif_rec_i.INDIRECT_FIFO_STATUS_0.EMPTY.value
+  };
+
+  //----------------------------------------------------------------------------
+  // CSR Data Mux
+  //----------------------------------------------------------------------------
+  always_comb begin
+    csr_data_next = 32'h0;
+    unique case (csr_sel)
+      CSR_PROT_CAP_0:             csr_data_next = hwif_rec_i.PROT_CAP_0.REC_MAGIC_STRING_0.value;
+      CSR_PROT_CAP_1:             csr_data_next = hwif_rec_i.PROT_CAP_1.REC_MAGIC_STRING_1.value;
+      CSR_PROT_CAP_2:             csr_data_next = prot_cap_2;
+      CSR_PROT_CAP_3:             csr_data_next = prot_cap_3;
+      CSR_DEVICE_ID_0:            csr_data_next = device_id_0;
+      CSR_DEVICE_ID_1:            csr_data_next = hwif_rec_i.DEVICE_ID_1.DATA.value;
+      CSR_DEVICE_ID_2:            csr_data_next = hwif_rec_i.DEVICE_ID_2.DATA.value;
+      CSR_DEVICE_ID_3:            csr_data_next = hwif_rec_i.DEVICE_ID_3.DATA.value;
+      CSR_DEVICE_ID_4:            csr_data_next = hwif_rec_i.DEVICE_ID_4.DATA.value;
+      CSR_DEVICE_ID_5:            csr_data_next = hwif_rec_i.DEVICE_ID_5.DATA.value;
+      CSR_DEVICE_STATUS_0:        csr_data_next = device_status_0;
+      CSR_DEVICE_STATUS_1:        csr_data_next = device_status_1;
+      CSR_DEVICE_RESET:           csr_data_next = device_reset;
+      CSR_RECOVERY_CTRL:          csr_data_next = recovery_ctrl;
+      CSR_RECOVERY_STATUS:        csr_data_next = recovery_status;
+      CSR_HW_STATUS:              csr_data_next = hw_status;
+      CSR_INDIRECT_FIFO_CTRL_0:   csr_data_next = indirect_fifo_ctrl_0;
+      CSR_INDIRECT_FIFO_CTRL_1:   csr_data_next = indirect_fifo_ctrl_1;
+      CSR_INDIRECT_FIFO_STATUS_0: csr_data_next = indirect_fifo_status_0;
+      CSR_INDIRECT_FIFO_STATUS_1: csr_data_next = hwif_rec_i.INDIRECT_FIFO_STATUS_1.WRITE_INDEX.value;
+      CSR_INDIRECT_FIFO_STATUS_2: csr_data_next = hwif_rec_i.INDIRECT_FIFO_STATUS_2.READ_INDEX.value;
+      CSR_INDIRECT_FIFO_STATUS_3: csr_data_next = hwif_rec_i.INDIRECT_FIFO_STATUS_3.FIFO_SIZE.value;
+      CSR_INDIRECT_FIFO_STATUS_4: csr_data_next = hwif_rec_i.INDIRECT_FIFO_STATUS_4.MAX_TRANSFER_SIZE.value;
+      default: ;
+    endcase
+  end
+
+  always_ff @(posedge clk_i or negedge rst_ni)
+    if (!rst_ni) csr_data <= 32'h0;
+    else         csr_data <= csr_data_next;
+
+  //============================================================================
+  //
+  // SECTION 13: CSR WRITE PATH
+  //
+  //============================================================================
+
+  //----------------------------------------------------------------------------
+  // TTI RX Request
+  // Deassert for one cycle after rack to allow dcnt to update (prevent underflow)
+  //----------------------------------------------------------------------------
+  assign tti_rx_rreq_o = (state_q inside {ExecCsrWrite, ExecFifoWrite}) && 
+                         (dcnt != 0) && !tti_rx_rack_i;
+
+  //----------------------------------------------------------------------------
+  // Previous RX Data (for multi-word writes)
+  //----------------------------------------------------------------------------
+  always_ff @(posedge clk_i or negedge rst_ni)
+    if (!rst_ni)         prev_tti_rx_rdata <= '0;
+    else if (tti_rx_rack_i) prev_tti_rx_rdata <= tti_rx_rdata_i;
+
+  //----------------------------------------------------------------------------
+  // CSR Write Enable Signals
+  //----------------------------------------------------------------------------
+  assign device_reset_we         = tti_rx_rack_i && (csr_sel == CSR_DEVICE_RESET);
+  assign indirect_fifo_ctrl_0_we = tti_rx_rack_i && (csr_sel == CSR_INDIRECT_FIFO_CTRL_0);
+  assign recovery_ctrl_we        = tti_rx_rack_i && (csr_sel == CSR_RECOVERY_CTRL);
+
+  //============================================================================
+  //
+  // SECTION 14: INDIRECT FIFO LOGIC
+  //
+  //============================================================================
+
+  //----------------------------------------------------------------------------
+  // FIFO Write Interface
+  //----------------------------------------------------------------------------
+  always_comb begin
+    // Only write to FIFO if not full - reject writes when full
+    indirect_rx_wvalid_o = (state_q == ExecFifoWrite) && tti_rx_rack_i && indirect_rx_wready_i;
+    indirect_rx_wdata_o  = tti_rx_rdata_i;
+  end
+
+
+  //----------------------------------------------------------------------------
+  // FIFO Pointer Management
+  //----------------------------------------------------------------------------
+  assign fifo_size      = hwif_rec_i.INDIRECT_FIFO_STATUS_3.FIFO_SIZE.value;
+  assign fifo_wrptr     = hwif_rec_i.INDIRECT_FIFO_STATUS_1.WRITE_INDEX.value;
+  assign fifo_rdptr     = hwif_rec_i.INDIRECT_FIFO_STATUS_2.READ_INDEX.value;
+  // Only increment write pointer if FIFO is not full - reject overflow writes
+  assign fifo_wrptr_inc = indirect_rx_wvalid_o;
+  assign fifo_rdptr_inc = indirect_rx_rack_i;
+  assign fifo_ptr_clr   = (hwif_rec_i.INDIRECT_FIFO_CTRL_0.RESET.value == 8'd1);
+  assign indirect_rx_clr_o = fifo_ptr_clr;
+
+  always_ff @(posedge clk_i or negedge rst_ni)
+    if (!rst_ni) fifo_ptr_top <= 32'h0;
+    else         fifo_ptr_top <= fifo_size - 32'h1;
+
+  //----------------------------------------------------------------------------
+  // FIFO Reset Self-Clear
+  //----------------------------------------------------------------------------
+  assign hwif_rec_o.INDIRECT_FIFO_CTRL_0.RESET.hwclr = fifo_reg_reset_clear;
+
+  always_ff @(posedge clk_i or negedge rst_ni)
+    if (!rst_ni)                                       fifo_reg_reset_clear <= 1'b0;
+    else if (|hwif_rec_i.INDIRECT_FIFO_CTRL_0.RESET.value) fifo_reg_reset_clear <= 1'b1;
+    else                                               fifo_reg_reset_clear <= 1'b0;
+
+  //----------------------------------------------------------------------------
+  // FIFO Read Port - synthetic ack when empty to reject reads immediately
+  //----------------------------------------------------------------------------
+  always_comb begin
+    indirect_rx_rreq_o = hwif_rec_i.INDIRECT_FIFO_DATA.req && 
+                         !hwif_rec_i.INDIRECT_FIFO_DATA.req_is_wr &&
+                         !indirect_rx_empty_i;
+    
+    hwif_rec_o.INDIRECT_FIFO_DATA.rd_ack = indirect_rx_rack_i || 
+                                            (indirect_rx_empty_i && 
+                                             hwif_rec_i.INDIRECT_FIFO_DATA.req && 
+                                             !hwif_rec_i.INDIRECT_FIFO_DATA.req_is_wr);
+    
+    hwif_rec_o.INDIRECT_FIFO_DATA.rd_data = indirect_rx_rdata_i;
+  end
+
+  //============================================================================
+  //
+  // SECTION 15: RECOVERY CSR INTERFACE
+  //
+  //============================================================================
+
+  //----------------------------------------------------------------------------
+  // Bypass Mode W1C Handling
+  //----------------------------------------------------------------------------
+  always_comb begin
+    sw_device_reset_ctrl_value            = hwif_socmgmt_i.REC_INTF_REG_W1C_ACCESS.DEVICE_RESET_CTRL.value;
+    sw_recovery_ctrl_activate_rec_img_value = hwif_socmgmt_i.REC_INTF_REG_W1C_ACCESS.RECOVERY_CTRL_ACTIVATE_REC_IMG.value;
+    sw_indirect_fifo_ctrl_reset_value     = hwif_socmgmt_i.REC_INTF_REG_W1C_ACCESS.INDIRECT_FIFO_CTRL_RESET.value;
+  end
+
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
-      pec_recv  <= '0;
-      cmd_cmd_o <= '0;
-      len_lsb   <= '0;
-      len_msb   <= '0;
-    end else begin
-      if (bypass_i3c_core | recovery_enable) begin
-        pec_recv  <= '0;
-        cmd_cmd_o <= '0;
-        len_lsb   <= '0;
-        len_msb   <= '0;
-      end else begin
-        cmd_cmd_o <= cmd_cmd_o;
-        len_lsb   <= len_lsb;
-        len_msb   <= len_msb;
-        pec_recv  <= pec_recv;
-        unique case (state_q)
-          RxCmd:  if (rx_flow) cmd_cmd_o <= data_data_i;
-          RxLenL: if (rx_flow) len_lsb <= data_data_i;
-          RxLenH: if (rx_flow) len_msb <= data_data_i;
-          RxPec:  if (rx_flow) pec_recv <= data_data_i;
-
-          CmdIsRd: begin
-            len_lsb  <= '0;
-            len_msb  <= '0;
-            pec_recv <= len_lsb;
-          end
-
-          default: begin
-            cmd_cmd_o <= cmd_cmd_o;
-            len_lsb   <= len_lsb;
-            len_msb   <= len_msb;
-            pec_recv  <= pec_recv;
-          end
-        endcase
-      end
+      sw_device_reset_ctrl_swmod            <= 1'b0;
+      sw_recovery_ctrl_activate_rec_img_swmod <= 1'b0;
+      sw_indirect_fifo_ctrl_reset_swmod     <= 1'b0;
+    end
+    else begin
+      sw_device_reset_ctrl_swmod            <= hwif_socmgmt_i.REC_INTF_REG_W1C_ACCESS.DEVICE_RESET_CTRL.swmod;
+      sw_recovery_ctrl_activate_rec_img_swmod <= hwif_socmgmt_i.REC_INTF_REG_W1C_ACCESS.RECOVERY_CTRL_ACTIVATE_REC_IMG.swmod;
+      sw_indirect_fifo_ctrl_reset_swmod     <= hwif_socmgmt_i.REC_INTF_REG_W1C_ACCESS.INDIRECT_FIFO_CTRL_RESET.swmod;
     end
   end
 
-  // PEC enable
-  assign pec_enable_o = (data_queue_select_o) ? rx_flow : data_queue_flow_i;
+  always_comb begin : clear_bypassed_regs
+    hwif_socmgmt_o.REC_INTF_REG_W1C_ACCESS.DEVICE_RESET_CTRL.we               = sw_device_reset_ctrl_swmod;
+    hwif_socmgmt_o.REC_INTF_REG_W1C_ACCESS.DEVICE_RESET_CTRL.next             = 8'h0;
+    hwif_socmgmt_o.REC_INTF_REG_W1C_ACCESS.RECOVERY_CTRL_ACTIVATE_REC_IMG.we  = sw_recovery_ctrl_activate_rec_img_swmod;
+    hwif_socmgmt_o.REC_INTF_REG_W1C_ACCESS.RECOVERY_CTRL_ACTIVATE_REC_IMG.next= 8'h0;
+    hwif_socmgmt_o.REC_INTF_REG_W1C_ACCESS.INDIRECT_FIFO_CTRL_RESET.we        = sw_indirect_fifo_ctrl_reset_swmod;
+    hwif_socmgmt_o.REC_INTF_REG_W1C_ACCESS.INDIRECT_FIFO_CTRL_RESET.next      = 8'h0;
+  end
 
-  // PEC capture
+  //----------------------------------------------------------------------------
+  // CSR Write Enables
+  //----------------------------------------------------------------------------
+  always_comb begin
+    // Read-only registers - no write enable
+    hwif_rec_o.PROT_CAP_2.REC_PROT_VERSION.we         = 1'b0;
+    hwif_rec_o.PROT_CAP_2.AGENT_CAPS.we               = 1'b0;
+    hwif_rec_o.PROT_CAP_3.NUM_OF_CMS_REGIONS.we       = 1'b0;
+    hwif_rec_o.PROT_CAP_3.MAX_RESP_TIME.we            = 1'b0;
+    hwif_rec_o.PROT_CAP_3.HEARTBEAT_PERIOD.we         = 1'b0;
+    hwif_rec_o.DEVICE_ID_0.DESC_TYPE.we               = 1'b0;
+    hwif_rec_o.DEVICE_ID_0.VENDOR_SPECIFIC_STR_LENGTH.we = 1'b0;
+    hwif_rec_o.DEVICE_ID_0.DATA.we                    = 1'b0;
+    hwif_rec_o.DEVICE_ID_1.DATA.we                    = 1'b0;
+    hwif_rec_o.DEVICE_ID_2.DATA.we                    = 1'b0;
+    hwif_rec_o.DEVICE_ID_3.DATA.we                    = 1'b0;
+    hwif_rec_o.DEVICE_ID_4.DATA.we                    = 1'b0;
+    hwif_rec_o.DEVICE_ID_5.DATA.we                    = 1'b0;
+    hwif_rec_o.DEVICE_STATUS_1.HEARTBEAT.we           = 1'b0;
+    hwif_rec_o.DEVICE_STATUS_1.VENDOR_STATUS_LENGTH.we = 1'b0;
+    hwif_rec_o.DEVICE_STATUS_1.VENDOR_STATUS.we       = 1'b0;
+    hwif_rec_o.RECOVERY_STATUS.DEV_REC_STATUS.we      = 1'b0;
+    hwif_rec_o.RECOVERY_STATUS.REC_IMG_INDEX.we       = 1'b0;
+    hwif_rec_o.RECOVERY_STATUS.VENDOR_SPECIFIC_STATUS.we = 1'b0;
+    hwif_rec_o.HW_STATUS.TEMP_CRITICAL.we             = 1'b0;
+    hwif_rec_o.HW_STATUS.SOFT_ERR.we                  = 1'b0;
+    hwif_rec_o.HW_STATUS.FATAL_ERR.we                 = 1'b0;
+    hwif_rec_o.HW_STATUS.RESERVED_7_3.we              = 1'b0;
+    hwif_rec_o.HW_STATUS.VENDOR_HW_STATUS.we          = 1'b0;
+    hwif_rec_o.HW_STATUS.CTEMP.we                     = 1'b0;
+    hwif_rec_o.HW_STATUS.VENDOR_HW_STATUS_LEN.we      = 1'b0;
+    hwif_rec_o.INDIRECT_FIFO_STATUS_0.REGION_TYPE.we  = 1'b0;
+    hwif_rec_o.INDIRECT_FIFO_RESERVED.DATA.we         = 1'b0;
+
+    // Writable registers
+    hwif_rec_o.DEVICE_RESET.RESET_CTRL.we     = bypass_i3c_core_i ? sw_device_reset_ctrl_swmod : device_reset_we;
+    hwif_rec_o.DEVICE_RESET.FORCED_RECOVERY.we = device_reset_we;
+    hwif_rec_o.DEVICE_RESET.IF_CTRL.we        = device_reset_we;
+    hwif_rec_o.RECOVERY_CTRL.ACTIVATE_REC_IMG.we = bypass_i3c_core_i ? sw_recovery_ctrl_activate_rec_img_swmod : recovery_ctrl_we;
+    hwif_rec_o.RECOVERY_CTRL.REC_IMG_SEL.we   = recovery_ctrl_we;
+    hwif_rec_o.RECOVERY_CTRL.CMS.we           = recovery_ctrl_we;
+    hwif_rec_o.INDIRECT_FIFO_CTRL_0.RESET.we  = bypass_i3c_core_i ? sw_indirect_fifo_ctrl_reset_swmod : indirect_fifo_ctrl_0_we;
+    hwif_rec_o.INDIRECT_FIFO_CTRL_0.CMS.we    = indirect_fifo_ctrl_0_we;
+    hwif_rec_o.INDIRECT_FIFO_CTRL_1.IMAGE_SIZE.we = tti_rx_rack_i && (csr_sel == CSR_INDIRECT_FIFO_CTRL_1);
+  end
+
+  //----------------------------------------------------------------------------
+  // CSR Write Values
+  //----------------------------------------------------------------------------
+  always_comb begin
+    hwif_rec_o.DEVICE_RESET.RESET_CTRL.next     = bypass_i3c_core_i ? sw_device_reset_ctrl_value : tti_rx_rdata_i[7:0];
+    hwif_rec_o.DEVICE_RESET.FORCED_RECOVERY.next = tti_rx_rdata_i[15:8];
+    hwif_rec_o.DEVICE_RESET.IF_CTRL.next        = tti_rx_rdata_i[23:16];
+    hwif_rec_o.RECOVERY_CTRL.ACTIVATE_REC_IMG.next = bypass_i3c_core_i ? sw_recovery_ctrl_activate_rec_img_value : tti_rx_rdata_i[23:16];
+    hwif_rec_o.RECOVERY_CTRL.REC_IMG_SEL.next   = tti_rx_rdata_i[15:8];
+    hwif_rec_o.RECOVERY_CTRL.CMS.next           = tti_rx_rdata_i[7:0];
+    hwif_rec_o.INDIRECT_FIFO_CTRL_0.RESET.next  = bypass_i3c_core_i ? sw_indirect_fifo_ctrl_reset_value : tti_rx_rdata_i[15:8];
+    hwif_rec_o.INDIRECT_FIFO_CTRL_0.CMS.next    = tti_rx_rdata_i[7:0];
+    hwif_rec_o.INDIRECT_FIFO_CTRL_1.IMAGE_SIZE.next = {tti_rx_rdata_i[15:0], prev_tti_rx_rdata[31:16]};
+  end
+
+  //----------------------------------------------------------------------------
+  // CSR Unused Next Values
+  //----------------------------------------------------------------------------
+  always_comb begin
+    hwif_rec_o.PROT_CAP_3.NUM_OF_CMS_REGIONS.next     = 8'h0;
+    hwif_rec_o.PROT_CAP_3.MAX_RESP_TIME.next          = 8'h0;
+    hwif_rec_o.PROT_CAP_3.HEARTBEAT_PERIOD.next       = 8'h0;
+    hwif_rec_o.PROT_CAP_2.REC_PROT_VERSION.next       = 16'h0;
+    hwif_rec_o.PROT_CAP_2.AGENT_CAPS.next             = 16'h0;
+    hwif_rec_o.HW_STATUS.TEMP_CRITICAL.next           = 1'b0;
+    hwif_rec_o.HW_STATUS.SOFT_ERR.next                = 1'b0;
+    hwif_rec_o.HW_STATUS.FATAL_ERR.next               = 1'b0;
+    hwif_rec_o.HW_STATUS.RESERVED_7_3.next            = 5'h0;
+    hwif_rec_o.HW_STATUS.VENDOR_HW_STATUS.next        = 8'h0;
+    hwif_rec_o.HW_STATUS.CTEMP.next                   = 8'h0;
+    hwif_rec_o.HW_STATUS.VENDOR_HW_STATUS_LEN.next    = 8'h0;
+    hwif_rec_o.DEVICE_STATUS_1.HEARTBEAT.next         = 8'h0;
+    hwif_rec_o.DEVICE_STATUS_1.VENDOR_STATUS_LENGTH.next = 8'h0;
+    hwif_rec_o.DEVICE_STATUS_1.VENDOR_STATUS.next     = 8'h0;
+    hwif_rec_o.RECOVERY_STATUS.DEV_REC_STATUS.next    = 3'h0;
+    hwif_rec_o.RECOVERY_STATUS.REC_IMG_INDEX.next     = 5'h0;
+    hwif_rec_o.RECOVERY_STATUS.VENDOR_SPECIFIC_STATUS.next = 8'h0;
+    hwif_rec_o.INDIRECT_FIFO_STATUS_0.REGION_TYPE.next = 2'h0;
+    hwif_rec_o.INDIRECT_FIFO_RESERVED.DATA.next       = 32'h0;
+    hwif_rec_o.DEVICE_ID_1.DATA.next                  = 32'h0;
+    hwif_rec_o.DEVICE_ID_2.DATA.next                  = 32'h0;
+    hwif_rec_o.DEVICE_ID_3.DATA.next                  = 32'h0;
+    hwif_rec_o.DEVICE_ID_4.DATA.next                  = 32'h0;
+    hwif_rec_o.DEVICE_ID_5.DATA.next                  = 32'h0;
+    hwif_rec_o.DEVICE_ID_0.DESC_TYPE.next             = 8'h0;
+    hwif_rec_o.DEVICE_ID_0.VENDOR_SPECIFIC_STR_LENGTH.next = 8'h0;
+    hwif_rec_o.DEVICE_ID_0.DATA.next                  = 16'h0;
+  end
+
+  //----------------------------------------------------------------------------
+  // FIFO Status Updates
+  //----------------------------------------------------------------------------
+  always_comb begin
+    hwif_rec_o.INDIRECT_FIFO_STATUS_0.EMPTY.next = indirect_rx_empty_i;
+    hwif_rec_o.INDIRECT_FIFO_STATUS_0.FULL.next  = indirect_rx_full_i;
+  end
+
+  //----------------------------------------------------------------------------
+  // FIFO Size
+  //----------------------------------------------------------------------------
+  always_comb begin
+    hwif_rec_o.INDIRECT_FIFO_STATUS_3.FIFO_SIZE.next = IndirectFifoDepth;
+  end
+
+  //----------------------------------------------------------------------------
+  // FIFO Pointer Updates
+  //----------------------------------------------------------------------------
+  assign hwif_rec_o.INDIRECT_FIFO_STATUS_1.WRITE_INDEX.we = fifo_wrptr_inc || fifo_ptr_clr;
+  assign hwif_rec_o.INDIRECT_FIFO_STATUS_2.READ_INDEX.we  = fifo_rdptr_inc || fifo_ptr_clr;
+
+  always_comb begin
+    hwif_rec_o.INDIRECT_FIFO_STATUS_1.WRITE_INDEX.next = fifo_ptr_clr ? 32'h0 :
+      ((fifo_wrptr == fifo_ptr_top) ? 32'h0 : (fifo_wrptr + 32'h1));
+  end
+
+  always_comb begin
+    hwif_rec_o.INDIRECT_FIFO_STATUS_2.READ_INDEX.next = fifo_ptr_clr ? 32'h0 :
+      ((fifo_rdptr == fifo_ptr_top) ? 32'h0 : (fifo_rdptr + 32'h1));
+  end
+
+  //============================================================================
+  //
+  // SECTION 16: PROTOCOL STATUS
+  //
+  //============================================================================
+
+  // OCP spec error priority: CRC > Length > Readonly/Unsupported
+  always_comb begin
+    status_protocol_next = status_protocol;  // Hold current value by default
+    if (pec_err)
+      status_protocol_next = PROTOCOL_ERROR_CRC;
+    else if (length_underrun_err || length_overrun_err)
+      status_protocol_next = PROTOCOL_ERROR_LENGTH;
+    else if (readonly_err || unsupported_err)
+      status_protocol_next = PROTOCOL_ERROR_READONLY;  // OCP: both map to "unsupported command error"
+  end
+
   always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni) begin
-      pec_calc <= 0;
-    end else begin
-      if (bypass_i3c_core | recovery_enable) begin
-        pec_calc <= 0;
-      end else begin
-        unique case (state_q)
-          RxPec:   if (rx_flow) pec_calc <= pec_crc_i;  // PEC of a write command
-          RxLenL:  if (rx_flow) pec_calc <= pec_crc_i;  // PEC of a read command
-          default: pec_calc <= pec_calc;
-        endcase
-      end
-    end
+    if (!rst_ni) status_protocol <= PROTOCOL_OK;
+    else if (state_q == Idle) status_protocol <= PROTOCOL_OK; // Clean slate for next transaction
+    else         status_protocol <= status_protocol_next;
 
-  // PEC comparator
-  assign pec_match = !(|(pec_calc ^ pec_recv));
+  assign status_protocol_we = (state_q == Done) || (state_q == Error);
 
-  // Command interface
+  always_comb begin
+    hwif_rec_o.DEVICE_STATUS_0.REC_REASON_CODE.we   = 1'b0;
+    hwif_rec_o.DEVICE_STATUS_0.PROT_ERROR.we        = status_protocol_we;
+    hwif_rec_o.DEVICE_STATUS_0.DEV_STATUS.we        = 1'b0;
+    hwif_rec_o.DEVICE_STATUS_0.REC_REASON_CODE.next = 8'h0;
+    hwif_rec_o.DEVICE_STATUS_0.PROT_ERROR.next      = status_protocol;
+    hwif_rec_o.DEVICE_STATUS_0.DEV_STATUS.next      = 8'h0;
+  end
+
+  //============================================================================
+  //
+  // SECTION 17: PAYLOAD AND EXECUTION TRACKING
+  //
+  //============================================================================
+
+  //----------------------------------------------------------------------------
+  // Payload Availability
+  //----------------------------------------------------------------------------
+  assign fifo_xfer_done   = indirect_rx_full_i || (image_activated_o && ~indirect_rx_empty_i);
+  assign bypass_xfer_done = (state_q == ExecFifoWrite) && (state_d == Done);
+  assign payload_high_en  = bypass_i3c_core_i ?
+    (bypass_xfer_done || hwif_socmgmt_i.REC_INTF_CFG.REC_PAYLOAD_DONE.value || image_activated_o) :
+    fifo_xfer_done;
+
+  always_comb begin
+    hwif_socmgmt_o.REC_INTF_CFG.REC_PAYLOAD_DONE.we   = fifo_xfer_done;
+    hwif_socmgmt_o.REC_INTF_CFG.REC_PAYLOAD_DONE.next = 1'b0;
+  end
+
   always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni) begin
-      cmd_valid_o <= '0;
-      cmd_is_rd_o <= '0;
-    end else begin
-      if (bypass_i3c_core | recovery_enable) begin
-        cmd_valid_o <= '0;
-        cmd_is_rd_o <= '0;
-      end else begin
-        cmd_valid_o <= (state_q == Cmd);
+    if (!rst_ni)               payload_available_q <= 1'b0;
+    else if (payload_high_en)    payload_available_q <= 1'b1;
+    else if (indirect_rx_empty_i) payload_available_q <= 1'b0;
 
-        if (state_q == CmdIsRd) cmd_is_rd_o <= 1'b1;
-        if (state_q == Idle) cmd_is_rd_o <= '0;
-      end
-    end
 
-  assign cmd_len_o = {len_msb, len_lsb};
-  // Gate PEC error detection at source - when disabled, never report error
-  assign cmd_error_o = pec_err_det_en_i && !pec_match;
+  //============================================================================
+  //
+  // SECTION 18: ERROR OUTPUTS
+  //
+  //============================================================================
 
-  // Discard any RX descriptors
-  assign desc_ready_o = 1'b1;
+  assign pec_err_o         = pec_err;
+  assign length_err_o      = length_underrun_err || length_overrun_err;
+  assign readonly_err_o    = readonly_err;
+  assign unsupported_err_o = unsupported_err;
 
 endmodule
+

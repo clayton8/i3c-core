@@ -17,7 +17,7 @@ regfile TargetTransactionInterfaceRegisters #(
             desc = "Capability Structure Length in DWORDs";
             sw = r;
             hw = r;
-            reset = 16'h0020;
+            reset = 16'h0040;
         } CAP_LENGTH[23:8];
         field {
             name = "CAP_ID";
@@ -633,12 +633,33 @@ regfile TargetTransactionInterfaceRegisters #(
         name = "TTI Target Error Detection Control";
         desc = "Target Error Detection Control. Set bits to enable error detection. Clear to disable.";
         field {
-            name = "PEC_ERR_DET_EN";
-            desc = "Enable PEC/CRC error detection. Set to 0 to disable.";
+            name = "RI_UNSUPPORTED_ERR_DET_EN";
+            desc = "Enable Recovery Interface unsupported command error detection. Set to 0 to disable.";
             sw = rw;
             hw = r;
             reset = 1'b1;
-        } PEC_ERR_DET_EN[7:7];
+        } RI_UNSUPPORTED_ERR_DET_EN[10:10];
+        field {
+            name = "RI_READONLY_ERR_DET_EN";
+            desc = "Enable Recovery Interface write-to-read-only error detection. Set to 0 to disable.";
+            sw = rw;
+            hw = r;
+            reset = 1'b1;
+        } RI_READONLY_ERR_DET_EN[9:9];
+        field {
+            name = "RI_LENGTH_ERR_DET_EN";
+            desc = "Enable Recovery Interface length error detection. Set to 0 to disable.";
+            sw = rw;
+            hw = r;
+            reset = 1'b1;
+        } RI_LENGTH_ERR_DET_EN[8:8];
+        field {
+            name = "RI_PEC_ERR_DET_EN";
+            desc = "Enable Recovery Interface PEC/CRC error detection. Set to 0 to disable.";
+            sw = rw;
+            hw = r;
+            reset = 1'b1;
+        } RI_PEC_ERR_DET_EN[7:7];
         field {
             name = "FRAMING_ERR_DET_EN";
             desc = "Enable framing error detection. Set to 0 to disable.";
@@ -696,14 +717,41 @@ regfile TargetTransactionInterfaceRegisters #(
         name = "TTI Target Error Interrupt Status";
         desc = "Target Error Interrupt Status. Write 1 to clear individual bits.";
         field {
-            name = "PEC_ERR_STAT";
-            desc = "Recovery PEC/CRC error detected";
+            name = "RI_UNSUPPORTED_ERR_STAT";
+            desc = "Recovery Interface unsupported command error detected";
             sw = rw;
             hw = rw;
             woclr = true;
             we = true;
             reset = 1'b0;
-        } PEC_ERR_STAT[8:8];
+        } RI_UNSUPPORTED_ERR_STAT[11:11];
+        field {
+            name = "RI_READONLY_ERR_STAT";
+            desc = "Recovery Interface write-to-read-only error detected";
+            sw = rw;
+            hw = rw;
+            woclr = true;
+            we = true;
+            reset = 1'b0;
+        } RI_READONLY_ERR_STAT[10:10];
+        field {
+            name = "RI_LENGTH_ERR_STAT";
+            desc = "Recovery Interface length mismatch error detected";
+            sw = rw;
+            hw = rw;
+            woclr = true;
+            we = true;
+            reset = 1'b0;
+        } RI_LENGTH_ERR_STAT[9:9];
+        field {
+            name = "RI_PEC_ERR_STAT";
+            desc = "Recovery Interface PEC/CRC error detected";
+            sw = rw;
+            hw = rw;
+            woclr = true;
+            we = true;
+            reset = 1'b0;
+        } RI_PEC_ERR_STAT[8:8];
         field {
             name = "FRAMING_ERR_STAT";
             desc = "DA padding error (Bit[0] != 0 in SETDASA/SETNEWDA)";
@@ -772,12 +820,33 @@ regfile TargetTransactionInterfaceRegisters #(
         name = "TTI Target Error Interrupt Enable";
         desc = "Target Error Interrupt Enable. Set bits to enable corresponding interrupts.";
         field {
-            name = "PEC_ERR_EN";
-            desc = "Enables the corresponding interrupt bit `PEC_ERR_STAT`";
+            name = "RI_UNSUPPORTED_ERR_EN";
+            desc = "Enables the corresponding interrupt bit `RI_UNSUPPORTED_ERR_STAT`";
             sw = rw;
             hw = r;
             reset = 1'b0;
-        } PEC_ERR_EN[8:8];
+        } RI_UNSUPPORTED_ERR_EN[11:11];
+        field {
+            name = "RI_READONLY_ERR_EN";
+            desc = "Enables the corresponding interrupt bit `RI_READONLY_ERR_STAT`";
+            sw = rw;
+            hw = r;
+            reset = 1'b0;
+        } RI_READONLY_ERR_EN[10:10];
+        field {
+            name = "RI_LENGTH_ERR_EN";
+            desc = "Enables the corresponding interrupt bit `RI_LENGTH_ERR_STAT`";
+            sw = rw;
+            hw = r;
+            reset = 1'b0;
+        } RI_LENGTH_ERR_EN[9:9];
+        field {
+            name = "RI_PEC_ERR_EN";
+            desc = "Enables the corresponding interrupt bit `RI_PEC_ERR_STAT`";
+            sw = rw;
+            hw = r;
+            reset = 1'b0;
+        } RI_PEC_ERR_EN[8:8];
         field {
             name = "FRAMING_ERR_EN";
             desc = "Enables the corresponding interrupt bit `FRAMING_ERR_STAT`";
@@ -832,12 +901,33 @@ regfile TargetTransactionInterfaceRegisters #(
         name = "TTI Target Error Interrupt Force";
         desc = "Target Error Interrupt Force. Set bits to force corresponding interrupts for testing.";
         field {
-            name = "PEC_ERR_FORCE";
-            desc = "Forces the corresponding interrupt bit `PEC_ERR_STAT` to be set to 1";
+            name = "RI_UNSUPPORTED_ERR_FORCE";
+            desc = "Forces the corresponding interrupt bit `RI_UNSUPPORTED_ERR_STAT` to be set to 1";
             sw = rw;
             hw = r;
             reset = 1'b0;
-        } PEC_ERR_FORCE[8:8];
+        } RI_UNSUPPORTED_ERR_FORCE[11:11];
+        field {
+            name = "RI_READONLY_ERR_FORCE";
+            desc = "Forces the corresponding interrupt bit `RI_READONLY_ERR_STAT` to be set to 1";
+            sw = rw;
+            hw = r;
+            reset = 1'b0;
+        } RI_READONLY_ERR_FORCE[10:10];
+        field {
+            name = "RI_LENGTH_ERR_FORCE";
+            desc = "Forces the corresponding interrupt bit `RI_LENGTH_ERR_STAT` to be set to 1";
+            sw = rw;
+            hw = r;
+            reset = 1'b0;
+        } RI_LENGTH_ERR_FORCE[9:9];
+        field {
+            name = "RI_PEC_ERR_FORCE";
+            desc = "Forces the corresponding interrupt bit `RI_PEC_ERR_STAT` to be set to 1";
+            sw = rw;
+            hw = r;
+            reset = 1'b0;
+        } RI_PEC_ERR_FORCE[8:8];
         field {
             name = "FRAMING_ERR_FORCE";
             desc = "Forces the corresponding interrupt bit `FRAMING_ERR_STAT` to be set to 1";
@@ -983,8 +1073,8 @@ regfile TargetTransactionInterfaceRegisters #(
     } TARGET_ERR_CNT_FRAMING;
 
     reg {
-        name = "PEC Error Counter";
-        desc = "Counts PEC errors. Saturates at 255. Write 0 to clear.";
+        name = "Recovery Interface PEC Error Counter";
+        desc = "Counts Recovery Interface PEC errors. Saturates at 255. Write 0 to clear.";
         field {
             name = "CNT";
             desc = "Error count (saturates at 255). Write 0 to clear.";
@@ -993,7 +1083,46 @@ regfile TargetTransactionInterfaceRegisters #(
             we = true;
             reset = 8'h00;
         } CNT[7:0];
-    } TARGET_ERR_CNT_PEC;
+    } TARGET_ERR_CNT_RI_PEC;
+
+    reg {
+        name = "Recovery Interface Length Error Counter";
+        desc = "Counts Recovery Interface length mismatch errors. Saturates at 255. Write 0 to clear.";
+        field {
+            name = "CNT";
+            desc = "Error count (saturates at 255). Write 0 to clear.";
+            sw = rw;
+            hw = rw;
+            we = true;
+            reset = 8'h00;
+        } CNT[7:0];
+    } TARGET_ERR_CNT_RI_LENGTH;
+
+    reg {
+        name = "Recovery Interface Read-Only Error Counter";
+        desc = "Counts Recovery Interface write-to-read-only errors. Saturates at 255. Write 0 to clear.";
+        field {
+            name = "CNT";
+            desc = "Error count (saturates at 255). Write 0 to clear.";
+            sw = rw;
+            hw = rw;
+            we = true;
+            reset = 8'h00;
+        } CNT[7:0];
+    } TARGET_ERR_CNT_RI_READONLY;
+
+    reg {
+        name = "Recovery Interface Unsupported Error Counter";
+        desc = "Counts Recovery Interface unsupported command errors. Saturates at 255. Write 0 to clear.";
+        field {
+            name = "CNT";
+            desc = "Error count (saturates at 255). Write 0 to clear.";
+            sw = rw;
+            hw = rw;
+            we = true;
+            reset = 8'h00;
+        } CNT[7:0];
+    } TARGET_ERR_CNT_RI_UNSUPPORTED;
 
     external reg {
         name = "TTI RX Descriptor Queue Port";

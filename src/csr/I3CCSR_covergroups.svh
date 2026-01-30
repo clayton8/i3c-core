@@ -2299,7 +2299,10 @@
     input bit [1-1:0] TE4_ERR_DET_EN,
     input bit [1-1:0] TE5_ERR_DET_EN,
     input bit [1-1:0] FRAMING_ERR_DET_EN,
-    input bit [1-1:0] PEC_ERR_DET_EN
+    input bit [1-1:0] RI_PEC_ERR_DET_EN,
+    input bit [1-1:0] RI_LENGTH_ERR_DET_EN,
+    input bit [1-1:0] RI_READONLY_ERR_DET_EN,
+    input bit [1-1:0] RI_UNSUPPORTED_ERR_DET_EN
     );
         option.per_instance = 1;
         TE0_ERR_DET_EN_cp : coverpoint TE0_ERR_DET_EN;
@@ -2309,7 +2312,10 @@
         TE4_ERR_DET_EN_cp : coverpoint TE4_ERR_DET_EN;
         TE5_ERR_DET_EN_cp : coverpoint TE5_ERR_DET_EN;
         FRAMING_ERR_DET_EN_cp : coverpoint FRAMING_ERR_DET_EN;
-        PEC_ERR_DET_EN_cp : coverpoint PEC_ERR_DET_EN;
+        RI_PEC_ERR_DET_EN_cp : coverpoint RI_PEC_ERR_DET_EN;
+        RI_LENGTH_ERR_DET_EN_cp : coverpoint RI_LENGTH_ERR_DET_EN;
+        RI_READONLY_ERR_DET_EN_cp : coverpoint RI_READONLY_ERR_DET_EN;
+        RI_UNSUPPORTED_ERR_DET_EN_cp : coverpoint RI_UNSUPPORTED_ERR_DET_EN;
 
     endgroup
 
@@ -2333,7 +2339,10 @@
     input bit [1-1:0] TE4_ERR_STAT,
     input bit [1-1:0] TE5_ERR_STAT,
     input bit [1-1:0] FRAMING_ERR_STAT,
-    input bit [1-1:0] PEC_ERR_STAT
+    input bit [1-1:0] RI_PEC_ERR_STAT,
+    input bit [1-1:0] RI_LENGTH_ERR_STAT,
+    input bit [1-1:0] RI_READONLY_ERR_STAT,
+    input bit [1-1:0] RI_UNSUPPORTED_ERR_STAT
     );
         option.per_instance = 1;
         TE0_ERR_STAT_cp : coverpoint TE0_ERR_STAT;
@@ -2343,7 +2352,10 @@
         TE4_ERR_STAT_cp : coverpoint TE4_ERR_STAT;
         TE5_ERR_STAT_cp : coverpoint TE5_ERR_STAT;
         FRAMING_ERR_STAT_cp : coverpoint FRAMING_ERR_STAT;
-        PEC_ERR_STAT_cp : coverpoint PEC_ERR_STAT;
+        RI_PEC_ERR_STAT_cp : coverpoint RI_PEC_ERR_STAT;
+        RI_LENGTH_ERR_STAT_cp : coverpoint RI_LENGTH_ERR_STAT;
+        RI_READONLY_ERR_STAT_cp : coverpoint RI_READONLY_ERR_STAT;
+        RI_UNSUPPORTED_ERR_STAT_cp : coverpoint RI_UNSUPPORTED_ERR_STAT;
 
     endgroup
 
@@ -2367,7 +2379,10 @@
     input bit [1-1:0] TE4_ERR_EN,
     input bit [1-1:0] TE5_ERR_EN,
     input bit [1-1:0] FRAMING_ERR_EN,
-    input bit [1-1:0] PEC_ERR_EN
+    input bit [1-1:0] RI_PEC_ERR_EN,
+    input bit [1-1:0] RI_LENGTH_ERR_EN,
+    input bit [1-1:0] RI_READONLY_ERR_EN,
+    input bit [1-1:0] RI_UNSUPPORTED_ERR_EN
     );
         option.per_instance = 1;
         TE0_ERR_EN_cp : coverpoint TE0_ERR_EN;
@@ -2377,7 +2392,10 @@
         TE4_ERR_EN_cp : coverpoint TE4_ERR_EN;
         TE5_ERR_EN_cp : coverpoint TE5_ERR_EN;
         FRAMING_ERR_EN_cp : coverpoint FRAMING_ERR_EN;
-        PEC_ERR_EN_cp : coverpoint PEC_ERR_EN;
+        RI_PEC_ERR_EN_cp : coverpoint RI_PEC_ERR_EN;
+        RI_LENGTH_ERR_EN_cp : coverpoint RI_LENGTH_ERR_EN;
+        RI_READONLY_ERR_EN_cp : coverpoint RI_READONLY_ERR_EN;
+        RI_UNSUPPORTED_ERR_EN_cp : coverpoint RI_UNSUPPORTED_ERR_EN;
 
     endgroup
 
@@ -2401,7 +2419,10 @@
     input bit [1-1:0] TE4_ERR_FORCE,
     input bit [1-1:0] TE5_ERR_FORCE,
     input bit [1-1:0] FRAMING_ERR_FORCE,
-    input bit [1-1:0] PEC_ERR_FORCE
+    input bit [1-1:0] RI_PEC_ERR_FORCE,
+    input bit [1-1:0] RI_LENGTH_ERR_FORCE,
+    input bit [1-1:0] RI_READONLY_ERR_FORCE,
+    input bit [1-1:0] RI_UNSUPPORTED_ERR_FORCE
     );
         option.per_instance = 1;
         TE0_ERR_FORCE_cp : coverpoint TE0_ERR_FORCE;
@@ -2411,7 +2432,10 @@
         TE4_ERR_FORCE_cp : coverpoint TE4_ERR_FORCE;
         TE5_ERR_FORCE_cp : coverpoint TE5_ERR_FORCE;
         FRAMING_ERR_FORCE_cp : coverpoint FRAMING_ERR_FORCE;
-        PEC_ERR_FORCE_cp : coverpoint PEC_ERR_FORCE;
+        RI_PEC_ERR_FORCE_cp : coverpoint RI_PEC_ERR_FORCE;
+        RI_LENGTH_ERR_FORCE_cp : coverpoint RI_LENGTH_ERR_FORCE;
+        RI_READONLY_ERR_FORCE_cp : coverpoint RI_READONLY_ERR_FORCE;
+        RI_UNSUPPORTED_ERR_FORCE_cp : coverpoint RI_UNSUPPORTED_ERR_FORCE;
 
     endgroup
 
@@ -2555,8 +2579,8 @@
 
     endgroup
 
-    /*----------------------- I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_PEC COVERGROUPS -----------------------*/
-    covergroup I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_PEC_bit_cg with function sample(input bit reg_bit);
+    /*----------------------- I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_PEC COVERGROUPS -----------------------*/
+    covergroup I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_PEC_bit_cg with function sample(input bit reg_bit);
         option.per_instance = 1;
         reg_bit_cp : coverpoint reg_bit {
             bins value[2] = {0,1};
@@ -2567,7 +2591,67 @@
         }
 
     endgroup
-    covergroup I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_PEC_fld_cg with function sample(
+    covergroup I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_PEC_fld_cg with function sample(
+    input bit [8-1:0] CNT
+    );
+        option.per_instance = 1;
+        CNT_cp : coverpoint CNT;
+
+    endgroup
+
+    /*----------------------- I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_LENGTH COVERGROUPS -----------------------*/
+    covergroup I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_LENGTH_bit_cg with function sample(input bit reg_bit);
+        option.per_instance = 1;
+        reg_bit_cp : coverpoint reg_bit {
+            bins value[2] = {0,1};
+        }
+        reg_bit_edge_cp : coverpoint reg_bit {
+            bins rise = (0 => 1);
+            bins fall = (1 => 0);
+        }
+
+    endgroup
+    covergroup I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_LENGTH_fld_cg with function sample(
+    input bit [8-1:0] CNT
+    );
+        option.per_instance = 1;
+        CNT_cp : coverpoint CNT;
+
+    endgroup
+
+    /*----------------------- I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_READONLY COVERGROUPS -----------------------*/
+    covergroup I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_READONLY_bit_cg with function sample(input bit reg_bit);
+        option.per_instance = 1;
+        reg_bit_cp : coverpoint reg_bit {
+            bins value[2] = {0,1};
+        }
+        reg_bit_edge_cp : coverpoint reg_bit {
+            bins rise = (0 => 1);
+            bins fall = (1 => 0);
+        }
+
+    endgroup
+    covergroup I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_READONLY_fld_cg with function sample(
+    input bit [8-1:0] CNT
+    );
+        option.per_instance = 1;
+        CNT_cp : coverpoint CNT;
+
+    endgroup
+
+    /*----------------------- I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_UNSUPPORTED COVERGROUPS -----------------------*/
+    covergroup I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_UNSUPPORTED_bit_cg with function sample(input bit reg_bit);
+        option.per_instance = 1;
+        reg_bit_cp : coverpoint reg_bit {
+            bins value[2] = {0,1};
+        }
+        reg_bit_edge_cp : coverpoint reg_bit {
+            bins rise = (0 => 1);
+            bins fall = (1 => 0);
+        }
+
+    endgroup
+    covergroup I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_UNSUPPORTED_fld_cg with function sample(
     input bit [8-1:0] CNT
     );
         option.per_instance = 1;

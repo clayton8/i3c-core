@@ -156,6 +156,7 @@ module controller
     input logic tti_rx_queue_wready_i,
     output logic [TtiRxDataWidth-1:0] tti_rx_queue_wdata_o,
     output logic tti_rx_queue_flush_o,
+    output logic tti_rx_queue_wlast_o,
 
     // TTI: TX Data
     input logic tti_tx_queue_full_i,
@@ -246,7 +247,7 @@ module controller
 
     output logic err_o,
     input  logic recovery_mode_enter_i,
-    input  logic recovery_protocol_err_i,
+    input  logic recovery_pec_err_i,
 
     // Individual TE error outputs for interrupt reporting
     output logic te0_err_o,
@@ -523,6 +524,7 @@ module controller
       .rx_queue_wready_i(tti_rx_queue_wready_i),
       .rx_queue_wdata_o(tti_rx_queue_wdata_o),
       .rx_queue_flush_o(tti_rx_queue_flush_o),
+      .rx_queue_wlast_o(tti_rx_queue_wlast_o),
       .tx_queue_full_i(tti_tx_queue_full_i),
       .tx_queue_depth_i(tti_tx_queue_depth_i),
       .tx_queue_start_thld_i(tti_tx_queue_start_thld_i),
@@ -617,7 +619,7 @@ module controller
       .peripheral_reset_done_i,
       .escalated_reset_o,
       .recovery_mode_enter_i(recovery_mode_enter_i),
-      .recovery_protocol_err_i(recovery_protocol_err_i),
+      .recovery_pec_err_i(recovery_pec_err_i),
       .te0_err_o(te0_err_o),
       .te1_err_o(te1_err_o),
       .te2_err_o(te2_err_o),

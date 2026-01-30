@@ -516,12 +516,10 @@ package I3CCSR_pkg;
 
     typedef struct packed{
         logic next;
-        logic we;
     } I3CCSR__I3C_EC__SecFwRecoveryIf__INDIRECT_FIFO_STATUS_0__EMPTY__in_t;
 
     typedef struct packed{
         logic next;
-        logic we;
     } I3CCSR__I3C_EC__SecFwRecoveryIf__INDIRECT_FIFO_STATUS_0__FULL__in_t;
 
     typedef struct packed{
@@ -555,7 +553,6 @@ package I3CCSR_pkg;
 
     typedef struct packed{
         logic [31:0] next;
-        logic we;
     } I3CCSR__I3C_EC__SecFwRecoveryIf__INDIRECT_FIFO_STATUS_3__FIFO_SIZE__in_t;
 
     typedef struct packed{
@@ -1263,7 +1260,22 @@ package I3CCSR_pkg;
     typedef struct packed{
         logic next;
         logic we;
-    } I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS__PEC_ERR_STAT__in_t;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS__RI_PEC_ERR_STAT__in_t;
+
+    typedef struct packed{
+        logic next;
+        logic we;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS__RI_LENGTH_ERR_STAT__in_t;
+
+    typedef struct packed{
+        logic next;
+        logic we;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS__RI_READONLY_ERR_STAT__in_t;
+
+    typedef struct packed{
+        logic next;
+        logic we;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS__RI_UNSUPPORTED_ERR_STAT__in_t;
 
     typedef struct packed{
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS__TE0_ERR_STAT__in_t TE0_ERR_STAT;
@@ -1273,7 +1285,10 @@ package I3CCSR_pkg;
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS__TE4_ERR_STAT__in_t TE4_ERR_STAT;
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS__TE5_ERR_STAT__in_t TE5_ERR_STAT;
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS__FRAMING_ERR_STAT__in_t FRAMING_ERR_STAT;
-        I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS__PEC_ERR_STAT__in_t PEC_ERR_STAT;
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS__RI_PEC_ERR_STAT__in_t RI_PEC_ERR_STAT;
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS__RI_LENGTH_ERR_STAT__in_t RI_LENGTH_ERR_STAT;
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS__RI_READONLY_ERR_STAT__in_t RI_READONLY_ERR_STAT;
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS__RI_UNSUPPORTED_ERR_STAT__in_t RI_UNSUPPORTED_ERR_STAT;
     } I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS__in_t;
 
     typedef struct packed{
@@ -1342,11 +1357,38 @@ package I3CCSR_pkg;
     typedef struct packed{
         logic [7:0] next;
         logic we;
-    } I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_PEC__CNT__in_t;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_PEC__CNT__in_t;
 
     typedef struct packed{
-        I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_PEC__CNT__in_t CNT;
-    } I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_PEC__in_t;
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_PEC__CNT__in_t CNT;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_PEC__in_t;
+
+    typedef struct packed{
+        logic [7:0] next;
+        logic we;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_LENGTH__CNT__in_t;
+
+    typedef struct packed{
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_LENGTH__CNT__in_t CNT;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_LENGTH__in_t;
+
+    typedef struct packed{
+        logic [7:0] next;
+        logic we;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_READONLY__CNT__in_t;
+
+    typedef struct packed{
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_READONLY__CNT__in_t CNT;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_READONLY__in_t;
+
+    typedef struct packed{
+        logic [7:0] next;
+        logic we;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_UNSUPPORTED__CNT__in_t;
+
+    typedef struct packed{
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_UNSUPPORTED__CNT__in_t CNT;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_UNSUPPORTED__in_t;
 
     typedef struct packed {
         logic [31:0] RX_DESC;
@@ -1416,7 +1458,10 @@ package I3CCSR_pkg;
         I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_TE4__in_t TARGET_ERR_CNT_TE4;
         I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_TE5__in_t TARGET_ERR_CNT_TE5;
         I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_FRAMING__in_t TARGET_ERR_CNT_FRAMING;
-        I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_PEC__in_t TARGET_ERR_CNT_PEC;
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_PEC__in_t TARGET_ERR_CNT_RI_PEC;
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_LENGTH__in_t TARGET_ERR_CNT_RI_LENGTH;
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_READONLY__in_t TARGET_ERR_CNT_RI_READONLY;
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_UNSUPPORTED__in_t TARGET_ERR_CNT_RI_UNSUPPORTED;
         I3CCSR__I3C_EC__TTI__RX_DESC_QUEUE_PORT__in_t RX_DESC_QUEUE_PORT;
         I3CCSR__I3C_EC__TTI__RX_DATA_PORT__in_t RX_DATA_PORT;
         I3CCSR__I3C_EC__TTI__TX_DESC_QUEUE_PORT__in_t TX_DESC_QUEUE_PORT;
@@ -3087,7 +3132,19 @@ package I3CCSR_pkg;
 
     typedef struct packed{
         logic value;
-    } I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL__PEC_ERR_DET_EN__out_t;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL__RI_PEC_ERR_DET_EN__out_t;
+
+    typedef struct packed{
+        logic value;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL__RI_LENGTH_ERR_DET_EN__out_t;
+
+    typedef struct packed{
+        logic value;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL__RI_READONLY_ERR_DET_EN__out_t;
+
+    typedef struct packed{
+        logic value;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL__RI_UNSUPPORTED_ERR_DET_EN__out_t;
 
     typedef struct packed{
         I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL__TE0_ERR_DET_EN__out_t TE0_ERR_DET_EN;
@@ -3097,7 +3154,10 @@ package I3CCSR_pkg;
         I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL__TE4_ERR_DET_EN__out_t TE4_ERR_DET_EN;
         I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL__TE5_ERR_DET_EN__out_t TE5_ERR_DET_EN;
         I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL__FRAMING_ERR_DET_EN__out_t FRAMING_ERR_DET_EN;
-        I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL__PEC_ERR_DET_EN__out_t PEC_ERR_DET_EN;
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL__RI_PEC_ERR_DET_EN__out_t RI_PEC_ERR_DET_EN;
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL__RI_LENGTH_ERR_DET_EN__out_t RI_LENGTH_ERR_DET_EN;
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL__RI_READONLY_ERR_DET_EN__out_t RI_READONLY_ERR_DET_EN;
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL__RI_UNSUPPORTED_ERR_DET_EN__out_t RI_UNSUPPORTED_ERR_DET_EN;
     } I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL__out_t;
 
     typedef struct packed{
@@ -3130,7 +3190,19 @@ package I3CCSR_pkg;
 
     typedef struct packed{
         logic value;
-    } I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS__PEC_ERR_STAT__out_t;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS__RI_PEC_ERR_STAT__out_t;
+
+    typedef struct packed{
+        logic value;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS__RI_LENGTH_ERR_STAT__out_t;
+
+    typedef struct packed{
+        logic value;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS__RI_READONLY_ERR_STAT__out_t;
+
+    typedef struct packed{
+        logic value;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS__RI_UNSUPPORTED_ERR_STAT__out_t;
 
     typedef struct packed{
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS__TE0_ERR_STAT__out_t TE0_ERR_STAT;
@@ -3140,7 +3212,10 @@ package I3CCSR_pkg;
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS__TE4_ERR_STAT__out_t TE4_ERR_STAT;
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS__TE5_ERR_STAT__out_t TE5_ERR_STAT;
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS__FRAMING_ERR_STAT__out_t FRAMING_ERR_STAT;
-        I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS__PEC_ERR_STAT__out_t PEC_ERR_STAT;
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS__RI_PEC_ERR_STAT__out_t RI_PEC_ERR_STAT;
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS__RI_LENGTH_ERR_STAT__out_t RI_LENGTH_ERR_STAT;
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS__RI_READONLY_ERR_STAT__out_t RI_READONLY_ERR_STAT;
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS__RI_UNSUPPORTED_ERR_STAT__out_t RI_UNSUPPORTED_ERR_STAT;
     } I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS__out_t;
 
     typedef struct packed{
@@ -3173,7 +3248,19 @@ package I3CCSR_pkg;
 
     typedef struct packed{
         logic value;
-    } I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_ENABLE__PEC_ERR_EN__out_t;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_ENABLE__RI_PEC_ERR_EN__out_t;
+
+    typedef struct packed{
+        logic value;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_ENABLE__RI_LENGTH_ERR_EN__out_t;
+
+    typedef struct packed{
+        logic value;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_ENABLE__RI_READONLY_ERR_EN__out_t;
+
+    typedef struct packed{
+        logic value;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_ENABLE__RI_UNSUPPORTED_ERR_EN__out_t;
 
     typedef struct packed{
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_ENABLE__TE0_ERR_EN__out_t TE0_ERR_EN;
@@ -3183,7 +3270,10 @@ package I3CCSR_pkg;
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_ENABLE__TE4_ERR_EN__out_t TE4_ERR_EN;
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_ENABLE__TE5_ERR_EN__out_t TE5_ERR_EN;
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_ENABLE__FRAMING_ERR_EN__out_t FRAMING_ERR_EN;
-        I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_ENABLE__PEC_ERR_EN__out_t PEC_ERR_EN;
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_ENABLE__RI_PEC_ERR_EN__out_t RI_PEC_ERR_EN;
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_ENABLE__RI_LENGTH_ERR_EN__out_t RI_LENGTH_ERR_EN;
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_ENABLE__RI_READONLY_ERR_EN__out_t RI_READONLY_ERR_EN;
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_ENABLE__RI_UNSUPPORTED_ERR_EN__out_t RI_UNSUPPORTED_ERR_EN;
     } I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_ENABLE__out_t;
 
     typedef struct packed{
@@ -3216,7 +3306,19 @@ package I3CCSR_pkg;
 
     typedef struct packed{
         logic value;
-    } I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_FORCE__PEC_ERR_FORCE__out_t;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_FORCE__RI_PEC_ERR_FORCE__out_t;
+
+    typedef struct packed{
+        logic value;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_FORCE__RI_LENGTH_ERR_FORCE__out_t;
+
+    typedef struct packed{
+        logic value;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_FORCE__RI_READONLY_ERR_FORCE__out_t;
+
+    typedef struct packed{
+        logic value;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_FORCE__RI_UNSUPPORTED_ERR_FORCE__out_t;
 
     typedef struct packed{
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_FORCE__TE0_ERR_FORCE__out_t TE0_ERR_FORCE;
@@ -3226,7 +3328,10 @@ package I3CCSR_pkg;
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_FORCE__TE4_ERR_FORCE__out_t TE4_ERR_FORCE;
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_FORCE__TE5_ERR_FORCE__out_t TE5_ERR_FORCE;
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_FORCE__FRAMING_ERR_FORCE__out_t FRAMING_ERR_FORCE;
-        I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_FORCE__PEC_ERR_FORCE__out_t PEC_ERR_FORCE;
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_FORCE__RI_PEC_ERR_FORCE__out_t RI_PEC_ERR_FORCE;
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_FORCE__RI_LENGTH_ERR_FORCE__out_t RI_LENGTH_ERR_FORCE;
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_FORCE__RI_READONLY_ERR_FORCE__out_t RI_READONLY_ERR_FORCE;
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_FORCE__RI_UNSUPPORTED_ERR_FORCE__out_t RI_UNSUPPORTED_ERR_FORCE;
     } I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_FORCE__out_t;
 
     typedef struct packed{
@@ -3287,11 +3392,35 @@ package I3CCSR_pkg;
 
     typedef struct packed{
         logic [7:0] value;
-    } I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_PEC__CNT__out_t;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_PEC__CNT__out_t;
 
     typedef struct packed{
-        I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_PEC__CNT__out_t CNT;
-    } I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_PEC__out_t;
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_PEC__CNT__out_t CNT;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_PEC__out_t;
+
+    typedef struct packed{
+        logic [7:0] value;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_LENGTH__CNT__out_t;
+
+    typedef struct packed{
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_LENGTH__CNT__out_t CNT;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_LENGTH__out_t;
+
+    typedef struct packed{
+        logic [7:0] value;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_READONLY__CNT__out_t;
+
+    typedef struct packed{
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_READONLY__CNT__out_t CNT;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_READONLY__out_t;
+
+    typedef struct packed{
+        logic [7:0] value;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_UNSUPPORTED__CNT__out_t;
+
+    typedef struct packed{
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_UNSUPPORTED__CNT__out_t CNT;
+    } I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_UNSUPPORTED__out_t;
 
     typedef struct packed{
         logic req;
@@ -3430,7 +3559,10 @@ package I3CCSR_pkg;
         I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_TE4__out_t TARGET_ERR_CNT_TE4;
         I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_TE5__out_t TARGET_ERR_CNT_TE5;
         I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_FRAMING__out_t TARGET_ERR_CNT_FRAMING;
-        I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_PEC__out_t TARGET_ERR_CNT_PEC;
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_PEC__out_t TARGET_ERR_CNT_RI_PEC;
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_LENGTH__out_t TARGET_ERR_CNT_RI_LENGTH;
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_READONLY__out_t TARGET_ERR_CNT_RI_READONLY;
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_UNSUPPORTED__out_t TARGET_ERR_CNT_RI_UNSUPPORTED;
         I3CCSR__I3C_EC__TTI__RX_DESC_QUEUE_PORT__out_t RX_DESC_QUEUE_PORT;
         I3CCSR__I3C_EC__TTI__RX_DATA_PORT__out_t RX_DATA_PORT;
         I3CCSR__I3C_EC__TTI__TX_DESC_QUEUE_PORT__out_t TX_DESC_QUEUE_PORT;

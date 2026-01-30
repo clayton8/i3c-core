@@ -2740,10 +2740,13 @@
             foreach(TE4_ERR_DET_EN_bit_cg[bt]) this.TE4_ERR_DET_EN_bit_cg[bt].sample(data[4 + bt]);
             foreach(TE5_ERR_DET_EN_bit_cg[bt]) this.TE5_ERR_DET_EN_bit_cg[bt].sample(data[5 + bt]);
             foreach(FRAMING_ERR_DET_EN_bit_cg[bt]) this.FRAMING_ERR_DET_EN_bit_cg[bt].sample(data[6 + bt]);
-            foreach(PEC_ERR_DET_EN_bit_cg[bt]) this.PEC_ERR_DET_EN_bit_cg[bt].sample(data[7 + bt]);
+            foreach(RI_PEC_ERR_DET_EN_bit_cg[bt]) this.RI_PEC_ERR_DET_EN_bit_cg[bt].sample(data[7 + bt]);
+            foreach(RI_LENGTH_ERR_DET_EN_bit_cg[bt]) this.RI_LENGTH_ERR_DET_EN_bit_cg[bt].sample(data[8 + bt]);
+            foreach(RI_READONLY_ERR_DET_EN_bit_cg[bt]) this.RI_READONLY_ERR_DET_EN_bit_cg[bt].sample(data[9 + bt]);
+            foreach(RI_UNSUPPORTED_ERR_DET_EN_bit_cg[bt]) this.RI_UNSUPPORTED_ERR_DET_EN_bit_cg[bt].sample(data[10 + bt]);
         end
         if (get_coverage(UVM_CVR_FIELD_VALS)) begin
-            this.fld_cg.sample( data[0:0]/*TE0_ERR_DET_EN*/  ,  data[1:1]/*TE1_ERR_DET_EN*/  ,  data[2:2]/*TE2_ERR_DET_EN*/  ,  data[3:3]/*TE3_ERR_DET_EN*/  ,  data[4:4]/*TE4_ERR_DET_EN*/  ,  data[5:5]/*TE5_ERR_DET_EN*/  ,  data[6:6]/*FRAMING_ERR_DET_EN*/  ,  data[7:7]/*PEC_ERR_DET_EN*/   );
+            this.fld_cg.sample( data[0:0]/*TE0_ERR_DET_EN*/  ,  data[1:1]/*TE1_ERR_DET_EN*/  ,  data[2:2]/*TE2_ERR_DET_EN*/  ,  data[3:3]/*TE3_ERR_DET_EN*/  ,  data[4:4]/*TE4_ERR_DET_EN*/  ,  data[5:5]/*TE5_ERR_DET_EN*/  ,  data[6:6]/*FRAMING_ERR_DET_EN*/  ,  data[7:7]/*RI_PEC_ERR_DET_EN*/  ,  data[8:8]/*RI_LENGTH_ERR_DET_EN*/  ,  data[9:9]/*RI_READONLY_ERR_DET_EN*/  ,  data[10:10]/*RI_UNSUPPORTED_ERR_DET_EN*/   );
         end
     endfunction
 
@@ -2756,10 +2759,13 @@
             foreach(TE4_ERR_DET_EN_bit_cg[bt]) this.TE4_ERR_DET_EN_bit_cg[bt].sample(TE4_ERR_DET_EN.get_mirrored_value() >> bt);
             foreach(TE5_ERR_DET_EN_bit_cg[bt]) this.TE5_ERR_DET_EN_bit_cg[bt].sample(TE5_ERR_DET_EN.get_mirrored_value() >> bt);
             foreach(FRAMING_ERR_DET_EN_bit_cg[bt]) this.FRAMING_ERR_DET_EN_bit_cg[bt].sample(FRAMING_ERR_DET_EN.get_mirrored_value() >> bt);
-            foreach(PEC_ERR_DET_EN_bit_cg[bt]) this.PEC_ERR_DET_EN_bit_cg[bt].sample(PEC_ERR_DET_EN.get_mirrored_value() >> bt);
+            foreach(RI_PEC_ERR_DET_EN_bit_cg[bt]) this.RI_PEC_ERR_DET_EN_bit_cg[bt].sample(RI_PEC_ERR_DET_EN.get_mirrored_value() >> bt);
+            foreach(RI_LENGTH_ERR_DET_EN_bit_cg[bt]) this.RI_LENGTH_ERR_DET_EN_bit_cg[bt].sample(RI_LENGTH_ERR_DET_EN.get_mirrored_value() >> bt);
+            foreach(RI_READONLY_ERR_DET_EN_bit_cg[bt]) this.RI_READONLY_ERR_DET_EN_bit_cg[bt].sample(RI_READONLY_ERR_DET_EN.get_mirrored_value() >> bt);
+            foreach(RI_UNSUPPORTED_ERR_DET_EN_bit_cg[bt]) this.RI_UNSUPPORTED_ERR_DET_EN_bit_cg[bt].sample(RI_UNSUPPORTED_ERR_DET_EN.get_mirrored_value() >> bt);
         end
         if (get_coverage(UVM_CVR_FIELD_VALS)) begin
-            this.fld_cg.sample( TE0_ERR_DET_EN.get_mirrored_value()  ,  TE1_ERR_DET_EN.get_mirrored_value()  ,  TE2_ERR_DET_EN.get_mirrored_value()  ,  TE3_ERR_DET_EN.get_mirrored_value()  ,  TE4_ERR_DET_EN.get_mirrored_value()  ,  TE5_ERR_DET_EN.get_mirrored_value()  ,  FRAMING_ERR_DET_EN.get_mirrored_value()  ,  PEC_ERR_DET_EN.get_mirrored_value()   );
+            this.fld_cg.sample( TE0_ERR_DET_EN.get_mirrored_value()  ,  TE1_ERR_DET_EN.get_mirrored_value()  ,  TE2_ERR_DET_EN.get_mirrored_value()  ,  TE3_ERR_DET_EN.get_mirrored_value()  ,  TE4_ERR_DET_EN.get_mirrored_value()  ,  TE5_ERR_DET_EN.get_mirrored_value()  ,  FRAMING_ERR_DET_EN.get_mirrored_value()  ,  RI_PEC_ERR_DET_EN.get_mirrored_value()  ,  RI_LENGTH_ERR_DET_EN.get_mirrored_value()  ,  RI_READONLY_ERR_DET_EN.get_mirrored_value()  ,  RI_UNSUPPORTED_ERR_DET_EN.get_mirrored_value()   );
         end
     endfunction
 
@@ -2779,10 +2785,13 @@
             foreach(TE4_ERR_STAT_bit_cg[bt]) this.TE4_ERR_STAT_bit_cg[bt].sample(data[5 + bt]);
             foreach(TE5_ERR_STAT_bit_cg[bt]) this.TE5_ERR_STAT_bit_cg[bt].sample(data[6 + bt]);
             foreach(FRAMING_ERR_STAT_bit_cg[bt]) this.FRAMING_ERR_STAT_bit_cg[bt].sample(data[7 + bt]);
-            foreach(PEC_ERR_STAT_bit_cg[bt]) this.PEC_ERR_STAT_bit_cg[bt].sample(data[8 + bt]);
+            foreach(RI_PEC_ERR_STAT_bit_cg[bt]) this.RI_PEC_ERR_STAT_bit_cg[bt].sample(data[8 + bt]);
+            foreach(RI_LENGTH_ERR_STAT_bit_cg[bt]) this.RI_LENGTH_ERR_STAT_bit_cg[bt].sample(data[9 + bt]);
+            foreach(RI_READONLY_ERR_STAT_bit_cg[bt]) this.RI_READONLY_ERR_STAT_bit_cg[bt].sample(data[10 + bt]);
+            foreach(RI_UNSUPPORTED_ERR_STAT_bit_cg[bt]) this.RI_UNSUPPORTED_ERR_STAT_bit_cg[bt].sample(data[11 + bt]);
         end
         if (get_coverage(UVM_CVR_FIELD_VALS)) begin
-            this.fld_cg.sample( data[1:1]/*TE0_ERR_STAT*/  ,  data[2:2]/*TE1_ERR_STAT*/  ,  data[3:3]/*TE2_ERR_STAT*/  ,  data[4:4]/*TE3_ERR_STAT*/  ,  data[5:5]/*TE4_ERR_STAT*/  ,  data[6:6]/*TE5_ERR_STAT*/  ,  data[7:7]/*FRAMING_ERR_STAT*/  ,  data[8:8]/*PEC_ERR_STAT*/   );
+            this.fld_cg.sample( data[1:1]/*TE0_ERR_STAT*/  ,  data[2:2]/*TE1_ERR_STAT*/  ,  data[3:3]/*TE2_ERR_STAT*/  ,  data[4:4]/*TE3_ERR_STAT*/  ,  data[5:5]/*TE4_ERR_STAT*/  ,  data[6:6]/*TE5_ERR_STAT*/  ,  data[7:7]/*FRAMING_ERR_STAT*/  ,  data[8:8]/*RI_PEC_ERR_STAT*/  ,  data[9:9]/*RI_LENGTH_ERR_STAT*/  ,  data[10:10]/*RI_READONLY_ERR_STAT*/  ,  data[11:11]/*RI_UNSUPPORTED_ERR_STAT*/   );
         end
     endfunction
 
@@ -2795,10 +2804,13 @@
             foreach(TE4_ERR_STAT_bit_cg[bt]) this.TE4_ERR_STAT_bit_cg[bt].sample(TE4_ERR_STAT.get_mirrored_value() >> bt);
             foreach(TE5_ERR_STAT_bit_cg[bt]) this.TE5_ERR_STAT_bit_cg[bt].sample(TE5_ERR_STAT.get_mirrored_value() >> bt);
             foreach(FRAMING_ERR_STAT_bit_cg[bt]) this.FRAMING_ERR_STAT_bit_cg[bt].sample(FRAMING_ERR_STAT.get_mirrored_value() >> bt);
-            foreach(PEC_ERR_STAT_bit_cg[bt]) this.PEC_ERR_STAT_bit_cg[bt].sample(PEC_ERR_STAT.get_mirrored_value() >> bt);
+            foreach(RI_PEC_ERR_STAT_bit_cg[bt]) this.RI_PEC_ERR_STAT_bit_cg[bt].sample(RI_PEC_ERR_STAT.get_mirrored_value() >> bt);
+            foreach(RI_LENGTH_ERR_STAT_bit_cg[bt]) this.RI_LENGTH_ERR_STAT_bit_cg[bt].sample(RI_LENGTH_ERR_STAT.get_mirrored_value() >> bt);
+            foreach(RI_READONLY_ERR_STAT_bit_cg[bt]) this.RI_READONLY_ERR_STAT_bit_cg[bt].sample(RI_READONLY_ERR_STAT.get_mirrored_value() >> bt);
+            foreach(RI_UNSUPPORTED_ERR_STAT_bit_cg[bt]) this.RI_UNSUPPORTED_ERR_STAT_bit_cg[bt].sample(RI_UNSUPPORTED_ERR_STAT.get_mirrored_value() >> bt);
         end
         if (get_coverage(UVM_CVR_FIELD_VALS)) begin
-            this.fld_cg.sample( TE0_ERR_STAT.get_mirrored_value()  ,  TE1_ERR_STAT.get_mirrored_value()  ,  TE2_ERR_STAT.get_mirrored_value()  ,  TE3_ERR_STAT.get_mirrored_value()  ,  TE4_ERR_STAT.get_mirrored_value()  ,  TE5_ERR_STAT.get_mirrored_value()  ,  FRAMING_ERR_STAT.get_mirrored_value()  ,  PEC_ERR_STAT.get_mirrored_value()   );
+            this.fld_cg.sample( TE0_ERR_STAT.get_mirrored_value()  ,  TE1_ERR_STAT.get_mirrored_value()  ,  TE2_ERR_STAT.get_mirrored_value()  ,  TE3_ERR_STAT.get_mirrored_value()  ,  TE4_ERR_STAT.get_mirrored_value()  ,  TE5_ERR_STAT.get_mirrored_value()  ,  FRAMING_ERR_STAT.get_mirrored_value()  ,  RI_PEC_ERR_STAT.get_mirrored_value()  ,  RI_LENGTH_ERR_STAT.get_mirrored_value()  ,  RI_READONLY_ERR_STAT.get_mirrored_value()  ,  RI_UNSUPPORTED_ERR_STAT.get_mirrored_value()   );
         end
     endfunction
 
@@ -2818,10 +2830,13 @@
             foreach(TE4_ERR_EN_bit_cg[bt]) this.TE4_ERR_EN_bit_cg[bt].sample(data[5 + bt]);
             foreach(TE5_ERR_EN_bit_cg[bt]) this.TE5_ERR_EN_bit_cg[bt].sample(data[6 + bt]);
             foreach(FRAMING_ERR_EN_bit_cg[bt]) this.FRAMING_ERR_EN_bit_cg[bt].sample(data[7 + bt]);
-            foreach(PEC_ERR_EN_bit_cg[bt]) this.PEC_ERR_EN_bit_cg[bt].sample(data[8 + bt]);
+            foreach(RI_PEC_ERR_EN_bit_cg[bt]) this.RI_PEC_ERR_EN_bit_cg[bt].sample(data[8 + bt]);
+            foreach(RI_LENGTH_ERR_EN_bit_cg[bt]) this.RI_LENGTH_ERR_EN_bit_cg[bt].sample(data[9 + bt]);
+            foreach(RI_READONLY_ERR_EN_bit_cg[bt]) this.RI_READONLY_ERR_EN_bit_cg[bt].sample(data[10 + bt]);
+            foreach(RI_UNSUPPORTED_ERR_EN_bit_cg[bt]) this.RI_UNSUPPORTED_ERR_EN_bit_cg[bt].sample(data[11 + bt]);
         end
         if (get_coverage(UVM_CVR_FIELD_VALS)) begin
-            this.fld_cg.sample( data[1:1]/*TE0_ERR_EN*/  ,  data[2:2]/*TE1_ERR_EN*/  ,  data[3:3]/*TE2_ERR_EN*/  ,  data[4:4]/*TE3_ERR_EN*/  ,  data[5:5]/*TE4_ERR_EN*/  ,  data[6:6]/*TE5_ERR_EN*/  ,  data[7:7]/*FRAMING_ERR_EN*/  ,  data[8:8]/*PEC_ERR_EN*/   );
+            this.fld_cg.sample( data[1:1]/*TE0_ERR_EN*/  ,  data[2:2]/*TE1_ERR_EN*/  ,  data[3:3]/*TE2_ERR_EN*/  ,  data[4:4]/*TE3_ERR_EN*/  ,  data[5:5]/*TE4_ERR_EN*/  ,  data[6:6]/*TE5_ERR_EN*/  ,  data[7:7]/*FRAMING_ERR_EN*/  ,  data[8:8]/*RI_PEC_ERR_EN*/  ,  data[9:9]/*RI_LENGTH_ERR_EN*/  ,  data[10:10]/*RI_READONLY_ERR_EN*/  ,  data[11:11]/*RI_UNSUPPORTED_ERR_EN*/   );
         end
     endfunction
 
@@ -2834,10 +2849,13 @@
             foreach(TE4_ERR_EN_bit_cg[bt]) this.TE4_ERR_EN_bit_cg[bt].sample(TE4_ERR_EN.get_mirrored_value() >> bt);
             foreach(TE5_ERR_EN_bit_cg[bt]) this.TE5_ERR_EN_bit_cg[bt].sample(TE5_ERR_EN.get_mirrored_value() >> bt);
             foreach(FRAMING_ERR_EN_bit_cg[bt]) this.FRAMING_ERR_EN_bit_cg[bt].sample(FRAMING_ERR_EN.get_mirrored_value() >> bt);
-            foreach(PEC_ERR_EN_bit_cg[bt]) this.PEC_ERR_EN_bit_cg[bt].sample(PEC_ERR_EN.get_mirrored_value() >> bt);
+            foreach(RI_PEC_ERR_EN_bit_cg[bt]) this.RI_PEC_ERR_EN_bit_cg[bt].sample(RI_PEC_ERR_EN.get_mirrored_value() >> bt);
+            foreach(RI_LENGTH_ERR_EN_bit_cg[bt]) this.RI_LENGTH_ERR_EN_bit_cg[bt].sample(RI_LENGTH_ERR_EN.get_mirrored_value() >> bt);
+            foreach(RI_READONLY_ERR_EN_bit_cg[bt]) this.RI_READONLY_ERR_EN_bit_cg[bt].sample(RI_READONLY_ERR_EN.get_mirrored_value() >> bt);
+            foreach(RI_UNSUPPORTED_ERR_EN_bit_cg[bt]) this.RI_UNSUPPORTED_ERR_EN_bit_cg[bt].sample(RI_UNSUPPORTED_ERR_EN.get_mirrored_value() >> bt);
         end
         if (get_coverage(UVM_CVR_FIELD_VALS)) begin
-            this.fld_cg.sample( TE0_ERR_EN.get_mirrored_value()  ,  TE1_ERR_EN.get_mirrored_value()  ,  TE2_ERR_EN.get_mirrored_value()  ,  TE3_ERR_EN.get_mirrored_value()  ,  TE4_ERR_EN.get_mirrored_value()  ,  TE5_ERR_EN.get_mirrored_value()  ,  FRAMING_ERR_EN.get_mirrored_value()  ,  PEC_ERR_EN.get_mirrored_value()   );
+            this.fld_cg.sample( TE0_ERR_EN.get_mirrored_value()  ,  TE1_ERR_EN.get_mirrored_value()  ,  TE2_ERR_EN.get_mirrored_value()  ,  TE3_ERR_EN.get_mirrored_value()  ,  TE4_ERR_EN.get_mirrored_value()  ,  TE5_ERR_EN.get_mirrored_value()  ,  FRAMING_ERR_EN.get_mirrored_value()  ,  RI_PEC_ERR_EN.get_mirrored_value()  ,  RI_LENGTH_ERR_EN.get_mirrored_value()  ,  RI_READONLY_ERR_EN.get_mirrored_value()  ,  RI_UNSUPPORTED_ERR_EN.get_mirrored_value()   );
         end
     endfunction
 
@@ -2857,10 +2875,13 @@
             foreach(TE4_ERR_FORCE_bit_cg[bt]) this.TE4_ERR_FORCE_bit_cg[bt].sample(data[5 + bt]);
             foreach(TE5_ERR_FORCE_bit_cg[bt]) this.TE5_ERR_FORCE_bit_cg[bt].sample(data[6 + bt]);
             foreach(FRAMING_ERR_FORCE_bit_cg[bt]) this.FRAMING_ERR_FORCE_bit_cg[bt].sample(data[7 + bt]);
-            foreach(PEC_ERR_FORCE_bit_cg[bt]) this.PEC_ERR_FORCE_bit_cg[bt].sample(data[8 + bt]);
+            foreach(RI_PEC_ERR_FORCE_bit_cg[bt]) this.RI_PEC_ERR_FORCE_bit_cg[bt].sample(data[8 + bt]);
+            foreach(RI_LENGTH_ERR_FORCE_bit_cg[bt]) this.RI_LENGTH_ERR_FORCE_bit_cg[bt].sample(data[9 + bt]);
+            foreach(RI_READONLY_ERR_FORCE_bit_cg[bt]) this.RI_READONLY_ERR_FORCE_bit_cg[bt].sample(data[10 + bt]);
+            foreach(RI_UNSUPPORTED_ERR_FORCE_bit_cg[bt]) this.RI_UNSUPPORTED_ERR_FORCE_bit_cg[bt].sample(data[11 + bt]);
         end
         if (get_coverage(UVM_CVR_FIELD_VALS)) begin
-            this.fld_cg.sample( data[1:1]/*TE0_ERR_FORCE*/  ,  data[2:2]/*TE1_ERR_FORCE*/  ,  data[3:3]/*TE2_ERR_FORCE*/  ,  data[4:4]/*TE3_ERR_FORCE*/  ,  data[5:5]/*TE4_ERR_FORCE*/  ,  data[6:6]/*TE5_ERR_FORCE*/  ,  data[7:7]/*FRAMING_ERR_FORCE*/  ,  data[8:8]/*PEC_ERR_FORCE*/   );
+            this.fld_cg.sample( data[1:1]/*TE0_ERR_FORCE*/  ,  data[2:2]/*TE1_ERR_FORCE*/  ,  data[3:3]/*TE2_ERR_FORCE*/  ,  data[4:4]/*TE3_ERR_FORCE*/  ,  data[5:5]/*TE4_ERR_FORCE*/  ,  data[6:6]/*TE5_ERR_FORCE*/  ,  data[7:7]/*FRAMING_ERR_FORCE*/  ,  data[8:8]/*RI_PEC_ERR_FORCE*/  ,  data[9:9]/*RI_LENGTH_ERR_FORCE*/  ,  data[10:10]/*RI_READONLY_ERR_FORCE*/  ,  data[11:11]/*RI_UNSUPPORTED_ERR_FORCE*/   );
         end
     endfunction
 
@@ -2873,10 +2894,13 @@
             foreach(TE4_ERR_FORCE_bit_cg[bt]) this.TE4_ERR_FORCE_bit_cg[bt].sample(TE4_ERR_FORCE.get_mirrored_value() >> bt);
             foreach(TE5_ERR_FORCE_bit_cg[bt]) this.TE5_ERR_FORCE_bit_cg[bt].sample(TE5_ERR_FORCE.get_mirrored_value() >> bt);
             foreach(FRAMING_ERR_FORCE_bit_cg[bt]) this.FRAMING_ERR_FORCE_bit_cg[bt].sample(FRAMING_ERR_FORCE.get_mirrored_value() >> bt);
-            foreach(PEC_ERR_FORCE_bit_cg[bt]) this.PEC_ERR_FORCE_bit_cg[bt].sample(PEC_ERR_FORCE.get_mirrored_value() >> bt);
+            foreach(RI_PEC_ERR_FORCE_bit_cg[bt]) this.RI_PEC_ERR_FORCE_bit_cg[bt].sample(RI_PEC_ERR_FORCE.get_mirrored_value() >> bt);
+            foreach(RI_LENGTH_ERR_FORCE_bit_cg[bt]) this.RI_LENGTH_ERR_FORCE_bit_cg[bt].sample(RI_LENGTH_ERR_FORCE.get_mirrored_value() >> bt);
+            foreach(RI_READONLY_ERR_FORCE_bit_cg[bt]) this.RI_READONLY_ERR_FORCE_bit_cg[bt].sample(RI_READONLY_ERR_FORCE.get_mirrored_value() >> bt);
+            foreach(RI_UNSUPPORTED_ERR_FORCE_bit_cg[bt]) this.RI_UNSUPPORTED_ERR_FORCE_bit_cg[bt].sample(RI_UNSUPPORTED_ERR_FORCE.get_mirrored_value() >> bt);
         end
         if (get_coverage(UVM_CVR_FIELD_VALS)) begin
-            this.fld_cg.sample( TE0_ERR_FORCE.get_mirrored_value()  ,  TE1_ERR_FORCE.get_mirrored_value()  ,  TE2_ERR_FORCE.get_mirrored_value()  ,  TE3_ERR_FORCE.get_mirrored_value()  ,  TE4_ERR_FORCE.get_mirrored_value()  ,  TE5_ERR_FORCE.get_mirrored_value()  ,  FRAMING_ERR_FORCE.get_mirrored_value()  ,  PEC_ERR_FORCE.get_mirrored_value()   );
+            this.fld_cg.sample( TE0_ERR_FORCE.get_mirrored_value()  ,  TE1_ERR_FORCE.get_mirrored_value()  ,  TE2_ERR_FORCE.get_mirrored_value()  ,  TE3_ERR_FORCE.get_mirrored_value()  ,  TE4_ERR_FORCE.get_mirrored_value()  ,  TE5_ERR_FORCE.get_mirrored_value()  ,  FRAMING_ERR_FORCE.get_mirrored_value()  ,  RI_PEC_ERR_FORCE.get_mirrored_value()  ,  RI_LENGTH_ERR_FORCE.get_mirrored_value()  ,  RI_READONLY_ERR_FORCE.get_mirrored_value()  ,  RI_UNSUPPORTED_ERR_FORCE.get_mirrored_value()   );
         end
     endfunction
 
@@ -3055,8 +3079,8 @@
         end
     endfunction
 
-    /*----------------------- I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_PEC SAMPLE FUNCTIONS -----------------------*/
-    function void I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_PEC::sample(uvm_reg_data_t  data,
+    /*----------------------- I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_PEC SAMPLE FUNCTIONS -----------------------*/
+    function void I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_PEC::sample(uvm_reg_data_t  data,
                                                    uvm_reg_data_t  byte_en,
                                                    bit             is_read,
                                                    uvm_reg_map     map);
@@ -3071,7 +3095,82 @@
         end
     endfunction
 
-    function void I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_PEC::sample_values();
+    function void I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_PEC::sample_values();
+        if (get_coverage(UVM_CVR_REG_BITS)) begin
+            foreach(CNT_bit_cg[bt]) this.CNT_bit_cg[bt].sample(CNT.get_mirrored_value() >> bt);
+        end
+        if (get_coverage(UVM_CVR_FIELD_VALS)) begin
+            this.fld_cg.sample( CNT.get_mirrored_value()   );
+        end
+    endfunction
+
+    /*----------------------- I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_LENGTH SAMPLE FUNCTIONS -----------------------*/
+    function void I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_LENGTH::sample(uvm_reg_data_t  data,
+                                                   uvm_reg_data_t  byte_en,
+                                                   bit             is_read,
+                                                   uvm_reg_map     map);
+        m_current = get();
+        m_data    = data;
+        m_is_read = is_read;
+        if (get_coverage(UVM_CVR_REG_BITS)) begin
+            foreach(CNT_bit_cg[bt]) this.CNT_bit_cg[bt].sample(data[0 + bt]);
+        end
+        if (get_coverage(UVM_CVR_FIELD_VALS)) begin
+            this.fld_cg.sample( data[7:0]/*CNT*/   );
+        end
+    endfunction
+
+    function void I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_LENGTH::sample_values();
+        if (get_coverage(UVM_CVR_REG_BITS)) begin
+            foreach(CNT_bit_cg[bt]) this.CNT_bit_cg[bt].sample(CNT.get_mirrored_value() >> bt);
+        end
+        if (get_coverage(UVM_CVR_FIELD_VALS)) begin
+            this.fld_cg.sample( CNT.get_mirrored_value()   );
+        end
+    endfunction
+
+    /*----------------------- I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_READONLY SAMPLE FUNCTIONS -----------------------*/
+    function void I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_READONLY::sample(uvm_reg_data_t  data,
+                                                   uvm_reg_data_t  byte_en,
+                                                   bit             is_read,
+                                                   uvm_reg_map     map);
+        m_current = get();
+        m_data    = data;
+        m_is_read = is_read;
+        if (get_coverage(UVM_CVR_REG_BITS)) begin
+            foreach(CNT_bit_cg[bt]) this.CNT_bit_cg[bt].sample(data[0 + bt]);
+        end
+        if (get_coverage(UVM_CVR_FIELD_VALS)) begin
+            this.fld_cg.sample( data[7:0]/*CNT*/   );
+        end
+    endfunction
+
+    function void I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_READONLY::sample_values();
+        if (get_coverage(UVM_CVR_REG_BITS)) begin
+            foreach(CNT_bit_cg[bt]) this.CNT_bit_cg[bt].sample(CNT.get_mirrored_value() >> bt);
+        end
+        if (get_coverage(UVM_CVR_FIELD_VALS)) begin
+            this.fld_cg.sample( CNT.get_mirrored_value()   );
+        end
+    endfunction
+
+    /*----------------------- I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_UNSUPPORTED SAMPLE FUNCTIONS -----------------------*/
+    function void I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_UNSUPPORTED::sample(uvm_reg_data_t  data,
+                                                   uvm_reg_data_t  byte_en,
+                                                   bit             is_read,
+                                                   uvm_reg_map     map);
+        m_current = get();
+        m_data    = data;
+        m_is_read = is_read;
+        if (get_coverage(UVM_CVR_REG_BITS)) begin
+            foreach(CNT_bit_cg[bt]) this.CNT_bit_cg[bt].sample(data[0 + bt]);
+        end
+        if (get_coverage(UVM_CVR_FIELD_VALS)) begin
+            this.fld_cg.sample( data[7:0]/*CNT*/   );
+        end
+    endfunction
+
+    function void I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_UNSUPPORTED::sample_values();
         if (get_coverage(UVM_CVR_REG_BITS)) begin
             foreach(CNT_bit_cg[bt]) this.CNT_bit_cg[bt].sample(CNT.get_mirrored_value() >> bt);
         end
