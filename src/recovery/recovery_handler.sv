@@ -401,8 +401,10 @@ module recovery_handler
   // Indirect FIFO Signals
   //----------------------------------------------------------------------------
   logic                          indirect_rx_wvalid;
+  logic                          indirect_rx_wvalid_muxed;
   logic                          indirect_rx_wready;
   logic [TtiRxDataDataWidth-1:0] indirect_rx_wdata;
+  logic [TtiRxDataDataWidth-1:0] indirect_rx_wdata_muxed;
   logic                          indirect_rx_rreq;
   logic                          indirect_rx_rack;
   logic [      CsrDataWidth-1:0] indirect_rx_rdata;
@@ -1124,6 +1126,12 @@ module recovery_handler
   //
   //============================================================================
 
+  // Bypass mode mux: In bypass mode, TX queue writes directly to indirect FIFO
+  assign indirect_rx_wvalid_muxed = bypass_i3c_core_i ?
+      (tti_tx_data_queue_rvalid & allow_indirect_write) : indirect_rx_wvalid;
+  assign indirect_rx_wdata_muxed = bypass_i3c_core_i ?
+      tti_tx_data_queue_rdata : indirect_rx_wdata;
+
   read_queue #(
       .Depth    (IndirectFifoDepth),
       .DataWidth(CsrDataWidth)
@@ -1131,10 +1139,10 @@ module recovery_handler
       .clk_i (clk_i),
       .rst_ni(rst_ni),
 
-      // Write port
-      .wvalid_i(indirect_rx_wvalid),
+      // Write port (muxed for bypass mode)
+      .wvalid_i(indirect_rx_wvalid_muxed),
       .wready_o(indirect_rx_wready),
-      .wdata_i (indirect_rx_wdata),
+      .wdata_i (indirect_rx_wdata_muxed),
 
       // Read port
       .req_i (indirect_rx_rreq & allow_indirect_read),
@@ -1200,8 +1208,9 @@ module recovery_handler
 
   always_comb begin : tti_tx_queue_converter_sink
     if (bypass_i3c_core_i) begin
+      // In bypass mode: TX queue writes directly to indirect FIFO
       tti_tx_data_queue_rvalid_conv_sink = '0;
-      tti_tx_data_queue_rready = exec_tti_rx_data_ready;
+      tti_tx_data_queue_rready = indirect_rx_wready & allow_indirect_write;
       tti_tx_data_queue_rdata_conv_sink = '0;
     end else begin
       tti_tx_data_queue_rvalid_conv_sink = tti_tx_data_queue_rvalid;
