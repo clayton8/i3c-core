@@ -304,6 +304,7 @@ module hci_queues_wrapper
 
       .bresp_o(bresp),
       .bid_o(bid),
+      .buser_o(),
       .bvalid_o(bvalid),
       .bready_i(bready),
 
@@ -350,6 +351,9 @@ module hci_queues_wrapper
 
   I3CCSR_pkg::I3CCSR__I3C_EC__SecFwRecoveryIf__out_t hwif_rec_out;
   I3CCSR_pkg::I3CCSR__I3C_EC__SecFwRecoveryIf__in_t hwif_rec_inp;
+
+  I3CCSR_pkg::I3CCSR__I3C_EC__SoCMgmtIf__out_t hwif_socmgmt_out;
+  I3CCSR_pkg::I3CCSR__I3C_EC__SoCMgmtIf__in_t hwif_socmgmt_inp;
 
   hci #(
       .HciRespFifoDepth(HciRespFifoDepth),
@@ -463,6 +467,10 @@ module hci_queues_wrapper
       // Recovery interface CSRs
       .hwif_rec_o(hwif_rec_out),
       .hwif_rec_i(hwif_rec_inp),
+
+      // SoC Management interface CSRs
+      .hwif_socmgmt_o(hwif_socmgmt_out),
+      .hwif_socmgmt_i(hwif_socmgmt_inp),
 
       // Controller configuration
       .hwif_out_o(unused_hwif_out),
@@ -588,13 +596,24 @@ module hci_queues_wrapper
       .ibi_queue_reg_rst_we_i  (csr_tti_ibi_queue_reg_rst_we),
       .ibi_queue_reg_rst_data_i(csr_tti_ibi_queue_reg_rst_data),
       .ibi_queue_full_i        (tti_ibi_full_o),
+      .ibi_queue_empty_i       (tti_ibi_empty_o),
+
+      // Queue depths
+      .rx_desc_queue_depth_i('0),
+      .tx_desc_queue_depth_i('0),
+      .rx_data_queue_depth_i('0),
+      .tx_data_queue_depth_i('0),
+      .ibi_queue_depth_i('0),
+      .tx_desc_queue_empty_i('0),
+      .tx_data_queue_empty_i('0),
 
       .bypass_i3c_core_i,
 
       .ibi_status_i('0),
       .ibi_status_we_i('0),
-      .recovery_mode_enabled_i('0),
+      .virtual_device_sel_i('0),
       .tx_pr_end_i('0),
+      .tx_pr_start_i('0),
 
       .enec_ibi_i('0),
       .enec_crr_i('0),
@@ -605,6 +624,21 @@ module hci_queues_wrapper
       .disec_hj_i('0),
 
       .err_i('0),
+
+      // Target error signals
+      .te0_err_i('0),
+      .te1_err_i('0),
+      .te2_err_i('0),
+      .te3_err_i('0),
+      .te4_err_i('0),
+      .te5_err_i('0),
+      .framing_err_i('0),
+
+      // Recovery interface error signals
+      .ri_pec_err_i('0),
+      .ri_length_err_i('0),
+      .ri_readonly_err_i('0),
+      .ri_unsupported_err_i('0),
 
       // Interrupt
       .irq_o(unused_irq)
@@ -618,6 +652,10 @@ module hci_queues_wrapper
       // Recovery CSR interface
       .hwif_rec_i(hwif_rec_out),
       .hwif_rec_o(hwif_rec_inp),
+
+      // SoC Management CSR interface
+      .hwif_socmgmt_i(hwif_socmgmt_out),
+      .hwif_socmgmt_o(hwif_socmgmt_inp),
 
       // Interrupt
       .irq_o(irq_o),
@@ -724,9 +762,11 @@ module hci_queues_wrapper
       .ctl_tti_rx_data_queue_wready_o(tti_rx_wready_o),
       .ctl_tti_rx_data_queue_wdata_i(tti_rx_wdata_i),
       .ctl_tti_rx_data_queue_flush_i(tti_rx_flush_i),
+      .ctl_tti_rx_data_queue_wlast_i('0),
       .ctl_tti_rx_data_queue_start_thld_o(tti_rx_start_thld_o),
       .ctl_tti_rx_data_queue_start_thld_trig_o(tti_rx_start_thld_trig_o),
       .ctl_tti_rx_data_queue_ready_thld_o(tti_rx_ready_thld_o),
+      .ctl_tti_rx_data_queue_ready_thld_trig_o(),
 
       // TTI TX data queue
       .ctl_tti_tx_data_queue_full_o(tti_tx_full_o),
@@ -751,6 +791,21 @@ module hci_queues_wrapper
       .ctl_tti_ibi_queue_rdata_o(tti_ibi_rdata_o),
       .ctl_tti_ibi_queue_ready_thld_o(tti_ibi_ready_thld_o),
       .ctl_tti_ibi_queue_ready_thld_trig_o(tti_ibi_ready_thld_trig_o),
+
+      // Recovery mode
+      .recovery_mode_enter_o(),
+
+      // Error detection enables
+      .pec_err_det_en_i('0),
+      .length_err_det_en_i('0),
+      .readonly_err_det_en_i('0),
+      .unsupported_err_det_en_i('0),
+
+      // Error outputs
+      .pec_err_o(),
+      .length_err_o(),
+      .readonly_err_o(),
+      .unsupported_err_o(),
 
       .virtual_device_sel_i('0),
       .xfer_in_progress_i('0)
