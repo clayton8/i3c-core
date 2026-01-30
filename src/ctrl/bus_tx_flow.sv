@@ -62,18 +62,18 @@ module bus_tx_flow import i3c_pkg::*; (
   // Common logic whenever a transfer gets started, including back-to-back transfers
   function automatic tx_state_e start_transfer(
     input  bus_tx_req_t bus_tx_req,
-    output i3c_byte_t   req_value_d,
-    output logic        bit_counter_en
+    output i3c_byte_t   req_value_out,
+    output logic        bit_counter_en_out
   );
-    req_value_d[7]   = tx_req_i.data[7];
-    req_value_d[6:0] = tx_req_i.req_bit ? '1 : tx_req_i.data[6:0];
+    req_value_out[7]   = bus_tx_req.data[7];
+    req_value_out[6:0] = bus_tx_req.req_bit ? '1 : bus_tx_req.data[6:0];
     if (bus_tx_req.req_bit) begin
       // Only one bit to send; wait for posedge
-      bit_counter_en = 1'b0;
+      bit_counter_en_out = 1'b0;
       return WaitPosEdge;
     end else begin
       // Enable bit counter and work on full byte in DriveByte
-      bit_counter_en = 1'b1;
+      bit_counter_en_out = 1'b1;
       return DriveByte;
     end
 
