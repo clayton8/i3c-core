@@ -1499,8 +1499,10 @@ module recovery_receiver
   //----------------------------------------------------------------------------
   assign fifo_xfer_done   = indirect_rx_full_i || (image_activated_o && ~indirect_rx_empty_i);
   assign bypass_xfer_done = (state_q == ExecFifoWrite) && (state_d == Done);
+  // In bypass mode: payload available when FIFO full, REC_PAYLOAD_DONE set, or image activated
+  // In normal mode: payload available when fifo_xfer_done (full or image activated with data)
   assign payload_high_en  = bypass_i3c_core_i ?
-    (bypass_xfer_done || hwif_socmgmt_i.REC_INTF_CFG.REC_PAYLOAD_DONE.value || image_activated_o) :
+    (indirect_rx_full_i || hwif_socmgmt_i.REC_INTF_CFG.REC_PAYLOAD_DONE.value || image_activated_o) :
     fifo_xfer_done;
 
   always_comb begin
