@@ -809,20 +809,20 @@ module recovery_receiver
   // Command Byte
   //----------------------------------------------------------------------------
   always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni)          cmd_cmd <= command_e'(8'h0);
+    if (!rst_ni)          cmd_cmd <= command_e'('0);
     else if (capture_cmd) cmd_cmd <= command_e'(rx_data_i);
 
   //----------------------------------------------------------------------------
   // Length Bytes
   //----------------------------------------------------------------------------
   always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni)               len_lsb <= 8'h0;
-    else if (latch_pec_from_len) len_lsb <= 8'h0;
+    if (!rst_ni)               len_lsb <= '0;
+    else if (latch_pec_from_len) len_lsb <= '0;
     else if (capture_len_lsb)   len_lsb <= rx_data_i;
 
   always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni)               len_msb <= 8'h0;
-    else if (latch_pec_from_len) len_msb <= 8'h0;
+    if (!rst_ni)               len_msb <= '0;
+    else if (latch_pec_from_len) len_msb <= '0;
     else if (capture_len_msb)   len_msb <= rx_data_i;
 
   //----------------------------------------------------------------------------
@@ -845,7 +845,7 @@ module recovery_receiver
   always_comb begin
     dcnt_next = dcnt;
     unique case (state_q)
-      Idle:                        dcnt_next = 16'h0;
+      Idle:                        dcnt_next = '0;
       CmdDispatch:                 dcnt_next = (|payload_byte_cnt[1:0]) ? 
                                                16'(payload_byte_cnt / 4 + 1) : 
                                                16'(payload_byte_cnt / 4);
@@ -858,7 +858,7 @@ module recovery_receiver
   end
 
   always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni) dcnt <= 16'h0;
+    if (!rst_ni) dcnt <= '0;
     else         dcnt <= dcnt_next;
 
   //----------------------------------------------------------------------------
@@ -867,14 +867,14 @@ module recovery_receiver
   always_comb begin
     bcnt_next = bcnt;
     unique case (state_q)
-      Idle:   bcnt_next = 2'h0;
+      Idle:   bcnt_next = '0;
       TxData: bcnt_next = (tx_data_valid_o && tx_data_ready_i) ? (bcnt + 2'h1) : bcnt;
       default: ;
     endcase
   end
 
   always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni) bcnt <= 2'h0;
+    if (!rst_ni) bcnt <= '0;
     else         bcnt <= bcnt_next;
 
   //----------------------------------------------------------------------------
@@ -883,7 +883,7 @@ module recovery_receiver
   always_comb begin
     payload_byte_cnt_next = payload_byte_cnt;
     unique case (state_q)
-      Idle, RxCmd, RxLenL, RxLenH: payload_byte_cnt_next = 16'h0;
+      Idle, RxCmd, RxLenL, RxLenH: payload_byte_cnt_next = '0;
       RxData: payload_byte_cnt_next = rx_data_queue_flow_i ? 
                                       (payload_byte_cnt + 16'h1) : payload_byte_cnt;
       default: ;
@@ -891,15 +891,15 @@ module recovery_receiver
   end
 
   always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni) payload_byte_cnt <= 16'h0;
+    if (!rst_ni) payload_byte_cnt <= '0;
     else         payload_byte_cnt <= payload_byte_cnt_next;
 
   //----------------------------------------------------------------------------
   // PEC Byte Counter
   //----------------------------------------------------------------------------
   always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni)             pec_rx_byte_cnt <= 2'h0;
-    else if (state_q != RxPec) pec_rx_byte_cnt <= 2'h0;
+    if (!rst_ni)             pec_rx_byte_cnt <= '0;
+    else if (state_q != RxPec) pec_rx_byte_cnt <= '0;
     else if (rx_flow)         pec_rx_byte_cnt <= pec_rx_byte_cnt + 2'h1;
 
   //============================================================================
@@ -922,15 +922,15 @@ module recovery_receiver
   // PEC CRC Latch
   //----------------------------------------------------------------------------
   always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni)        pec_crc_latched <= 8'h0;
-    else if (bus_start_i) pec_crc_latched <= 8'h0;
+    if (!rst_ni)        pec_crc_latched <= '0;
+    else if (bus_start_i) pec_crc_latched <= '0;
     else if (pec_enable_q) pec_crc_latched <= pec_crc_i;
 
   //----------------------------------------------------------------------------
   // PEC Receive Capture
   //----------------------------------------------------------------------------
   always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni)               pec_recv <= 8'h0;
+    if (!rst_ni)               pec_recv <= '0;
     else if (latch_pec_from_len) pec_recv <= len_lsb;
     else if (capture_pec)       pec_recv <= rx_data_i;
 
@@ -938,7 +938,7 @@ module recovery_receiver
   // PEC Calculated Value
   //----------------------------------------------------------------------------
   always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni) pec_calc <= 8'h0;
+    if (!rst_ni) pec_calc <= '0;
     else if (state_q == RxLenL && rx_flow) pec_calc <= pec_crc_latched;
     else if (state_q == RxPec && rx_flow)  pec_calc <= pec_crc_latched;
 
@@ -949,8 +949,8 @@ module recovery_receiver
   //============================================================================
 
   always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni)               desc_error <= 4'h0;
-    else if (state_q == Idle)  desc_error <= 4'h0;
+    if (!rst_ni)               desc_error <= '0;
+    else if (state_q == Idle)  desc_error <= '0;
     else if (desc_valid_i)     desc_error <= desc_data_i[31:28];
 
 
@@ -976,7 +976,7 @@ module recovery_receiver
   // TX Data Mux
   //----------------------------------------------------------------------------
   always_comb begin
-    tx_data_o = 8'h0;
+    tx_data_o = '0;
     unique case (state_q)
       TxLenL: tx_data_o = csr_length[7:0];
       TxLenH: tx_data_o = csr_length[15:8];
@@ -1068,7 +1068,7 @@ module recovery_receiver
   end
 
   always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni)           csr_length <= 16'h0;
+    if (!rst_ni)           csr_length <= '0;
     else if (load_csr_length) csr_length <= csr_length_next;
 
   //----------------------------------------------------------------------------
@@ -1098,7 +1098,7 @@ module recovery_receiver
   };
 
   assign prot_cap_3 = {
-    8'h0,
+    '0,
     hwif_rec_i.PROT_CAP_3.HEARTBEAT_PERIOD.value,
     hwif_rec_i.PROT_CAP_3.MAX_RESP_TIME.value,
     hwif_rec_i.PROT_CAP_3.NUM_OF_CMS_REGIONS.value
@@ -1123,21 +1123,21 @@ module recovery_receiver
   };
 
   assign device_reset = {
-    8'h0,
+    '0,
     hwif_rec_i.DEVICE_RESET.IF_CTRL.value,
     hwif_rec_i.DEVICE_RESET.FORCED_RECOVERY.value,
     hwif_rec_i.DEVICE_RESET.RESET_CTRL.value
   };
 
   assign recovery_ctrl = {
-    8'h0,
+    '0,
     hwif_rec_i.RECOVERY_CTRL.ACTIVATE_REC_IMG.value,
     hwif_rec_i.RECOVERY_CTRL.REC_IMG_SEL.value,
     hwif_rec_i.RECOVERY_CTRL.CMS.value
   };
 
   assign recovery_status = {
-    16'h0,
+    '0,
     hwif_rec_i.RECOVERY_STATUS.VENDOR_SPECIFIC_STATUS.value,
     hwif_rec_i.RECOVERY_STATUS.REC_IMG_INDEX.value,
     hwif_rec_i.RECOVERY_STATUS.DEV_REC_STATUS.value
@@ -1160,7 +1160,7 @@ module recovery_receiver
   };
 
   assign indirect_fifo_ctrl_1 = {
-    16'h0,
+    '0,
     hwif_rec_i.INDIRECT_FIFO_CTRL_1.IMAGE_SIZE.value[31:16]
   };
 
@@ -1176,7 +1176,7 @@ module recovery_receiver
   // CSR Data Mux
   //----------------------------------------------------------------------------
   always_comb begin
-    csr_data_next = 32'h0;
+    csr_data_next = '0;
     unique case (csr_sel)
       CSR_PROT_CAP_0:             csr_data_next = hwif_rec_i.PROT_CAP_0.REC_MAGIC_STRING_0.value;
       CSR_PROT_CAP_1:             csr_data_next = hwif_rec_i.PROT_CAP_1.REC_MAGIC_STRING_1.value;
@@ -1206,7 +1206,7 @@ module recovery_receiver
   end
 
   always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni) csr_data <= 32'h0;
+    if (!rst_ni) csr_data <= '0;
     else         csr_data <= csr_data_next;
 
   //============================================================================
@@ -1265,7 +1265,7 @@ module recovery_receiver
   assign indirect_rx_clr_o = fifo_ptr_clr;
 
   always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni) fifo_ptr_top <= 32'h0;
+    if (!rst_ni) fifo_ptr_top <= '0;
     else         fifo_ptr_top <= fifo_size - 32'h1;
 
   //----------------------------------------------------------------------------
@@ -1448,13 +1448,13 @@ module recovery_receiver
   assign hwif_rec_o.INDIRECT_FIFO_STATUS_2.READ_INDEX.we  = fifo_rdptr_inc || fifo_ptr_clr;
 
   always_comb begin
-    hwif_rec_o.INDIRECT_FIFO_STATUS_1.WRITE_INDEX.next = fifo_ptr_clr ? 32'h0 :
-      ((fifo_wrptr == fifo_ptr_top) ? 32'h0 : (fifo_wrptr + 32'h1));
+    hwif_rec_o.INDIRECT_FIFO_STATUS_1.WRITE_INDEX.next = fifo_ptr_clr ? '0 :
+      ((fifo_wrptr == fifo_ptr_top) ? '0 : (fifo_wrptr + 32'h1));
   end
 
   always_comb begin
-    hwif_rec_o.INDIRECT_FIFO_STATUS_2.READ_INDEX.next = fifo_ptr_clr ? 32'h0 :
-      ((fifo_rdptr == fifo_ptr_top) ? 32'h0 : (fifo_rdptr + 32'h1));
+    hwif_rec_o.INDIRECT_FIFO_STATUS_2.READ_INDEX.next = fifo_ptr_clr ? '0 :
+      ((fifo_rdptr == fifo_ptr_top) ? '0 : (fifo_rdptr + 32'h1));
   end
 
   //============================================================================
