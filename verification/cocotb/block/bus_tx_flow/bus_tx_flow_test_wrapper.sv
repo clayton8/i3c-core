@@ -17,6 +17,8 @@ module bus_tx_flow_test_wrapper
     input logic scl_negedge_i,
     input logic scl_posedge_i,
     input logic scl_stable_low_i,
+    input logic sda_negedge_i,
+    input logic sda_value_i,
 
     // Bus flow control
     input logic req_byte_i,
@@ -34,15 +36,24 @@ module bus_tx_flow_test_wrapper
     output logic sda_o  // Output I3C SDA bus line
 );
 
-  // Map individual signals to struct
+  // Map individual signals to/from structs
   bus_tx_req_t tx_req_i;
   bus_tx_rsp_t tx_rsp_o;
 
-  assign tx_req_i.drive_type = sel_od_pp_i ? PushPull : OpenDrain;
-  assign tx_req_i.req_byte   = req_byte_i;
-  assign tx_req_i.req_bit    = req_bit_i;
-  assign tx_req_i.req_ibi    = req_ibi_i;
-  assign tx_req_i.data       = req_value_i;
+  assign tx_req_i = '{
+    drive_type: (sel_od_pp_i ? PushPull : OpenDrain),
+    req_type:   (req_byte_i ? RawByte : RawBit), 
+    req_valid:  (req_byte_i || req_bit_i),
+    data:       req_value_i
+  };
+
+  bus_state_t bus_i;
+
+  assign bus_i = '{
+    sda: '{neg_edge: sda_negedge_i, value: sda_value_i, default: '0},
+    scl: '{pos_edge: scl_posedge_i, neg_edge: scl_negedge_i, stable_low: scl_stable_low_i, default: '0},
+    default: '0
+  };
 
   assign bus_tx_done_o  = tx_rsp_o.done;
   assign bus_tx_idle_o  = tx_rsp_o.idle;
@@ -51,9 +62,7 @@ module bus_tx_flow_test_wrapper
   bus_tx_flow xbus_tx_flow (
     .clk_i,
     .rst_ni,
-    .scl_negedge_i,
-    .scl_posedge_i,
-    .scl_stable_low_i,
+    .bus_i,
     .tx_req_i,
     .tx_rsp_o,
     .sel_od_pp_o,
