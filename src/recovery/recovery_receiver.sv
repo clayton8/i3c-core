@@ -395,8 +395,10 @@ module recovery_receiver
   //----------------------------------------------------------------------------
   // Protocol Status Signals
   //----------------------------------------------------------------------------
-  protocol_error_e status_protocol, status_protocol_next;
+  protocol_error_e status_protocol;
   logic            status_protocol_we;
+  logic            entering_error;
+  logic            entering_done_directly;
 
   //----------------------------------------------------------------------------
   // Payload and Transfer Signals
@@ -1463,21 +1465,25 @@ module recovery_receiver
 
   // OCP spec error priority: CRC > Length > Readonly/Unsupported
   always_comb begin
-    status_protocol_next = status_protocol;  // Hold current value by default
+    status_protocol = PROTOCOL_OK;
     if (pec_err)
-      status_protocol_next = PROTOCOL_ERROR_CRC;
+      status_protocol = PROTOCOL_ERROR_CRC;
     else if (length_underrun_err || length_overrun_err)
-      status_protocol_next = PROTOCOL_ERROR_LENGTH;
+      status_protocol = PROTOCOL_ERROR_LENGTH;
     else if (readonly_err || unsupported_err)
-      status_protocol_next = PROTOCOL_ERROR_READONLY;  // OCP: both map to "unsupported command error"
+      status_protocol = PROTOCOL_ERROR_READONLY;  // OCP: both map to "unsupported command error"
   end
 
-  always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni) status_protocol <= PROTOCOL_OK;
-    else if (state_q == Idle) status_protocol <= PROTOCOL_OK; // Clean slate for next transaction
-    else         status_protocol <= status_protocol_next;
-
-  assign status_protocol_we = (state_q == Done) || (state_q == Error);
+  // Write PROT_ERROR CSR only ONCE per transaction:
+  // - On transition INTO Error state (reports the error)
+  // - On transition INTO Done state directly (clears to OK, but NOT if coming from Error)
+  // This handles:
+  // 1. Staying in Error for multiple cycles (only writes on entry)
+  // 2. Error -> Done -> Idle (only writes on Error entry, Done doesn't overwrite)
+  // 3. Direct Done (writes PROTOCOL_OK to clear any previous error)
+  assign entering_error         = (state_q != Error) && (state_d == Error);
+  assign entering_done_directly = (state_q != Error) && (state_q != Done) && (state_d == Done);
+  assign status_protocol_we     = entering_error || entering_done_directly;
 
   always_comb begin
     hwif_rec_o.DEVICE_STATUS_0.REC_REASON_CODE.we   = 1'b0;
