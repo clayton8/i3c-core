@@ -552,7 +552,7 @@ async def test_chained_ri_and_ccc_commands(dut):
 
     # Enter recovery mode (DEV_STATUS = 0x3) before accessing recovery-only commands
     # INDIRECT_FIFO_DATA and INDIRECT_FIFO_CTRL are only accessible when in recovery mode
-    await tb.write_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_STATUS_0.base_addr, 0x3, 4)
+    await tb.write_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_STATUS_0.base_addr, int2dword(3), 4)
     await Timer(1, "us")
 
     # =========================================================================
@@ -1495,7 +1495,7 @@ async def test_write(dut):
 
     # Enter recovery mode (DEV_STATUS = 0x3) before accessing recovery-only commands
     # INDIRECT_FIFO_CTRL is only accessible when in recovery mode
-    await tb.write_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_STATUS_0.base_addr, 0x3, 4)
+    await tb.write_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_STATUS_0.base_addr, int2dword(3), 4)
     await Timer(1, "us")
 
     # Write to the FIFO_CTRL CSR (two words)
@@ -2747,7 +2747,7 @@ async def test_ri_comprehensive_stress(dut):
     
     # Enter recovery mode (DEV_STATUS = 0x3) before accessing recovery-only commands
     # INDIRECT_FIFO_DATA and related commands are only accessible when in recovery mode
-    await tb.write_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_STATUS_0.base_addr, 0x3, 4)
+    await tb.write_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_STATUS_0.base_addr, int2dword(3), 4)
     await Timer(1, "us")
 
     # Track test results
