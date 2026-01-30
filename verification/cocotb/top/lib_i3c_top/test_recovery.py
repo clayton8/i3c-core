@@ -919,7 +919,7 @@ async def test_chained_ri_and_ccc_commands(dut):
             f"Final FIFO word {i} mismatch: expected 0x{expected_word_final:08X}, got 0x{fifo_data_final:08X}"
 
 
-@cocotb.test(skip=True, skip_reason="Requires cocotbext-i3c update before it can be enabled")
+@cocotb.test(skip=True)  # Requires cocotbext-i3c update before it can be enabled
 async def test_ri_error_injection_stress(dut):
     """
     Tests Recovery Interface resilience to various I3C framing errors and abnormal conditions.
