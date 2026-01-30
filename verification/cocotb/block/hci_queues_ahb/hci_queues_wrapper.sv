@@ -521,8 +521,9 @@ module hci_queues_wrapper
 
       .ibi_status_i('0),
       .ibi_status_we_i('0),
-      .recovery_mode_enabled_i('0),
+      .virtual_device_sel_i('0),
       .tx_pr_end_i('0),
+      .tx_pr_start_i('0),
 
       .enec_ibi_i('0),
       .enec_crr_i('0),
@@ -533,6 +534,18 @@ module hci_queues_wrapper
       .disec_hj_i('0),
 
       .err_i('0),
+
+      .te0_err_i('0),
+      .te1_err_i('0),
+      .te2_err_i('0),
+      .te3_err_i('0),
+      .te4_err_i('0),
+      .te5_err_i('0),
+      .framing_err_i('0),
+      .ri_pec_err_i('0),
+      .ri_length_err_i('0),
+      .ri_readonly_err_i('0),
+      .ri_unsupported_err_i('0),
 
       // Interrupt
       .irq_o(unused_irq)
