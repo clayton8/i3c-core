@@ -1324,11 +1324,11 @@ module recovery_receiver
 
   always_comb begin : clear_bypassed_regs
     hwif_socmgmt_o.REC_INTF_REG_W1C_ACCESS.DEVICE_RESET_CTRL.we               = sw_device_reset_ctrl_swmod;
-    hwif_socmgmt_o.REC_INTF_REG_W1C_ACCESS.DEVICE_RESET_CTRL.next             = 8'h0;
+    hwif_socmgmt_o.REC_INTF_REG_W1C_ACCESS.DEVICE_RESET_CTRL.next             = '0;
     hwif_socmgmt_o.REC_INTF_REG_W1C_ACCESS.RECOVERY_CTRL_ACTIVATE_REC_IMG.we  = sw_recovery_ctrl_activate_rec_img_swmod;
-    hwif_socmgmt_o.REC_INTF_REG_W1C_ACCESS.RECOVERY_CTRL_ACTIVATE_REC_IMG.next= 8'h0;
+    hwif_socmgmt_o.REC_INTF_REG_W1C_ACCESS.RECOVERY_CTRL_ACTIVATE_REC_IMG.next= '0;
     hwif_socmgmt_o.REC_INTF_REG_W1C_ACCESS.INDIRECT_FIFO_CTRL_RESET.we        = sw_indirect_fifo_ctrl_reset_swmod;
-    hwif_socmgmt_o.REC_INTF_REG_W1C_ACCESS.INDIRECT_FIFO_CTRL_RESET.next      = 8'h0;
+    hwif_socmgmt_o.REC_INTF_REG_W1C_ACCESS.INDIRECT_FIFO_CTRL_RESET.next      = '0;
   end
 
   //----------------------------------------------------------------------------
@@ -1336,34 +1336,34 @@ module recovery_receiver
   //----------------------------------------------------------------------------
   always_comb begin
     // Read-only registers - no write enable
-    hwif_rec_o.PROT_CAP_2.REC_PROT_VERSION.we         = 1'b0;
-    hwif_rec_o.PROT_CAP_2.AGENT_CAPS.we               = 1'b0;
-    hwif_rec_o.PROT_CAP_3.NUM_OF_CMS_REGIONS.we       = 1'b0;
-    hwif_rec_o.PROT_CAP_3.MAX_RESP_TIME.we            = 1'b0;
-    hwif_rec_o.PROT_CAP_3.HEARTBEAT_PERIOD.we         = 1'b0;
-    hwif_rec_o.DEVICE_ID_0.DESC_TYPE.we               = 1'b0;
-    hwif_rec_o.DEVICE_ID_0.VENDOR_SPECIFIC_STR_LENGTH.we = 1'b0;
-    hwif_rec_o.DEVICE_ID_0.DATA.we                    = 1'b0;
-    hwif_rec_o.DEVICE_ID_1.DATA.we                    = 1'b0;
-    hwif_rec_o.DEVICE_ID_2.DATA.we                    = 1'b0;
-    hwif_rec_o.DEVICE_ID_3.DATA.we                    = 1'b0;
-    hwif_rec_o.DEVICE_ID_4.DATA.we                    = 1'b0;
-    hwif_rec_o.DEVICE_ID_5.DATA.we                    = 1'b0;
-    hwif_rec_o.DEVICE_STATUS_1.HEARTBEAT.we           = 1'b0;
-    hwif_rec_o.DEVICE_STATUS_1.VENDOR_STATUS_LENGTH.we = 1'b0;
-    hwif_rec_o.DEVICE_STATUS_1.VENDOR_STATUS.we       = 1'b0;
-    hwif_rec_o.RECOVERY_STATUS.DEV_REC_STATUS.we      = 1'b0;
-    hwif_rec_o.RECOVERY_STATUS.REC_IMG_INDEX.we       = 1'b0;
-    hwif_rec_o.RECOVERY_STATUS.VENDOR_SPECIFIC_STATUS.we = 1'b0;
-    hwif_rec_o.HW_STATUS.TEMP_CRITICAL.we             = 1'b0;
-    hwif_rec_o.HW_STATUS.SOFT_ERR.we                  = 1'b0;
-    hwif_rec_o.HW_STATUS.FATAL_ERR.we                 = 1'b0;
-    hwif_rec_o.HW_STATUS.RESERVED_7_3.we              = 1'b0;
-    hwif_rec_o.HW_STATUS.VENDOR_HW_STATUS.we          = 1'b0;
-    hwif_rec_o.HW_STATUS.CTEMP.we                     = 1'b0;
-    hwif_rec_o.HW_STATUS.VENDOR_HW_STATUS_LEN.we      = 1'b0;
-    hwif_rec_o.INDIRECT_FIFO_STATUS_0.REGION_TYPE.we  = 1'b0;
-    hwif_rec_o.INDIRECT_FIFO_RESERVED.DATA.we         = 1'b0;
+    hwif_rec_o.PROT_CAP_2.REC_PROT_VERSION.we         = '0;
+    hwif_rec_o.PROT_CAP_2.AGENT_CAPS.we               = '0;
+    hwif_rec_o.PROT_CAP_3.NUM_OF_CMS_REGIONS.we       = '0;
+    hwif_rec_o.PROT_CAP_3.MAX_RESP_TIME.we            = '0;
+    hwif_rec_o.PROT_CAP_3.HEARTBEAT_PERIOD.we         = '0;
+    hwif_rec_o.DEVICE_ID_0.DESC_TYPE.we               = '0;
+    hwif_rec_o.DEVICE_ID_0.VENDOR_SPECIFIC_STR_LENGTH.we = '0;
+    hwif_rec_o.DEVICE_ID_0.DATA.we                    = '0;
+    hwif_rec_o.DEVICE_ID_1.DATA.we                    = '0;
+    hwif_rec_o.DEVICE_ID_2.DATA.we                    = '0;
+    hwif_rec_o.DEVICE_ID_3.DATA.we                    = '0;
+    hwif_rec_o.DEVICE_ID_4.DATA.we                    = '0;
+    hwif_rec_o.DEVICE_ID_5.DATA.we                    = '0;
+    hwif_rec_o.DEVICE_STATUS_1.HEARTBEAT.we           = '0;
+    hwif_rec_o.DEVICE_STATUS_1.VENDOR_STATUS_LENGTH.we = '0;
+    hwif_rec_o.DEVICE_STATUS_1.VENDOR_STATUS.we       = '0;
+    hwif_rec_o.RECOVERY_STATUS.DEV_REC_STATUS.we      = '0;
+    hwif_rec_o.RECOVERY_STATUS.REC_IMG_INDEX.we       = '0;
+    hwif_rec_o.RECOVERY_STATUS.VENDOR_SPECIFIC_STATUS.we = '0;
+    hwif_rec_o.HW_STATUS.TEMP_CRITICAL.we             = '0;
+    hwif_rec_o.HW_STATUS.SOFT_ERR.we                  = '0;
+    hwif_rec_o.HW_STATUS.FATAL_ERR.we                 = '0;
+    hwif_rec_o.HW_STATUS.RESERVED_7_3.we              = '0;
+    hwif_rec_o.HW_STATUS.VENDOR_HW_STATUS.we          = '0;
+    hwif_rec_o.HW_STATUS.CTEMP.we                     = '0;
+    hwif_rec_o.HW_STATUS.VENDOR_HW_STATUS_LEN.we      = '0;
+    hwif_rec_o.INDIRECT_FIFO_STATUS_0.REGION_TYPE.we  = '0;
+    hwif_rec_o.INDIRECT_FIFO_RESERVED.DATA.we         = '0;
 
     // Writable registers
     hwif_rec_o.DEVICE_RESET.RESET_CTRL.we     = bypass_i3c_core_i ? sw_device_reset_ctrl_swmod : device_reset_we;
@@ -1396,34 +1396,34 @@ module recovery_receiver
   // CSR Unused Next Values
   //----------------------------------------------------------------------------
   always_comb begin
-    hwif_rec_o.PROT_CAP_3.NUM_OF_CMS_REGIONS.next     = 8'h0;
-    hwif_rec_o.PROT_CAP_3.MAX_RESP_TIME.next          = 8'h0;
-    hwif_rec_o.PROT_CAP_3.HEARTBEAT_PERIOD.next       = 8'h0;
-    hwif_rec_o.PROT_CAP_2.REC_PROT_VERSION.next       = 16'h0;
-    hwif_rec_o.PROT_CAP_2.AGENT_CAPS.next             = 16'h0;
-    hwif_rec_o.HW_STATUS.TEMP_CRITICAL.next           = 1'b0;
-    hwif_rec_o.HW_STATUS.SOFT_ERR.next                = 1'b0;
-    hwif_rec_o.HW_STATUS.FATAL_ERR.next               = 1'b0;
-    hwif_rec_o.HW_STATUS.RESERVED_7_3.next            = 5'h0;
-    hwif_rec_o.HW_STATUS.VENDOR_HW_STATUS.next        = 8'h0;
-    hwif_rec_o.HW_STATUS.CTEMP.next                   = 8'h0;
-    hwif_rec_o.HW_STATUS.VENDOR_HW_STATUS_LEN.next    = 8'h0;
-    hwif_rec_o.DEVICE_STATUS_1.HEARTBEAT.next         = 8'h0;
-    hwif_rec_o.DEVICE_STATUS_1.VENDOR_STATUS_LENGTH.next = 8'h0;
-    hwif_rec_o.DEVICE_STATUS_1.VENDOR_STATUS.next     = 8'h0;
-    hwif_rec_o.RECOVERY_STATUS.DEV_REC_STATUS.next    = 3'h0;
-    hwif_rec_o.RECOVERY_STATUS.REC_IMG_INDEX.next     = 5'h0;
-    hwif_rec_o.RECOVERY_STATUS.VENDOR_SPECIFIC_STATUS.next = 8'h0;
-    hwif_rec_o.INDIRECT_FIFO_STATUS_0.REGION_TYPE.next = 2'h0;
-    hwif_rec_o.INDIRECT_FIFO_RESERVED.DATA.next       = 32'h0;
-    hwif_rec_o.DEVICE_ID_1.DATA.next                  = 32'h0;
-    hwif_rec_o.DEVICE_ID_2.DATA.next                  = 32'h0;
-    hwif_rec_o.DEVICE_ID_3.DATA.next                  = 32'h0;
-    hwif_rec_o.DEVICE_ID_4.DATA.next                  = 32'h0;
-    hwif_rec_o.DEVICE_ID_5.DATA.next                  = 32'h0;
-    hwif_rec_o.DEVICE_ID_0.DESC_TYPE.next             = 8'h0;
-    hwif_rec_o.DEVICE_ID_0.VENDOR_SPECIFIC_STR_LENGTH.next = 8'h0;
-    hwif_rec_o.DEVICE_ID_0.DATA.next                  = 16'h0;
+    hwif_rec_o.PROT_CAP_3.NUM_OF_CMS_REGIONS.next     = '0;
+    hwif_rec_o.PROT_CAP_3.MAX_RESP_TIME.next          = '0;
+    hwif_rec_o.PROT_CAP_3.HEARTBEAT_PERIOD.next       = '0;
+    hwif_rec_o.PROT_CAP_2.REC_PROT_VERSION.next       = '0;
+    hwif_rec_o.PROT_CAP_2.AGENT_CAPS.next             = '0;
+    hwif_rec_o.HW_STATUS.TEMP_CRITICAL.next           = '0;
+    hwif_rec_o.HW_STATUS.SOFT_ERR.next                = '0;
+    hwif_rec_o.HW_STATUS.FATAL_ERR.next               = '0;
+    hwif_rec_o.HW_STATUS.RESERVED_7_3.next            = '0;
+    hwif_rec_o.HW_STATUS.VENDOR_HW_STATUS.next        = '0;
+    hwif_rec_o.HW_STATUS.CTEMP.next                   = '0;
+    hwif_rec_o.HW_STATUS.VENDOR_HW_STATUS_LEN.next    = '0;
+    hwif_rec_o.DEVICE_STATUS_1.HEARTBEAT.next         = '0;
+    hwif_rec_o.DEVICE_STATUS_1.VENDOR_STATUS_LENGTH.next = '0;
+    hwif_rec_o.DEVICE_STATUS_1.VENDOR_STATUS.next     = '0;
+    hwif_rec_o.RECOVERY_STATUS.DEV_REC_STATUS.next    = '0;
+    hwif_rec_o.RECOVERY_STATUS.REC_IMG_INDEX.next     = '0;
+    hwif_rec_o.RECOVERY_STATUS.VENDOR_SPECIFIC_STATUS.next = '0;
+    hwif_rec_o.INDIRECT_FIFO_STATUS_0.REGION_TYPE.next = '0;
+    hwif_rec_o.INDIRECT_FIFO_RESERVED.DATA.next       = '0;
+    hwif_rec_o.DEVICE_ID_1.DATA.next                  = '0;
+    hwif_rec_o.DEVICE_ID_2.DATA.next                  = '0;
+    hwif_rec_o.DEVICE_ID_3.DATA.next                  = '0;
+    hwif_rec_o.DEVICE_ID_4.DATA.next                  = '0;
+    hwif_rec_o.DEVICE_ID_5.DATA.next                  = '0;
+    hwif_rec_o.DEVICE_ID_0.DESC_TYPE.next             = '0;
+    hwif_rec_o.DEVICE_ID_0.VENDOR_SPECIFIC_STR_LENGTH.next = '0;
+    hwif_rec_o.DEVICE_ID_0.DATA.next                  = '0;
   end
 
   //----------------------------------------------------------------------------
@@ -1486,12 +1486,12 @@ module recovery_receiver
   assign status_protocol_we     = entering_error || entering_done_directly;
 
   always_comb begin
-    hwif_rec_o.DEVICE_STATUS_0.REC_REASON_CODE.we   = 1'b0;
+    hwif_rec_o.DEVICE_STATUS_0.REC_REASON_CODE.we   = '0;
     hwif_rec_o.DEVICE_STATUS_0.PROT_ERROR.we        = status_protocol_we;
-    hwif_rec_o.DEVICE_STATUS_0.DEV_STATUS.we        = 1'b0;
-    hwif_rec_o.DEVICE_STATUS_0.REC_REASON_CODE.next = 8'h0;
+    hwif_rec_o.DEVICE_STATUS_0.DEV_STATUS.we        = '0;
+    hwif_rec_o.DEVICE_STATUS_0.REC_REASON_CODE.next = '0;
     hwif_rec_o.DEVICE_STATUS_0.PROT_ERROR.next      = status_protocol;
-    hwif_rec_o.DEVICE_STATUS_0.DEV_STATUS.next      = 8'h0;
+    hwif_rec_o.DEVICE_STATUS_0.DEV_STATUS.next      = '0;
   end
 
   //============================================================================
