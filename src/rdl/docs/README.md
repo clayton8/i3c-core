@@ -2648,45 +2648,47 @@ shall be revoked) with this Target Reset Pattern.</p>
 
 - Absolute Address: 0x200
 - Base Offset: 0x100
-- Size: 0x8C
+- Size: 0x94
 
-|Offset|          Identifier         |                    Name                    |
-|------|-----------------------------|--------------------------------------------|
-| 0x00 |        EXTCAP_HEADER        |                      —                     |
-| 0x04 |           CONTROL           |                 TTI Control                |
-| 0x08 |            STATUS           |                 TTI Status                 |
-| 0x0C |        RESET_CONTROL        |           TTI Queue Reset Control          |
-| 0x10 |         QUEUE_STATUS        |              TTI Queue Status              |
-| 0x14 |       DESC_QUEUE_DEPTH      |         TTI Descriptor Queue Depth         |
-| 0x18 |       DATA_QUEUE_DEPTH      |            TTI Data Queue Depth            |
-| 0x1C |       IBI_QUEUE_DEPTH       |             TTI IBI Queue Depth            |
-| 0x20 |       INTERRUPT_STATUS      |            TTI Interrupt Status            |
-| 0x24 |       INTERRUPT_ENABLE      |            TTI Interrupt Enable            |
-| 0x28 |       INTERRUPT_FORCE       |             TTI Interrupt Force            |
-| 0x2C |       TARGET_ERR_CTRL       |     TTI Target Error Detection Control     |
-| 0x30 |    TARGET_ERR_INTR_STATUS   |      TTI Target Error Interrupt Status     |
-| 0x34 |    TARGET_ERR_INTR_ENABLE   |      TTI Target Error Interrupt Enable     |
-| 0x38 |    TARGET_ERR_INTR_FORCE    |      TTI Target Error Interrupt Force      |
-| 0x3C |      TARGET_ERR_CNT_TE0     |              TE0 Error Counter             |
-| 0x40 |      TARGET_ERR_CNT_TE1     |              TE1 Error Counter             |
-| 0x44 |      TARGET_ERR_CNT_TE2     |              TE2 Error Counter             |
-| 0x48 |      TARGET_ERR_CNT_TE3     |              TE3 Error Counter             |
-| 0x4C |      TARGET_ERR_CNT_TE4     |              TE4 Error Counter             |
-| 0x50 |      TARGET_ERR_CNT_TE5     |              TE5 Error Counter             |
-| 0x54 |    TARGET_ERR_CNT_FRAMING   |            Framing Error Counter           |
-| 0x58 |    TARGET_ERR_CNT_RI_PEC    |    Recovery Interface PEC Error Counter    |
-| 0x5C |   TARGET_ERR_CNT_RI_LENGTH  |   Recovery Interface Length Error Counter  |
-| 0x60 |  TARGET_ERR_CNT_RI_READONLY | Recovery Interface Read-Only Error Counter |
-| 0x64 |TARGET_ERR_CNT_RI_UNSUPPORTED|Recovery Interface Unsupported Error Counter|
-| 0x68 |      RX_DESC_QUEUE_PORT     |        TTI RX Descriptor Queue Port        |
-| 0x6C |         RX_DATA_PORT        |              TTI RX Data Port              |
-| 0x70 |      TX_DESC_QUEUE_PORT     |        TTI TX Descriptor Queue Port        |
-| 0x74 |         TX_DATA_PORT        |              TTI TX Data Port              |
-| 0x78 |           IBI_PORT          |              TTI IBI Data Port             |
-| 0x7C |          QUEUE_SIZE         |               TTI Queue Size               |
-| 0x80 |        IBI_QUEUE_SIZE       |             TTI IBI Queue Size             |
-| 0x84 |       QUEUE_THLD_CTRL       |         TTI Queue Threshold Control        |
-| 0x88 |    DATA_BUFFER_THLD_CTRL    |       TTI IBI Queue Threshold Control      |
+|Offset|               Identifier               |                          Name                         |
+|------|----------------------------------------|-------------------------------------------------------|
+| 0x00 |              EXTCAP_HEADER             |                           —                           |
+| 0x04 |                 CONTROL                |                      TTI Control                      |
+| 0x08 |                 STATUS                 |                       TTI Status                      |
+| 0x0C |              RESET_CONTROL             |                TTI Queue Reset Control                |
+| 0x10 |              QUEUE_STATUS              |                    TTI Queue Status                   |
+| 0x14 |            DESC_QUEUE_DEPTH            |               TTI Descriptor Queue Depth              |
+| 0x18 |            DATA_QUEUE_DEPTH            |                  TTI Data Queue Depth                 |
+| 0x1C |             IBI_QUEUE_DEPTH            |                  TTI IBI Queue Depth                  |
+| 0x20 |            INTERRUPT_STATUS            |                  TTI Interrupt Status                 |
+| 0x24 |            INTERRUPT_ENABLE            |                  TTI Interrupt Enable                 |
+| 0x28 |             INTERRUPT_FORCE            |                  TTI Interrupt Force                  |
+| 0x2C |             TARGET_ERR_CTRL            |           TTI Target Error Detection Control          |
+| 0x30 |         TARGET_ERR_INTR_STATUS         |           TTI Target Error Interrupt Status           |
+| 0x34 |         TARGET_ERR_INTR_ENABLE         |           TTI Target Error Interrupt Enable           |
+| 0x38 |          TARGET_ERR_INTR_FORCE         |            TTI Target Error Interrupt Force           |
+| 0x3C |           TARGET_ERR_CNT_TE0           |                   TE0 Error Counter                   |
+| 0x40 |           TARGET_ERR_CNT_TE1           |                   TE1 Error Counter                   |
+| 0x44 |           TARGET_ERR_CNT_TE2           |                   TE2 Error Counter                   |
+| 0x48 |           TARGET_ERR_CNT_TE3           |                   TE3 Error Counter                   |
+| 0x4C |           TARGET_ERR_CNT_TE4           |                   TE4 Error Counter                   |
+| 0x50 |           TARGET_ERR_CNT_TE5           |                   TE5 Error Counter                   |
+| 0x54 |         TARGET_ERR_CNT_FRAMING         |                 Framing Error Counter                 |
+| 0x58 |          TARGET_ERR_CNT_RI_PEC         |          Recovery Interface PEC Error Counter         |
+| 0x5C |        TARGET_ERR_CNT_RI_LENGTH        |        Recovery Interface Length Error Counter        |
+| 0x60 |       TARGET_ERR_CNT_RI_READONLY       |       Recovery Interface Read-Only Error Counter      |
+| 0x64 |      TARGET_ERR_CNT_RI_UNSUPPORTED     |      Recovery Interface Unsupported Error Counter     |
+| 0x68 |   TARGET_ERR_CNT_RI_RX_FIFO_OVERFLOW   |   Recovery Interface RX FIFO Overflow Error Counter   |
+| 0x6C |TARGET_ERR_CNT_RI_INDIRECT_FIFO_OVERFLOW|Recovery Interface INDIRECT FIFO Overflow Error Counter|
+| 0x70 |           RX_DESC_QUEUE_PORT           |              TTI RX Descriptor Queue Port             |
+| 0x74 |              RX_DATA_PORT              |                    TTI RX Data Port                   |
+| 0x78 |           TX_DESC_QUEUE_PORT           |              TTI TX Descriptor Queue Port             |
+| 0x7C |              TX_DATA_PORT              |                    TTI TX Data Port                   |
+| 0x80 |                IBI_PORT                |                   TTI IBI Data Port                   |
+| 0x84 |               QUEUE_SIZE               |                     TTI Queue Size                    |
+| 0x88 |             IBI_QUEUE_SIZE             |                   TTI IBI Queue Size                  |
+| 0x8C |             QUEUE_THLD_CTRL            |              TTI Queue Threshold Control              |
+| 0x90 |          DATA_BUFFER_THLD_CTRL         |            TTI IBI Queue Threshold Control            |
 
 ### EXTCAP_HEADER register
 
@@ -3186,19 +3188,21 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 <p>Target Error Detection Control. Set bits to enable error detection. Clear to disable.</p>
 
-|Bits|        Identifier       |Access|Reset|           Name          |
-|----|-------------------------|------|-----|-------------------------|
-|  0 |      TE0_ERR_DET_EN     |  rw  | 0x1 |      TE0_ERR_DET_EN     |
-|  1 |      TE1_ERR_DET_EN     |  rw  | 0x1 |      TE1_ERR_DET_EN     |
-|  2 |      TE2_ERR_DET_EN     |  rw  | 0x1 |      TE2_ERR_DET_EN     |
-|  3 |      TE3_ERR_DET_EN     |  rw  | 0x1 |      TE3_ERR_DET_EN     |
-|  4 |      TE4_ERR_DET_EN     |  rw  | 0x1 |      TE4_ERR_DET_EN     |
-|  5 |      TE5_ERR_DET_EN     |  rw  | 0x1 |      TE5_ERR_DET_EN     |
-|  6 |    FRAMING_ERR_DET_EN   |  rw  | 0x1 |    FRAMING_ERR_DET_EN   |
-|  7 |    RI_PEC_ERR_DET_EN    |  rw  | 0x1 |    RI_PEC_ERR_DET_EN    |
-|  8 |   RI_LENGTH_ERR_DET_EN  |  rw  | 0x1 |   RI_LENGTH_ERR_DET_EN  |
-|  9 |  RI_READONLY_ERR_DET_EN |  rw  | 0x1 |  RI_READONLY_ERR_DET_EN |
-| 10 |RI_UNSUPPORTED_ERR_DET_EN|  rw  | 0x1 |RI_UNSUPPORTED_ERR_DET_EN|
+|Bits|             Identifier             |Access|Reset|                Name                |
+|----|------------------------------------|------|-----|------------------------------------|
+|  0 |           TE0_ERR_DET_EN           |  rw  | 0x1 |           TE0_ERR_DET_EN           |
+|  1 |           TE1_ERR_DET_EN           |  rw  | 0x1 |           TE1_ERR_DET_EN           |
+|  2 |           TE2_ERR_DET_EN           |  rw  | 0x1 |           TE2_ERR_DET_EN           |
+|  3 |           TE3_ERR_DET_EN           |  rw  | 0x1 |           TE3_ERR_DET_EN           |
+|  4 |           TE4_ERR_DET_EN           |  rw  | 0x1 |           TE4_ERR_DET_EN           |
+|  5 |           TE5_ERR_DET_EN           |  rw  | 0x1 |           TE5_ERR_DET_EN           |
+|  6 |         FRAMING_ERR_DET_EN         |  rw  | 0x1 |         FRAMING_ERR_DET_EN         |
+|  7 |          RI_PEC_ERR_DET_EN         |  rw  | 0x1 |          RI_PEC_ERR_DET_EN         |
+|  8 |        RI_LENGTH_ERR_DET_EN        |  rw  | 0x1 |        RI_LENGTH_ERR_DET_EN        |
+|  9 |       RI_READONLY_ERR_DET_EN       |  rw  | 0x1 |       RI_READONLY_ERR_DET_EN       |
+| 10 |      RI_UNSUPPORTED_ERR_DET_EN     |  rw  | 0x1 |      RI_UNSUPPORTED_ERR_DET_EN     |
+| 11 |   RI_RX_FIFO_OVERFLOW_ERR_DET_EN   |  rw  | 0x1 |   RI_RX_FIFO_OVERFLOW_ERR_DET_EN   |
+| 12 |RI_INDIRECT_FIFO_OVERFLOW_ERR_DET_EN|  rw  | 0x1 |RI_INDIRECT_FIFO_OVERFLOW_ERR_DET_EN|
 
 #### TE0_ERR_DET_EN field
 
@@ -3244,6 +3248,14 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 <p>Enable Recovery Interface unsupported command error detection. Set to 0 to disable.</p>
 
+#### RI_RX_FIFO_OVERFLOW_ERR_DET_EN field
+
+<p>Enable Recovery Interface RX FIFO overflow error detection and transition to Error state. Set to 0 to disable (overflow is still recorded in interrupt status).</p>
+
+#### RI_INDIRECT_FIFO_OVERFLOW_ERR_DET_EN field
+
+<p>Enable Recovery Interface INDIRECT FIFO overflow error detection and transition to Error state. Set to 0 to disable (overflow is still recorded in interrupt status).</p>
+
 ### TARGET_ERR_INTR_STATUS register
 
 - Absolute Address: 0x230
@@ -3252,19 +3264,21 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 <p>Target Error Interrupt Status. Write 1 to clear individual bits.</p>
 
-|Bits|       Identifier      |  Access |Reset|          Name         |
-|----|-----------------------|---------|-----|-----------------------|
-|  1 |      TE0_ERR_STAT     |rw, woclr| 0x0 |      TE0_ERR_STAT     |
-|  2 |      TE1_ERR_STAT     |rw, woclr| 0x0 |      TE1_ERR_STAT     |
-|  3 |      TE2_ERR_STAT     |rw, woclr| 0x0 |      TE2_ERR_STAT     |
-|  4 |      TE3_ERR_STAT     |rw, woclr| 0x0 |      TE3_ERR_STAT     |
-|  5 |      TE4_ERR_STAT     |rw, woclr| 0x0 |      TE4_ERR_STAT     |
-|  6 |      TE5_ERR_STAT     |rw, woclr| 0x0 |      TE5_ERR_STAT     |
-|  7 |    FRAMING_ERR_STAT   |rw, woclr| 0x0 |    FRAMING_ERR_STAT   |
-|  8 |    RI_PEC_ERR_STAT    |rw, woclr| 0x0 |    RI_PEC_ERR_STAT    |
-|  9 |   RI_LENGTH_ERR_STAT  |rw, woclr| 0x0 |   RI_LENGTH_ERR_STAT  |
-| 10 |  RI_READONLY_ERR_STAT |rw, woclr| 0x0 |  RI_READONLY_ERR_STAT |
-| 11 |RI_UNSUPPORTED_ERR_STAT|rw, woclr| 0x0 |RI_UNSUPPORTED_ERR_STAT|
+|Bits|            Identifier            |  Access |Reset|               Name               |
+|----|----------------------------------|---------|-----|----------------------------------|
+|  1 |           TE0_ERR_STAT           |rw, woclr| 0x0 |           TE0_ERR_STAT           |
+|  2 |           TE1_ERR_STAT           |rw, woclr| 0x0 |           TE1_ERR_STAT           |
+|  3 |           TE2_ERR_STAT           |rw, woclr| 0x0 |           TE2_ERR_STAT           |
+|  4 |           TE3_ERR_STAT           |rw, woclr| 0x0 |           TE3_ERR_STAT           |
+|  5 |           TE4_ERR_STAT           |rw, woclr| 0x0 |           TE4_ERR_STAT           |
+|  6 |           TE5_ERR_STAT           |rw, woclr| 0x0 |           TE5_ERR_STAT           |
+|  7 |         FRAMING_ERR_STAT         |rw, woclr| 0x0 |         FRAMING_ERR_STAT         |
+|  8 |          RI_PEC_ERR_STAT         |rw, woclr| 0x0 |          RI_PEC_ERR_STAT         |
+|  9 |        RI_LENGTH_ERR_STAT        |rw, woclr| 0x0 |        RI_LENGTH_ERR_STAT        |
+| 10 |       RI_READONLY_ERR_STAT       |rw, woclr| 0x0 |       RI_READONLY_ERR_STAT       |
+| 11 |      RI_UNSUPPORTED_ERR_STAT     |rw, woclr| 0x0 |      RI_UNSUPPORTED_ERR_STAT     |
+| 12 |   RI_RX_FIFO_OVERFLOW_ERR_STAT   |rw, woclr| 0x0 |   RI_RX_FIFO_OVERFLOW_ERR_STAT   |
+| 13 |RI_INDIRECT_FIFO_OVERFLOW_ERR_STAT|rw, woclr| 0x0 |RI_INDIRECT_FIFO_OVERFLOW_ERR_STAT|
 
 #### TE0_ERR_STAT field
 
@@ -3310,6 +3324,14 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 <p>Recovery Interface unsupported command error detected</p>
 
+#### RI_RX_FIFO_OVERFLOW_ERR_STAT field
+
+<p>Recovery Interface RX FIFO overflow error detected</p>
+
+#### RI_INDIRECT_FIFO_OVERFLOW_ERR_STAT field
+
+<p>Recovery Interface INDIRECT FIFO overflow error detected</p>
+
 ### TARGET_ERR_INTR_ENABLE register
 
 - Absolute Address: 0x234
@@ -3318,19 +3340,21 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 <p>Target Error Interrupt Enable. Set bits to enable corresponding interrupts.</p>
 
-|Bits|      Identifier     |Access|Reset|         Name        |
-|----|---------------------|------|-----|---------------------|
-|  1 |      TE0_ERR_EN     |  rw  | 0x0 |      TE0_ERR_EN     |
-|  2 |      TE1_ERR_EN     |  rw  | 0x0 |      TE1_ERR_EN     |
-|  3 |      TE2_ERR_EN     |  rw  | 0x0 |      TE2_ERR_EN     |
-|  4 |      TE3_ERR_EN     |  rw  | 0x0 |      TE3_ERR_EN     |
-|  5 |      TE4_ERR_EN     |  rw  | 0x0 |      TE4_ERR_EN     |
-|  6 |      TE5_ERR_EN     |  rw  | 0x0 |      TE5_ERR_EN     |
-|  7 |    FRAMING_ERR_EN   |  rw  | 0x0 |    FRAMING_ERR_EN   |
-|  8 |    RI_PEC_ERR_EN    |  rw  | 0x0 |    RI_PEC_ERR_EN    |
-|  9 |   RI_LENGTH_ERR_EN  |  rw  | 0x0 |   RI_LENGTH_ERR_EN  |
-| 10 |  RI_READONLY_ERR_EN |  rw  | 0x0 |  RI_READONLY_ERR_EN |
-| 11 |RI_UNSUPPORTED_ERR_EN|  rw  | 0x0 |RI_UNSUPPORTED_ERR_EN|
+|Bits|           Identifier           |Access|Reset|              Name              |
+|----|--------------------------------|------|-----|--------------------------------|
+|  1 |           TE0_ERR_EN           |  rw  | 0x0 |           TE0_ERR_EN           |
+|  2 |           TE1_ERR_EN           |  rw  | 0x0 |           TE1_ERR_EN           |
+|  3 |           TE2_ERR_EN           |  rw  | 0x0 |           TE2_ERR_EN           |
+|  4 |           TE3_ERR_EN           |  rw  | 0x0 |           TE3_ERR_EN           |
+|  5 |           TE4_ERR_EN           |  rw  | 0x0 |           TE4_ERR_EN           |
+|  6 |           TE5_ERR_EN           |  rw  | 0x0 |           TE5_ERR_EN           |
+|  7 |         FRAMING_ERR_EN         |  rw  | 0x0 |         FRAMING_ERR_EN         |
+|  8 |          RI_PEC_ERR_EN         |  rw  | 0x0 |          RI_PEC_ERR_EN         |
+|  9 |        RI_LENGTH_ERR_EN        |  rw  | 0x0 |        RI_LENGTH_ERR_EN        |
+| 10 |       RI_READONLY_ERR_EN       |  rw  | 0x0 |       RI_READONLY_ERR_EN       |
+| 11 |      RI_UNSUPPORTED_ERR_EN     |  rw  | 0x0 |      RI_UNSUPPORTED_ERR_EN     |
+| 12 |   RI_RX_FIFO_OVERFLOW_ERR_EN   |  rw  | 0x0 |   RI_RX_FIFO_OVERFLOW_ERR_EN   |
+| 13 |RI_INDIRECT_FIFO_OVERFLOW_ERR_EN|  rw  | 0x0 |RI_INDIRECT_FIFO_OVERFLOW_ERR_EN|
 
 #### TE0_ERR_EN field
 
@@ -3376,6 +3400,14 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 <p>Enables the corresponding interrupt bit <code>RI_UNSUPPORTED_ERR_STAT</code></p>
 
+#### RI_RX_FIFO_OVERFLOW_ERR_EN field
+
+<p>Enables the corresponding interrupt bit <code>RI_RX_FIFO_OVERFLOW_ERR_STAT</code></p>
+
+#### RI_INDIRECT_FIFO_OVERFLOW_ERR_EN field
+
+<p>Enables the corresponding interrupt bit <code>RI_INDIRECT_FIFO_OVERFLOW_ERR_STAT</code></p>
+
 ### TARGET_ERR_INTR_FORCE register
 
 - Absolute Address: 0x238
@@ -3384,19 +3416,21 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 <p>Target Error Interrupt Force. Set bits to force corresponding interrupts for testing.</p>
 
-|Bits|       Identifier       |Access|Reset|          Name          |
-|----|------------------------|------|-----|------------------------|
-|  1 |      TE0_ERR_FORCE     |  rw  | 0x0 |      TE0_ERR_FORCE     |
-|  2 |      TE1_ERR_FORCE     |  rw  | 0x0 |      TE1_ERR_FORCE     |
-|  3 |      TE2_ERR_FORCE     |  rw  | 0x0 |      TE2_ERR_FORCE     |
-|  4 |      TE3_ERR_FORCE     |  rw  | 0x0 |      TE3_ERR_FORCE     |
-|  5 |      TE4_ERR_FORCE     |  rw  | 0x0 |      TE4_ERR_FORCE     |
-|  6 |      TE5_ERR_FORCE     |  rw  | 0x0 |      TE5_ERR_FORCE     |
-|  7 |    FRAMING_ERR_FORCE   |  rw  | 0x0 |    FRAMING_ERR_FORCE   |
-|  8 |    RI_PEC_ERR_FORCE    |  rw  | 0x0 |    RI_PEC_ERR_FORCE    |
-|  9 |   RI_LENGTH_ERR_FORCE  |  rw  | 0x0 |   RI_LENGTH_ERR_FORCE  |
-| 10 |  RI_READONLY_ERR_FORCE |  rw  | 0x0 |  RI_READONLY_ERR_FORCE |
-| 11 |RI_UNSUPPORTED_ERR_FORCE|  rw  | 0x0 |RI_UNSUPPORTED_ERR_FORCE|
+|Bits|             Identifier            |Access|Reset|                Name               |
+|----|-----------------------------------|------|-----|-----------------------------------|
+|  1 |           TE0_ERR_FORCE           |  rw  | 0x0 |           TE0_ERR_FORCE           |
+|  2 |           TE1_ERR_FORCE           |  rw  | 0x0 |           TE1_ERR_FORCE           |
+|  3 |           TE2_ERR_FORCE           |  rw  | 0x0 |           TE2_ERR_FORCE           |
+|  4 |           TE3_ERR_FORCE           |  rw  | 0x0 |           TE3_ERR_FORCE           |
+|  5 |           TE4_ERR_FORCE           |  rw  | 0x0 |           TE4_ERR_FORCE           |
+|  6 |           TE5_ERR_FORCE           |  rw  | 0x0 |           TE5_ERR_FORCE           |
+|  7 |         FRAMING_ERR_FORCE         |  rw  | 0x0 |         FRAMING_ERR_FORCE         |
+|  8 |          RI_PEC_ERR_FORCE         |  rw  | 0x0 |          RI_PEC_ERR_FORCE         |
+|  9 |        RI_LENGTH_ERR_FORCE        |  rw  | 0x0 |        RI_LENGTH_ERR_FORCE        |
+| 10 |       RI_READONLY_ERR_FORCE       |  rw  | 0x0 |       RI_READONLY_ERR_FORCE       |
+| 11 |      RI_UNSUPPORTED_ERR_FORCE     |  rw  | 0x0 |      RI_UNSUPPORTED_ERR_FORCE     |
+| 12 |   RI_RX_FIFO_OVERFLOW_ERR_FORCE   |  rw  | 0x0 |   RI_RX_FIFO_OVERFLOW_ERR_FORCE   |
+| 13 |RI_INDIRECT_FIFO_OVERFLOW_ERR_FORCE|  rw  | 0x0 |RI_INDIRECT_FIFO_OVERFLOW_ERR_FORCE|
 
 #### TE0_ERR_FORCE field
 
@@ -3441,6 +3475,14 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 #### RI_UNSUPPORTED_ERR_FORCE field
 
 <p>Forces the corresponding interrupt bit <code>RI_UNSUPPORTED_ERR_STAT</code> to be set to 1</p>
+
+#### RI_RX_FIFO_OVERFLOW_ERR_FORCE field
+
+<p>Forces the corresponding interrupt bit <code>RI_RX_FIFO_OVERFLOW_ERR_STAT</code> to be set to 1</p>
+
+#### RI_INDIRECT_FIFO_OVERFLOW_ERR_FORCE field
+
+<p>Forces the corresponding interrupt bit <code>RI_INDIRECT_FIFO_OVERFLOW_ERR_STAT</code> to be set to 1</p>
 
 ### TARGET_ERR_CNT_TE0 register
 
@@ -3618,10 +3660,42 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 <p>Error count (saturates at 255). Write 0 to clear.</p>
 
-### RX_DESC_QUEUE_PORT register
+### TARGET_ERR_CNT_RI_RX_FIFO_OVERFLOW register
 
 - Absolute Address: 0x268
 - Base Offset: 0x68
+- Size: 0x4
+
+<p>Counts Recovery Interface RX FIFO overflow errors. Saturates at 255. Write 0 to clear.</p>
+
+|Bits|Identifier|Access|Reset|Name|
+|----|----------|------|-----|----|
+| 7:0|    CNT   |  rw  | 0x0 | CNT|
+
+#### CNT field
+
+<p>Error count (saturates at 255). Write 0 to clear.</p>
+
+### TARGET_ERR_CNT_RI_INDIRECT_FIFO_OVERFLOW register
+
+- Absolute Address: 0x26C
+- Base Offset: 0x6C
+- Size: 0x4
+
+<p>Counts Recovery Interface INDIRECT FIFO overflow errors. Saturates at 255. Write 0 to clear.</p>
+
+|Bits|Identifier|Access|Reset|Name|
+|----|----------|------|-----|----|
+| 7:0|    CNT   |  rw  | 0x0 | CNT|
+
+#### CNT field
+
+<p>Error count (saturates at 255). Write 0 to clear.</p>
+
+### RX_DESC_QUEUE_PORT register
+
+- Absolute Address: 0x270
+- Base Offset: 0x70
 - Size: 0x4
 
 <p>RX Descriptor Queue Port</p>
@@ -3636,8 +3710,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### RX_DATA_PORT register
 
-- Absolute Address: 0x26C
-- Base Offset: 0x6C
+- Absolute Address: 0x274
+- Base Offset: 0x74
 - Size: 0x4
 
 <p>RX Data Port</p>
@@ -3652,8 +3726,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### TX_DESC_QUEUE_PORT register
 
-- Absolute Address: 0x270
-- Base Offset: 0x70
+- Absolute Address: 0x278
+- Base Offset: 0x78
 - Size: 0x4
 
 <p>TX Descriptor Queue Port</p>
@@ -3668,8 +3742,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### TX_DATA_PORT register
 
-- Absolute Address: 0x274
-- Base Offset: 0x74
+- Absolute Address: 0x27C
+- Base Offset: 0x7C
 - Size: 0x4
 
 <p>TX Data Port</p>
@@ -3684,8 +3758,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### IBI_PORT register
 
-- Absolute Address: 0x278
-- Base Offset: 0x78
+- Absolute Address: 0x280
+- Base Offset: 0x80
 - Size: 0x4
 
 <p>IBI Data Port</p>
@@ -3700,8 +3774,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### QUEUE_SIZE register
 
-- Absolute Address: 0x27C
-- Base Offset: 0x7C
+- Absolute Address: 0x284
+- Base Offset: 0x84
 - Size: 0x4
 
 <p>Queue Size</p>
@@ -3731,8 +3805,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### IBI_QUEUE_SIZE register
 
-- Absolute Address: 0x280
-- Base Offset: 0x80
+- Absolute Address: 0x288
+- Base Offset: 0x88
 - Size: 0x4
 
 <p>IBI Queue Size</p>
@@ -3747,8 +3821,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### QUEUE_THLD_CTRL register
 
-- Absolute Address: 0x284
-- Base Offset: 0x84
+- Absolute Address: 0x28C
+- Base Offset: 0x8C
 - Size: 0x4
 
 <p>Queue Threshold Control</p>
@@ -3773,8 +3847,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### DATA_BUFFER_THLD_CTRL register
 
-- Absolute Address: 0x288
-- Base Offset: 0x88
+- Absolute Address: 0x290
+- Base Offset: 0x90
 - Size: 0x4
 
 <p>IBI Queue Threshold Control</p>

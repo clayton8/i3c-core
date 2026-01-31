@@ -130,6 +130,8 @@ module tti
     input logic ri_length_err_i,
     input logic ri_readonly_err_i,
     input logic ri_unsupported_err_i,
+    input logic ri_rx_fifo_overflow_err_i,
+    input logic ri_indirect_fifo_overflow_err_i,
 
     // Interrupt
     output logic irq_o
@@ -315,8 +317,10 @@ module tti
 
   assign hwif_tti_o.STATUS.PROTOCOL_ERROR.next = err_i;
 
-  // Interrupts: [5:0] = TTI queue interrupts, [14:6] = TE error interrupts, [16:15] = Recovery errors
-  logic [16:0] irqs;
+  // Interrupts: [5:0] = TTI queue interrupts, [12:6] = TE error interrupts + framing,
+  //             [16:13] = Recovery errors (PEC, LENGTH, READONLY, UNSUPPORTED),
+  //             [18:17] = Recovery FIFO overflow errors (TX_FIFO, INDIRECT_FIFO)
+  logic [18:0] irqs;
 
   // Delay queue write monitor signals by 1 cycle to align them with
   // full/empty/threshold trigger update.
@@ -607,6 +611,40 @@ module tti
     .irq_o          (irqs[16])
   );
 
+  // RI_RX_FIFO_OVERFLOW_ERR: Recovery Interface RX FIFO overflow error
+  // DET_EN controls whether the FSM transitions to Error state (via recovery_receiver).
+  // Status is recorded when DET_EN allows it; interrupt enable controls IRQ output.
+  interrupt xintr_ri_rx_fifo_overflow (
+    .clk_i          (clk_i),
+    .rst_ni         (rst_ni),
+    .irq_i          (ri_rx_fifo_overflow_err_i),
+    .clr_i          ('0),
+    .irq_force_i    (hwif_tti_i.TARGET_ERR_INTR_FORCE.RI_RX_FIFO_OVERFLOW_ERR_FORCE.value),
+    .sts_o          (hwif_tti_o.TARGET_ERR_INTR_STATUS.RI_RX_FIFO_OVERFLOW_ERR_STAT.next),
+    .sts_we_o       (hwif_tti_o.TARGET_ERR_INTR_STATUS.RI_RX_FIFO_OVERFLOW_ERR_STAT.we),
+    .sts_i          (hwif_tti_i.TARGET_ERR_INTR_STATUS.RI_RX_FIFO_OVERFLOW_ERR_STAT.value),
+    .sts_ena_i      (hwif_tti_i.TARGET_ERR_CTRL.RI_RX_FIFO_OVERFLOW_ERR_DET_EN.value),
+    .sig_ena_i      (hwif_tti_i.TARGET_ERR_INTR_ENABLE.RI_RX_FIFO_OVERFLOW_ERR_EN.value),
+    .irq_o          (irqs[17])
+  );
+
+  // RI_INDIRECT_FIFO_OVERFLOW_ERR: Recovery Interface INDIRECT FIFO overflow error
+  // DET_EN controls whether the FSM transitions to Error state (via recovery_receiver).
+  // Status is recorded when DET_EN allows it; interrupt enable controls IRQ output.
+  interrupt xintr_ri_indirect_fifo_overflow (
+    .clk_i          (clk_i),
+    .rst_ni         (rst_ni),
+    .irq_i          (ri_indirect_fifo_overflow_err_i),
+    .clr_i          ('0),
+    .irq_force_i    (hwif_tti_i.TARGET_ERR_INTR_FORCE.RI_INDIRECT_FIFO_OVERFLOW_ERR_FORCE.value),
+    .sts_o          (hwif_tti_o.TARGET_ERR_INTR_STATUS.RI_INDIRECT_FIFO_OVERFLOW_ERR_STAT.next),
+    .sts_we_o       (hwif_tti_o.TARGET_ERR_INTR_STATUS.RI_INDIRECT_FIFO_OVERFLOW_ERR_STAT.we),
+    .sts_i          (hwif_tti_i.TARGET_ERR_INTR_STATUS.RI_INDIRECT_FIFO_OVERFLOW_ERR_STAT.value),
+    .sts_ena_i      (hwif_tti_i.TARGET_ERR_CTRL.RI_INDIRECT_FIFO_OVERFLOW_ERR_DET_EN.value),
+    .sig_ena_i      (hwif_tti_i.TARGET_ERR_INTR_ENABLE.RI_INDIRECT_FIFO_OVERFLOW_ERR_EN.value),
+    .irq_o          (irqs[18])
+  );
+
   // =========================================================================
   // Target Error Counters - 8-bit saturating counters
   // CSR holds the register value. HW increments on error (if not saturated).
@@ -656,6 +694,14 @@ module tti
   // Recovery Interface Unsupported error counter
   assign hwif_tti_o.TARGET_ERR_CNT_RI_UNSUPPORTED.CNT.next = hwif_tti_i.TARGET_ERR_CNT_RI_UNSUPPORTED.CNT.value + 8'h01;
   assign hwif_tti_o.TARGET_ERR_CNT_RI_UNSUPPORTED.CNT.we   = ri_unsupported_err_i && (hwif_tti_i.TARGET_ERR_CNT_RI_UNSUPPORTED.CNT.value != 8'hFF);
+
+  // Recovery Interface RX FIFO Overflow error counter
+  assign hwif_tti_o.TARGET_ERR_CNT_RI_RX_FIFO_OVERFLOW.CNT.next = hwif_tti_i.TARGET_ERR_CNT_RI_RX_FIFO_OVERFLOW.CNT.value + 8'h01;
+  assign hwif_tti_o.TARGET_ERR_CNT_RI_RX_FIFO_OVERFLOW.CNT.we   = ri_rx_fifo_overflow_err_i && (hwif_tti_i.TARGET_ERR_CNT_RI_RX_FIFO_OVERFLOW.CNT.value != 8'hFF);
+
+  // Recovery Interface INDIRECT FIFO Overflow error counter
+  assign hwif_tti_o.TARGET_ERR_CNT_RI_INDIRECT_FIFO_OVERFLOW.CNT.next = hwif_tti_i.TARGET_ERR_CNT_RI_INDIRECT_FIFO_OVERFLOW.CNT.value + 8'h01;
+  assign hwif_tti_o.TARGET_ERR_CNT_RI_INDIRECT_FIFO_OVERFLOW.CNT.we   = ri_indirect_fifo_overflow_err_i && (hwif_tti_i.TARGET_ERR_CNT_RI_INDIRECT_FIFO_OVERFLOW.CNT.value != 8'hFF);
 
   // Interrupt output
   assign irq_o = |irqs;

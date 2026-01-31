@@ -3748,6 +3748,26 @@ reg_map = Munch.fromDict({
                     "woclr": 0,
                     "rclr": 0,
                     "hwclr": 0
+                },
+                "RI_RX_FIFO_OVERFLOW_ERR_DET_EN": {
+                    "low": 11,
+                    "mask": 2048,
+                    "reset": 1,
+                    "sw": "rw",
+                    "hw": "r",
+                    "woclr": 0,
+                    "rclr": 0,
+                    "hwclr": 0
+                },
+                "RI_INDIRECT_FIFO_OVERFLOW_ERR_DET_EN": {
+                    "low": 12,
+                    "mask": 4096,
+                    "reset": 1,
+                    "sw": "rw",
+                    "hw": "r",
+                    "woclr": 0,
+                    "rclr": 0,
+                    "hwclr": 0
                 }
             },
             "TARGET_ERR_INTR_STATUS": {
@@ -3856,6 +3876,26 @@ reg_map = Munch.fromDict({
                 "RI_UNSUPPORTED_ERR_STAT": {
                     "low": 11,
                     "mask": 2048,
+                    "reset": 0,
+                    "sw": "rw",
+                    "hw": "rw",
+                    "woclr": 1,
+                    "rclr": 0,
+                    "hwclr": 0
+                },
+                "RI_RX_FIFO_OVERFLOW_ERR_STAT": {
+                    "low": 12,
+                    "mask": 4096,
+                    "reset": 0,
+                    "sw": "rw",
+                    "hw": "rw",
+                    "woclr": 1,
+                    "rclr": 0,
+                    "hwclr": 0
+                },
+                "RI_INDIRECT_FIFO_OVERFLOW_ERR_STAT": {
+                    "low": 13,
+                    "mask": 8192,
                     "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
@@ -3976,6 +4016,26 @@ reg_map = Munch.fromDict({
                     "woclr": 0,
                     "rclr": 0,
                     "hwclr": 0
+                },
+                "RI_RX_FIFO_OVERFLOW_ERR_EN": {
+                    "low": 12,
+                    "mask": 4096,
+                    "reset": 0,
+                    "sw": "rw",
+                    "hw": "r",
+                    "woclr": 0,
+                    "rclr": 0,
+                    "hwclr": 0
+                },
+                "RI_INDIRECT_FIFO_OVERFLOW_ERR_EN": {
+                    "low": 13,
+                    "mask": 8192,
+                    "reset": 0,
+                    "sw": "rw",
+                    "hw": "r",
+                    "woclr": 0,
+                    "rclr": 0,
+                    "hwclr": 0
                 }
             },
             "TARGET_ERR_INTR_FORCE": {
@@ -4084,6 +4144,26 @@ reg_map = Munch.fromDict({
                 "RI_UNSUPPORTED_ERR_FORCE": {
                     "low": 11,
                     "mask": 2048,
+                    "reset": 0,
+                    "sw": "rw",
+                    "hw": "r",
+                    "woclr": 0,
+                    "rclr": 0,
+                    "hwclr": 0
+                },
+                "RI_RX_FIFO_OVERFLOW_ERR_FORCE": {
+                    "low": 12,
+                    "mask": 4096,
+                    "reset": 0,
+                    "sw": "rw",
+                    "hw": "r",
+                    "woclr": 0,
+                    "rclr": 0,
+                    "hwclr": 0
+                },
+                "RI_INDIRECT_FIFO_OVERFLOW_ERR_FORCE": {
+                    "low": 13,
+                    "mask": 8192,
                     "reset": 0,
                     "sw": "rw",
                     "hw": "r",
@@ -4246,9 +4326,37 @@ reg_map = Munch.fromDict({
                     "hwclr": 0
                 }
             },
-            "RX_DESC_QUEUE_PORT": {
+            "TARGET_ERR_CNT_RI_RX_FIFO_OVERFLOW": {
                 "base_addr": 616,
                 "offset": 616,
+                "CNT": {
+                    "low": 0,
+                    "mask": 255,
+                    "reset": 0,
+                    "sw": "rw",
+                    "hw": "rw",
+                    "woclr": 0,
+                    "rclr": 0,
+                    "hwclr": 0
+                }
+            },
+            "TARGET_ERR_CNT_RI_INDIRECT_FIFO_OVERFLOW": {
+                "base_addr": 620,
+                "offset": 620,
+                "CNT": {
+                    "low": 0,
+                    "mask": 255,
+                    "reset": 0,
+                    "sw": "rw",
+                    "hw": "rw",
+                    "woclr": 0,
+                    "rclr": 0,
+                    "hwclr": 0
+                }
+            },
+            "RX_DESC_QUEUE_PORT": {
+                "base_addr": 624,
+                "offset": 624,
                 "RX_DESC": {
                     "low": 0,
                     "mask": 4294967295,
@@ -4261,8 +4369,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "RX_DATA_PORT": {
-                "base_addr": 620,
-                "offset": 620,
+                "base_addr": 628,
+                "offset": 628,
                 "RX_DATA": {
                     "low": 0,
                     "mask": 4294967295,
@@ -4275,8 +4383,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "TX_DESC_QUEUE_PORT": {
-                "base_addr": 624,
-                "offset": 624,
+                "base_addr": 632,
+                "offset": 632,
                 "TX_DESC": {
                     "low": 0,
                     "mask": 4294967295,
@@ -4289,8 +4397,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "TX_DATA_PORT": {
-                "base_addr": 628,
-                "offset": 628,
+                "base_addr": 636,
+                "offset": 636,
                 "TX_DATA": {
                     "low": 0,
                     "mask": 4294967295,
@@ -4303,8 +4411,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "IBI_PORT": {
-                "base_addr": 632,
-                "offset": 632,
+                "base_addr": 640,
+                "offset": 640,
                 "IBI_DATA": {
                     "low": 0,
                     "mask": 4294967295,
@@ -4317,8 +4425,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "QUEUE_SIZE": {
-                "base_addr": 636,
-                "offset": 636,
+                "base_addr": 644,
+                "offset": 644,
                 "RX_DESC_BUFFER_SIZE": {
                     "low": 0,
                     "mask": 255,
@@ -4361,8 +4469,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "IBI_QUEUE_SIZE": {
-                "base_addr": 640,
-                "offset": 640,
+                "base_addr": 648,
+                "offset": 648,
                 "IBI_QUEUE_SIZE": {
                     "low": 0,
                     "mask": 255,
@@ -4375,8 +4483,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "QUEUE_THLD_CTRL": {
-                "base_addr": 644,
-                "offset": 644,
+                "base_addr": 652,
+                "offset": 652,
                 "TX_DESC_THLD": {
                     "low": 0,
                     "mask": 255,
@@ -4409,8 +4517,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "DATA_BUFFER_THLD_CTRL": {
-                "base_addr": 648,
-                "offset": 648,
+                "base_addr": 656,
+                "offset": 656,
                 "TX_DATA_THLD": {
                     "low": 0,
                     "mask": 7,

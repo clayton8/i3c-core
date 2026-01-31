@@ -539,6 +539,8 @@ module i3c
   logic ri_length_err;
   logic ri_readonly_err;
   logic ri_unsupported_err;
+  logic ri_rx_fifo_overflow_err;
+  logic ri_indirect_fifo_overflow_err;
 
   // Individual TE error signals for interrupt reporting
   logic te0_err;
@@ -1089,6 +1091,8 @@ module i3c
       .ri_length_err_i(ri_length_err),
       .ri_readonly_err_i(ri_readonly_err),
       .ri_unsupported_err_i(ri_unsupported_err),
+      .ri_rx_fifo_overflow_err_i(ri_rx_fifo_overflow_err),
+      .ri_indirect_fifo_overflow_err_i(ri_indirect_fifo_overflow_err),
 
       .irq_o (tti_irq)
   );
@@ -1259,10 +1263,14 @@ module i3c
       .length_err_det_en_i(hwif_tti_out.TARGET_ERR_CTRL.RI_LENGTH_ERR_DET_EN.value),
       .readonly_err_det_en_i(hwif_tti_out.TARGET_ERR_CTRL.RI_READONLY_ERR_DET_EN.value),
       .unsupported_err_det_en_i(hwif_tti_out.TARGET_ERR_CTRL.RI_UNSUPPORTED_ERR_DET_EN.value),
+      .rx_fifo_overflow_err_det_en_i(hwif_tti_out.TARGET_ERR_CTRL.RI_RX_FIFO_OVERFLOW_ERR_DET_EN.value),
+      .indirect_fifo_overflow_err_det_en_i(hwif_tti_out.TARGET_ERR_CTRL.RI_INDIRECT_FIFO_OVERFLOW_ERR_DET_EN.value),
       .pec_err_o(ri_pec_err),
       .length_err_o(ri_length_err),
       .readonly_err_o(ri_readonly_err),
-      .unsupported_err_o(ri_unsupported_err)
+      .unsupported_err_o(ri_unsupported_err),
+      .rx_fifo_overflow_err_o(ri_rx_fifo_overflow_err),
+      .indirect_fifo_overflow_err_o(ri_indirect_fifo_overflow_err)
   );
 
   // I3C PHY

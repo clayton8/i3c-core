@@ -70,6 +70,9 @@ module recovery_receiver
     input  logic length_err_det_en_i,
     input  logic readonly_err_det_en_i,
     input  logic unsupported_err_det_en_i,
+    input  logic rx_fifo_overflow_err_det_en_i,
+    input  logic rx_fifo_overflow_raw_i,  // Raw overflow signal from handler
+    input  logic indirect_fifo_overflow_err_det_en_i,
     input  logic recovery_mode_csr_active_i,
 
     //--------------------------------------------------------------------------
@@ -176,6 +179,8 @@ module recovery_receiver
     output logic unsupported_err_o,
     output logic exec_pending_o,
     output logic recovery_mode_enter_o,
+    output logic rx_fifo_overflow_err_o,       // RX FIFO overflow error (always reported)
+    output logic indirect_fifo_overflow_err_o, // INDIRECT_FIFO overflow error
 
     //--------------------------------------------------------------------------
     // Recovery CSR Interface
@@ -333,7 +338,6 @@ module recovery_receiver
   //----------------------------------------------------------------------------
   // Length Validation Signals
   //----------------------------------------------------------------------------
-  logic [3:0]  desc_error;
   logic        all_data_received;
 
   // Raw length error detection (no enable masking)
@@ -441,8 +445,21 @@ module recovery_receiver
   logic        length_overrun_err;    // Overrun detected in RxPec
   logic        readonly_err;          // Read-only error detected in CmdDispatch
   logic        unsupported_err;       // Unsupported error detected in CmdDispatch
+  logic        csr_length_err;        // CSR write length mismatch detected in CmdDispatch
   logic        premature_stop;        // Premature bus stop detected (combinational)
   logic        premature_stop_q;      // Registered premature stop for Error state exit
+  
+  // CSR write length validation errors (cmd_len vs expected csr_length)
+  logic        csr_length_err_raw;    // cmd_len doesn't match expected csr_length_next
+  logic        csr_length_err_en;     // Enabled CSR length error
+  
+  // FIFO overflow error signals
+  logic        rx_fifo_overflow_err_raw;     // RX FIFO overflow raw detection
+  logic        rx_fifo_overflow_err_en;      // RX FIFO overflow enabled
+  logic        rx_fifo_overflow_err;         // RX FIFO overflow detected in FSM
+  logic        indirect_fifo_overflow_err_raw;   // INDIRECT_FIFO overflow raw detection
+  logic        indirect_fifo_overflow_err_en;    // INDIRECT_FIFO overflow enabled
+  logic        indirect_fifo_overflow_err;       // INDIRECT_FIFO overflow detected in FSM
 
   //============================================================================
   //
@@ -509,6 +526,16 @@ module recovery_receiver
   assign readonly_err_en    = readonly_err_raw && readonly_err_det_en_i;
   assign unsupported_err_en = unsupported_err_raw && unsupported_err_det_en_i;
 
+  // CSR write length validation - Raw detection (evaluated in CmdDispatch)
+  // Check if received cmd_len matches expected csr_length_next for WRITE commands
+  // Exclude INDIRECT_FIFO_DATA which has variable length
+  // Only applies to WRITE commands (!cmd_is_rd)
+  assign csr_length_err_raw = !cmd_is_rd && 
+    (cmd_cmd != CMD_INDIRECT_FIFO_DATA) && 
+    (cmd_len != csr_length_next);
+  
+  // CSR write length validation - Enabled error
+  assign csr_length_err_en = csr_length_err_raw && length_err_det_en_i;
 
 
   //============================================================================
@@ -563,6 +590,9 @@ module recovery_receiver
     length_overrun_err    = 1'b0;
     readonly_err          = 1'b0;
     unsupported_err       = 1'b0;
+    csr_length_err        = 1'b0;
+    rx_fifo_overflow_err  = 1'b0;
+    indirect_fifo_overflow_err = 1'b0;
     premature_stop        = 1'b0;
 
     unique case (state_q)
@@ -617,8 +647,9 @@ module recovery_receiver
       //------------------------------------------------------------------------
       RxData: begin
         if (all_data_received) state_d = RxPec;
-        else if (length_underrun_err_en) begin
-          length_underrun_err = 1'b1;
+        else if (length_underrun_err_en || rx_fifo_overflow_err_en) begin
+          length_underrun_err = length_underrun_err_en;
+          rx_fifo_overflow_err = rx_fifo_overflow_err_en;
           state_d = Error;
         end
       end
@@ -649,8 +680,9 @@ module recovery_receiver
         pec_err             = pec_err_en;
         readonly_err        = readonly_err_en;
         unsupported_err     = unsupported_err_en;
+        csr_length_err      = csr_length_err_en;
         
-        if (pec_err || readonly_err || unsupported_err)
+        if (pec_err || readonly_err || unsupported_err || csr_length_err)
           state_d = Error;
         else if (!cmd_is_rd) begin
           state_d = (cmd_cmd == CMD_INDIRECT_FIFO_DATA) ? ExecFifoWrite : ExecCsrWrite;
@@ -671,7 +703,12 @@ module recovery_receiver
       // ExecFifoWrite: Stream firmware data to indirect FIFO
       //------------------------------------------------------------------------
       ExecFifoWrite: begin
-        if ((tti_rx_rack_i && (dcnt == 1)) ||
+        // Check for FIFO overflow - transition to Error if enabled
+        if (indirect_fifo_overflow_err_en) begin
+          indirect_fifo_overflow_err = 1'b1;
+          state_d = Error;
+        end
+        else if ((tti_rx_rack_i && (dcnt == 1)) ||
             (bypass_i3c_core_i && hwif_socmgmt_i.REC_INTF_CFG.REC_PAYLOAD_DONE.value && 
              ~indirect_rx_empty_i))
           state_d = Done;
@@ -944,14 +981,17 @@ module recovery_receiver
 
   //============================================================================
   //
-  // SECTION 9: LENGTH VALIDATION
+  // SECTION 9: RX FIFO OVERFLOW DETECTION
   //
   //============================================================================
 
-  always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni)               desc_error <= '0;
-    else if (state_q == Idle)  desc_error <= '0;
-    else if (desc_valid_i)     desc_error <= desc_data_i[31:28];
+  //----------------------------------------------------------------------------
+  // RX FIFO Overflow Detection
+  // Overflow is detected by the handler when wvalid && !wready on RX data queue.
+  // Raw detection comes from handler; enabled detection is masked by DET_EN.
+  //----------------------------------------------------------------------------
+  assign rx_fifo_overflow_err_raw = rx_fifo_overflow_raw_i;
+  assign rx_fifo_overflow_err_en  = rx_fifo_overflow_err_raw && rx_fifo_overflow_err_det_en_i;
 
 
 
@@ -1251,6 +1291,17 @@ module recovery_receiver
     indirect_rx_wdata_o  = tti_rx_rdata_i;
   end
 
+  //----------------------------------------------------------------------------
+  // INDIRECT_FIFO Overflow Detection
+  // Detect when we try to write to FIFO but it is full
+  // Raw detection is always active; enabled detection is masked by DET_EN
+  // FSM error signal is set in ExecFifoWrite and triggers transition to Error
+  //----------------------------------------------------------------------------
+  // Raw detection: trying to write but FIFO is full
+  assign indirect_fifo_overflow_err_raw = (state_q == ExecFifoWrite) && tti_rx_rack_i && !indirect_rx_wready_i;
+  // Enabled detection: masked by DET_EN CSR
+  assign indirect_fifo_overflow_err_en  = indirect_fifo_overflow_err_raw && indirect_fifo_overflow_err_det_en_i;
+
 
   //----------------------------------------------------------------------------
   // FIFO Pointer Management
@@ -1464,11 +1515,13 @@ module recovery_receiver
   //============================================================================
 
   // OCP spec error priority: CRC > Length > Readonly/Unsupported
+  // FIFO overflow errors (RX FIFO and INDIRECT_FIFO) are reported as Length errors
   always_comb begin
     status_protocol = PROTOCOL_OK;
     if (pec_err)
       status_protocol = PROTOCOL_ERROR_CRC;
-    else if (length_underrun_err || length_overrun_err)
+    else if (length_underrun_err || length_overrun_err || csr_length_err || 
+             rx_fifo_overflow_err || indirect_fifo_overflow_err)
       status_protocol = PROTOCOL_ERROR_LENGTH;
     else if (readonly_err || unsupported_err)
       status_protocol = PROTOCOL_ERROR_READONLY;  // OCP: both map to "unsupported command error"
@@ -1529,9 +1582,15 @@ module recovery_receiver
   //============================================================================
 
   assign pec_err_o         = pec_err;
-  assign length_err_o      = length_underrun_err || length_overrun_err;
+  assign length_err_o      = length_underrun_err || length_overrun_err || csr_length_err;
   assign readonly_err_o    = readonly_err;
   assign unsupported_err_o = unsupported_err;
+  
+  // FIFO overflow error outputs
+  // RX FIFO overflow: always reported (not gated by enable)
+  assign rx_fifo_overflow_err_o = rx_fifo_overflow_err;
+  // INDIRECT_FIFO overflow: reported on each overflow event
+  assign indirect_fifo_overflow_err_o = indirect_fifo_overflow_err;
 
 endmodule
 

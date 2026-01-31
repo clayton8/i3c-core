@@ -4417,6 +4417,8 @@ package I3CCSR_uvm;
         I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL_bit_cg RI_LENGTH_ERR_DET_EN_bit_cg[1];
         I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL_bit_cg RI_READONLY_ERR_DET_EN_bit_cg[1];
         I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL_bit_cg RI_UNSUPPORTED_ERR_DET_EN_bit_cg[1];
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL_bit_cg RI_RX_FIFO_OVERFLOW_ERR_DET_EN_bit_cg[1];
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL_bit_cg RI_INDIRECT_FIFO_OVERFLOW_ERR_DET_EN_bit_cg[1];
         I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL_fld_cg fld_cg;
         rand uvm_reg_field TE0_ERR_DET_EN;
         rand uvm_reg_field TE1_ERR_DET_EN;
@@ -4429,6 +4431,8 @@ package I3CCSR_uvm;
         rand uvm_reg_field RI_LENGTH_ERR_DET_EN;
         rand uvm_reg_field RI_READONLY_ERR_DET_EN;
         rand uvm_reg_field RI_UNSUPPORTED_ERR_DET_EN;
+        rand uvm_reg_field RI_RX_FIFO_OVERFLOW_ERR_DET_EN;
+        rand uvm_reg_field RI_INDIRECT_FIFO_OVERFLOW_ERR_DET_EN;
 
         function new(string name = "I3CCSR__I3C_EC__TTI__TARGET_ERR_CTRL");
             super.new(name, 32, build_coverage(UVM_CVR_ALL));
@@ -4462,6 +4466,10 @@ package I3CCSR_uvm;
             this.RI_READONLY_ERR_DET_EN.configure(this, 1, 9, "RW", 0, 'h1, 1, 1, 0);
             this.RI_UNSUPPORTED_ERR_DET_EN = new("RI_UNSUPPORTED_ERR_DET_EN");
             this.RI_UNSUPPORTED_ERR_DET_EN.configure(this, 1, 10, "RW", 0, 'h1, 1, 1, 0);
+            this.RI_RX_FIFO_OVERFLOW_ERR_DET_EN = new("RI_RX_FIFO_OVERFLOW_ERR_DET_EN");
+            this.RI_RX_FIFO_OVERFLOW_ERR_DET_EN.configure(this, 1, 11, "RW", 0, 'h1, 1, 1, 0);
+            this.RI_INDIRECT_FIFO_OVERFLOW_ERR_DET_EN = new("RI_INDIRECT_FIFO_OVERFLOW_ERR_DET_EN");
+            this.RI_INDIRECT_FIFO_OVERFLOW_ERR_DET_EN.configure(this, 1, 12, "RW", 0, 'h1, 1, 1, 0);
             if (has_coverage(UVM_CVR_REG_BITS)) begin
                 foreach(TE0_ERR_DET_EN_bit_cg[bt]) TE0_ERR_DET_EN_bit_cg[bt] = new();
                 foreach(TE1_ERR_DET_EN_bit_cg[bt]) TE1_ERR_DET_EN_bit_cg[bt] = new();
@@ -4474,6 +4482,8 @@ package I3CCSR_uvm;
                 foreach(RI_LENGTH_ERR_DET_EN_bit_cg[bt]) RI_LENGTH_ERR_DET_EN_bit_cg[bt] = new();
                 foreach(RI_READONLY_ERR_DET_EN_bit_cg[bt]) RI_READONLY_ERR_DET_EN_bit_cg[bt] = new();
                 foreach(RI_UNSUPPORTED_ERR_DET_EN_bit_cg[bt]) RI_UNSUPPORTED_ERR_DET_EN_bit_cg[bt] = new();
+                foreach(RI_RX_FIFO_OVERFLOW_ERR_DET_EN_bit_cg[bt]) RI_RX_FIFO_OVERFLOW_ERR_DET_EN_bit_cg[bt] = new();
+                foreach(RI_INDIRECT_FIFO_OVERFLOW_ERR_DET_EN_bit_cg[bt]) RI_INDIRECT_FIFO_OVERFLOW_ERR_DET_EN_bit_cg[bt] = new();
             end
             if (has_coverage(UVM_CVR_FIELD_VALS))
                 fld_cg = new();
@@ -4497,6 +4507,8 @@ package I3CCSR_uvm;
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS_bit_cg RI_LENGTH_ERR_STAT_bit_cg[1];
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS_bit_cg RI_READONLY_ERR_STAT_bit_cg[1];
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS_bit_cg RI_UNSUPPORTED_ERR_STAT_bit_cg[1];
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS_bit_cg RI_RX_FIFO_OVERFLOW_ERR_STAT_bit_cg[1];
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS_bit_cg RI_INDIRECT_FIFO_OVERFLOW_ERR_STAT_bit_cg[1];
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS_fld_cg fld_cg;
         rand uvm_reg_field TE0_ERR_STAT;
         rand uvm_reg_field TE1_ERR_STAT;
@@ -4509,6 +4521,8 @@ package I3CCSR_uvm;
         rand uvm_reg_field RI_LENGTH_ERR_STAT;
         rand uvm_reg_field RI_READONLY_ERR_STAT;
         rand uvm_reg_field RI_UNSUPPORTED_ERR_STAT;
+        rand uvm_reg_field RI_RX_FIFO_OVERFLOW_ERR_STAT;
+        rand uvm_reg_field RI_INDIRECT_FIFO_OVERFLOW_ERR_STAT;
 
         function new(string name = "I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_STATUS");
             super.new(name, 32, build_coverage(UVM_CVR_ALL));
@@ -4542,6 +4556,10 @@ package I3CCSR_uvm;
             this.RI_READONLY_ERR_STAT.configure(this, 1, 10, "W1C", 1, 'h0, 1, 1, 0);
             this.RI_UNSUPPORTED_ERR_STAT = new("RI_UNSUPPORTED_ERR_STAT");
             this.RI_UNSUPPORTED_ERR_STAT.configure(this, 1, 11, "W1C", 1, 'h0, 1, 1, 0);
+            this.RI_RX_FIFO_OVERFLOW_ERR_STAT = new("RI_RX_FIFO_OVERFLOW_ERR_STAT");
+            this.RI_RX_FIFO_OVERFLOW_ERR_STAT.configure(this, 1, 12, "W1C", 1, 'h0, 1, 1, 0);
+            this.RI_INDIRECT_FIFO_OVERFLOW_ERR_STAT = new("RI_INDIRECT_FIFO_OVERFLOW_ERR_STAT");
+            this.RI_INDIRECT_FIFO_OVERFLOW_ERR_STAT.configure(this, 1, 13, "W1C", 1, 'h0, 1, 1, 0);
             if (has_coverage(UVM_CVR_REG_BITS)) begin
                 foreach(TE0_ERR_STAT_bit_cg[bt]) TE0_ERR_STAT_bit_cg[bt] = new();
                 foreach(TE1_ERR_STAT_bit_cg[bt]) TE1_ERR_STAT_bit_cg[bt] = new();
@@ -4554,6 +4572,8 @@ package I3CCSR_uvm;
                 foreach(RI_LENGTH_ERR_STAT_bit_cg[bt]) RI_LENGTH_ERR_STAT_bit_cg[bt] = new();
                 foreach(RI_READONLY_ERR_STAT_bit_cg[bt]) RI_READONLY_ERR_STAT_bit_cg[bt] = new();
                 foreach(RI_UNSUPPORTED_ERR_STAT_bit_cg[bt]) RI_UNSUPPORTED_ERR_STAT_bit_cg[bt] = new();
+                foreach(RI_RX_FIFO_OVERFLOW_ERR_STAT_bit_cg[bt]) RI_RX_FIFO_OVERFLOW_ERR_STAT_bit_cg[bt] = new();
+                foreach(RI_INDIRECT_FIFO_OVERFLOW_ERR_STAT_bit_cg[bt]) RI_INDIRECT_FIFO_OVERFLOW_ERR_STAT_bit_cg[bt] = new();
             end
             if (has_coverage(UVM_CVR_FIELD_VALS))
                 fld_cg = new();
@@ -4577,6 +4597,8 @@ package I3CCSR_uvm;
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_ENABLE_bit_cg RI_LENGTH_ERR_EN_bit_cg[1];
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_ENABLE_bit_cg RI_READONLY_ERR_EN_bit_cg[1];
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_ENABLE_bit_cg RI_UNSUPPORTED_ERR_EN_bit_cg[1];
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_ENABLE_bit_cg RI_RX_FIFO_OVERFLOW_ERR_EN_bit_cg[1];
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_ENABLE_bit_cg RI_INDIRECT_FIFO_OVERFLOW_ERR_EN_bit_cg[1];
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_ENABLE_fld_cg fld_cg;
         rand uvm_reg_field TE0_ERR_EN;
         rand uvm_reg_field TE1_ERR_EN;
@@ -4589,6 +4611,8 @@ package I3CCSR_uvm;
         rand uvm_reg_field RI_LENGTH_ERR_EN;
         rand uvm_reg_field RI_READONLY_ERR_EN;
         rand uvm_reg_field RI_UNSUPPORTED_ERR_EN;
+        rand uvm_reg_field RI_RX_FIFO_OVERFLOW_ERR_EN;
+        rand uvm_reg_field RI_INDIRECT_FIFO_OVERFLOW_ERR_EN;
 
         function new(string name = "I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_ENABLE");
             super.new(name, 32, build_coverage(UVM_CVR_ALL));
@@ -4622,6 +4646,10 @@ package I3CCSR_uvm;
             this.RI_READONLY_ERR_EN.configure(this, 1, 10, "RW", 0, 'h0, 1, 1, 0);
             this.RI_UNSUPPORTED_ERR_EN = new("RI_UNSUPPORTED_ERR_EN");
             this.RI_UNSUPPORTED_ERR_EN.configure(this, 1, 11, "RW", 0, 'h0, 1, 1, 0);
+            this.RI_RX_FIFO_OVERFLOW_ERR_EN = new("RI_RX_FIFO_OVERFLOW_ERR_EN");
+            this.RI_RX_FIFO_OVERFLOW_ERR_EN.configure(this, 1, 12, "RW", 0, 'h0, 1, 1, 0);
+            this.RI_INDIRECT_FIFO_OVERFLOW_ERR_EN = new("RI_INDIRECT_FIFO_OVERFLOW_ERR_EN");
+            this.RI_INDIRECT_FIFO_OVERFLOW_ERR_EN.configure(this, 1, 13, "RW", 0, 'h0, 1, 1, 0);
             if (has_coverage(UVM_CVR_REG_BITS)) begin
                 foreach(TE0_ERR_EN_bit_cg[bt]) TE0_ERR_EN_bit_cg[bt] = new();
                 foreach(TE1_ERR_EN_bit_cg[bt]) TE1_ERR_EN_bit_cg[bt] = new();
@@ -4634,6 +4662,8 @@ package I3CCSR_uvm;
                 foreach(RI_LENGTH_ERR_EN_bit_cg[bt]) RI_LENGTH_ERR_EN_bit_cg[bt] = new();
                 foreach(RI_READONLY_ERR_EN_bit_cg[bt]) RI_READONLY_ERR_EN_bit_cg[bt] = new();
                 foreach(RI_UNSUPPORTED_ERR_EN_bit_cg[bt]) RI_UNSUPPORTED_ERR_EN_bit_cg[bt] = new();
+                foreach(RI_RX_FIFO_OVERFLOW_ERR_EN_bit_cg[bt]) RI_RX_FIFO_OVERFLOW_ERR_EN_bit_cg[bt] = new();
+                foreach(RI_INDIRECT_FIFO_OVERFLOW_ERR_EN_bit_cg[bt]) RI_INDIRECT_FIFO_OVERFLOW_ERR_EN_bit_cg[bt] = new();
             end
             if (has_coverage(UVM_CVR_FIELD_VALS))
                 fld_cg = new();
@@ -4657,6 +4687,8 @@ package I3CCSR_uvm;
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_FORCE_bit_cg RI_LENGTH_ERR_FORCE_bit_cg[1];
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_FORCE_bit_cg RI_READONLY_ERR_FORCE_bit_cg[1];
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_FORCE_bit_cg RI_UNSUPPORTED_ERR_FORCE_bit_cg[1];
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_FORCE_bit_cg RI_RX_FIFO_OVERFLOW_ERR_FORCE_bit_cg[1];
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_FORCE_bit_cg RI_INDIRECT_FIFO_OVERFLOW_ERR_FORCE_bit_cg[1];
         I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_FORCE_fld_cg fld_cg;
         rand uvm_reg_field TE0_ERR_FORCE;
         rand uvm_reg_field TE1_ERR_FORCE;
@@ -4669,6 +4701,8 @@ package I3CCSR_uvm;
         rand uvm_reg_field RI_LENGTH_ERR_FORCE;
         rand uvm_reg_field RI_READONLY_ERR_FORCE;
         rand uvm_reg_field RI_UNSUPPORTED_ERR_FORCE;
+        rand uvm_reg_field RI_RX_FIFO_OVERFLOW_ERR_FORCE;
+        rand uvm_reg_field RI_INDIRECT_FIFO_OVERFLOW_ERR_FORCE;
 
         function new(string name = "I3CCSR__I3C_EC__TTI__TARGET_ERR_INTR_FORCE");
             super.new(name, 32, build_coverage(UVM_CVR_ALL));
@@ -4702,6 +4736,10 @@ package I3CCSR_uvm;
             this.RI_READONLY_ERR_FORCE.configure(this, 1, 10, "RW", 0, 'h0, 1, 1, 0);
             this.RI_UNSUPPORTED_ERR_FORCE = new("RI_UNSUPPORTED_ERR_FORCE");
             this.RI_UNSUPPORTED_ERR_FORCE.configure(this, 1, 11, "RW", 0, 'h0, 1, 1, 0);
+            this.RI_RX_FIFO_OVERFLOW_ERR_FORCE = new("RI_RX_FIFO_OVERFLOW_ERR_FORCE");
+            this.RI_RX_FIFO_OVERFLOW_ERR_FORCE.configure(this, 1, 12, "RW", 0, 'h0, 1, 1, 0);
+            this.RI_INDIRECT_FIFO_OVERFLOW_ERR_FORCE = new("RI_INDIRECT_FIFO_OVERFLOW_ERR_FORCE");
+            this.RI_INDIRECT_FIFO_OVERFLOW_ERR_FORCE.configure(this, 1, 13, "RW", 0, 'h0, 1, 1, 0);
             if (has_coverage(UVM_CVR_REG_BITS)) begin
                 foreach(TE0_ERR_FORCE_bit_cg[bt]) TE0_ERR_FORCE_bit_cg[bt] = new();
                 foreach(TE1_ERR_FORCE_bit_cg[bt]) TE1_ERR_FORCE_bit_cg[bt] = new();
@@ -4714,6 +4752,8 @@ package I3CCSR_uvm;
                 foreach(RI_LENGTH_ERR_FORCE_bit_cg[bt]) RI_LENGTH_ERR_FORCE_bit_cg[bt] = new();
                 foreach(RI_READONLY_ERR_FORCE_bit_cg[bt]) RI_READONLY_ERR_FORCE_bit_cg[bt] = new();
                 foreach(RI_UNSUPPORTED_ERR_FORCE_bit_cg[bt]) RI_UNSUPPORTED_ERR_FORCE_bit_cg[bt] = new();
+                foreach(RI_RX_FIFO_OVERFLOW_ERR_FORCE_bit_cg[bt]) RI_RX_FIFO_OVERFLOW_ERR_FORCE_bit_cg[bt] = new();
+                foreach(RI_INDIRECT_FIFO_OVERFLOW_ERR_FORCE_bit_cg[bt]) RI_INDIRECT_FIFO_OVERFLOW_ERR_FORCE_bit_cg[bt] = new();
             end
             if (has_coverage(UVM_CVR_FIELD_VALS))
                 fld_cg = new();
@@ -5049,6 +5089,66 @@ package I3CCSR_uvm;
                 fld_cg = new();
         endfunction : build
     endclass : I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_UNSUPPORTED
+
+    // Reg - I3CCSR.I3C_EC.TTI.TARGET_ERR_CNT_RI_RX_FIFO_OVERFLOW
+    class I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_RX_FIFO_OVERFLOW extends uvm_reg;
+        protected uvm_reg_data_t m_current;
+        protected uvm_reg_data_t m_data;
+        protected bit            m_is_read;
+
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_RX_FIFO_OVERFLOW_bit_cg CNT_bit_cg[8];
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_RX_FIFO_OVERFLOW_fld_cg fld_cg;
+        rand uvm_reg_field CNT;
+
+        function new(string name = "I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_RX_FIFO_OVERFLOW");
+            super.new(name, 32, build_coverage(UVM_CVR_ALL));
+        endfunction : new
+        extern virtual function void sample_values();
+        extern protected virtual function void sample(uvm_reg_data_t  data,
+                                                      uvm_reg_data_t  byte_en,
+                                                      bit             is_read,
+                                                      uvm_reg_map     map);
+
+        virtual function void build();
+            this.CNT = new("CNT");
+            this.CNT.configure(this, 8, 0, "RW", 1, 'h0, 1, 1, 0);
+            if (has_coverage(UVM_CVR_REG_BITS)) begin
+                foreach(CNT_bit_cg[bt]) CNT_bit_cg[bt] = new();
+            end
+            if (has_coverage(UVM_CVR_FIELD_VALS))
+                fld_cg = new();
+        endfunction : build
+    endclass : I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_RX_FIFO_OVERFLOW
+
+    // Reg - I3CCSR.I3C_EC.TTI.TARGET_ERR_CNT_RI_INDIRECT_FIFO_OVERFLOW
+    class I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_INDIRECT_FIFO_OVERFLOW extends uvm_reg;
+        protected uvm_reg_data_t m_current;
+        protected uvm_reg_data_t m_data;
+        protected bit            m_is_read;
+
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_INDIRECT_FIFO_OVERFLOW_bit_cg CNT_bit_cg[8];
+        I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_INDIRECT_FIFO_OVERFLOW_fld_cg fld_cg;
+        rand uvm_reg_field CNT;
+
+        function new(string name = "I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_INDIRECT_FIFO_OVERFLOW");
+            super.new(name, 32, build_coverage(UVM_CVR_ALL));
+        endfunction : new
+        extern virtual function void sample_values();
+        extern protected virtual function void sample(uvm_reg_data_t  data,
+                                                      uvm_reg_data_t  byte_en,
+                                                      bit             is_read,
+                                                      uvm_reg_map     map);
+
+        virtual function void build();
+            this.CNT = new("CNT");
+            this.CNT.configure(this, 8, 0, "RW", 1, 'h0, 1, 1, 0);
+            if (has_coverage(UVM_CVR_REG_BITS)) begin
+                foreach(CNT_bit_cg[bt]) CNT_bit_cg[bt] = new();
+            end
+            if (has_coverage(UVM_CVR_FIELD_VALS))
+                fld_cg = new();
+        endfunction : build
+    endclass : I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_INDIRECT_FIFO_OVERFLOW
 
     // Reg - I3CCSR.I3C_EC.TTI.RX_DESC_QUEUE_PORT
     class I3CCSR__I3C_EC__TTI__RX_DESC_QUEUE_PORT extends uvm_reg;
@@ -5388,6 +5488,8 @@ package I3CCSR_uvm;
         rand I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_LENGTH TARGET_ERR_CNT_RI_LENGTH;
         rand I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_READONLY TARGET_ERR_CNT_RI_READONLY;
         rand I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_UNSUPPORTED TARGET_ERR_CNT_RI_UNSUPPORTED;
+        rand I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_RX_FIFO_OVERFLOW TARGET_ERR_CNT_RI_RX_FIFO_OVERFLOW;
+        rand I3CCSR__I3C_EC__TTI__TARGET_ERR_CNT_RI_INDIRECT_FIFO_OVERFLOW TARGET_ERR_CNT_RI_INDIRECT_FIFO_OVERFLOW;
         rand I3CCSR__I3C_EC__TTI__RX_DESC_QUEUE_PORT RX_DESC_QUEUE_PORT;
         rand I3CCSR__I3C_EC__TTI__RX_DATA_PORT RX_DATA_PORT;
         rand I3CCSR__I3C_EC__TTI__TX_DESC_QUEUE_PORT TX_DESC_QUEUE_PORT;
@@ -5534,51 +5636,61 @@ package I3CCSR_uvm;
 
             this.TARGET_ERR_CNT_RI_UNSUPPORTED.build();
             this.default_map.add_reg(this.TARGET_ERR_CNT_RI_UNSUPPORTED, 'h64);
+            this.TARGET_ERR_CNT_RI_RX_FIFO_OVERFLOW = new("TARGET_ERR_CNT_RI_RX_FIFO_OVERFLOW");
+            this.TARGET_ERR_CNT_RI_RX_FIFO_OVERFLOW.configure(this);
+
+            this.TARGET_ERR_CNT_RI_RX_FIFO_OVERFLOW.build();
+            this.default_map.add_reg(this.TARGET_ERR_CNT_RI_RX_FIFO_OVERFLOW, 'h68);
+            this.TARGET_ERR_CNT_RI_INDIRECT_FIFO_OVERFLOW = new("TARGET_ERR_CNT_RI_INDIRECT_FIFO_OVERFLOW");
+            this.TARGET_ERR_CNT_RI_INDIRECT_FIFO_OVERFLOW.configure(this);
+
+            this.TARGET_ERR_CNT_RI_INDIRECT_FIFO_OVERFLOW.build();
+            this.default_map.add_reg(this.TARGET_ERR_CNT_RI_INDIRECT_FIFO_OVERFLOW, 'h6c);
             this.RX_DESC_QUEUE_PORT = new("RX_DESC_QUEUE_PORT");
             this.RX_DESC_QUEUE_PORT.configure(this);
 
             this.RX_DESC_QUEUE_PORT.build();
-            this.default_map.add_reg(this.RX_DESC_QUEUE_PORT, 'h68);
+            this.default_map.add_reg(this.RX_DESC_QUEUE_PORT, 'h70);
             this.RX_DATA_PORT = new("RX_DATA_PORT");
             this.RX_DATA_PORT.configure(this);
 
             this.RX_DATA_PORT.build();
-            this.default_map.add_reg(this.RX_DATA_PORT, 'h6c);
+            this.default_map.add_reg(this.RX_DATA_PORT, 'h74);
             this.TX_DESC_QUEUE_PORT = new("TX_DESC_QUEUE_PORT");
             this.TX_DESC_QUEUE_PORT.configure(this);
 
             this.TX_DESC_QUEUE_PORT.build();
-            this.default_map.add_reg(this.TX_DESC_QUEUE_PORT, 'h70);
+            this.default_map.add_reg(this.TX_DESC_QUEUE_PORT, 'h78);
             this.TX_DATA_PORT = new("TX_DATA_PORT");
             this.TX_DATA_PORT.configure(this);
 
             this.TX_DATA_PORT.build();
-            this.default_map.add_reg(this.TX_DATA_PORT, 'h74);
+            this.default_map.add_reg(this.TX_DATA_PORT, 'h7c);
             this.IBI_PORT = new("IBI_PORT");
             this.IBI_PORT.configure(this);
 
             this.IBI_PORT.build();
-            this.default_map.add_reg(this.IBI_PORT, 'h78);
+            this.default_map.add_reg(this.IBI_PORT, 'h80);
             this.QUEUE_SIZE = new("QUEUE_SIZE");
             this.QUEUE_SIZE.configure(this);
 
             this.QUEUE_SIZE.build();
-            this.default_map.add_reg(this.QUEUE_SIZE, 'h7c);
+            this.default_map.add_reg(this.QUEUE_SIZE, 'h84);
             this.IBI_QUEUE_SIZE = new("IBI_QUEUE_SIZE");
             this.IBI_QUEUE_SIZE.configure(this);
 
             this.IBI_QUEUE_SIZE.build();
-            this.default_map.add_reg(this.IBI_QUEUE_SIZE, 'h80);
+            this.default_map.add_reg(this.IBI_QUEUE_SIZE, 'h88);
             this.QUEUE_THLD_CTRL = new("QUEUE_THLD_CTRL");
             this.QUEUE_THLD_CTRL.configure(this);
 
             this.QUEUE_THLD_CTRL.build();
-            this.default_map.add_reg(this.QUEUE_THLD_CTRL, 'h84);
+            this.default_map.add_reg(this.QUEUE_THLD_CTRL, 'h8c);
             this.DATA_BUFFER_THLD_CTRL = new("DATA_BUFFER_THLD_CTRL");
             this.DATA_BUFFER_THLD_CTRL.configure(this);
 
             this.DATA_BUFFER_THLD_CTRL.build();
-            this.default_map.add_reg(this.DATA_BUFFER_THLD_CTRL, 'h88);
+            this.default_map.add_reg(this.DATA_BUFFER_THLD_CTRL, 'h90);
         endfunction : build
     endclass : I3CCSR__I3C_EC__TTI
 

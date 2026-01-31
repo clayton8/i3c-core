@@ -214,12 +214,16 @@ module recovery_handler
     input  logic length_err_det_en_i,
     input  logic readonly_err_det_en_i,
     input  logic unsupported_err_det_en_i,
+    input  logic rx_fifo_overflow_err_det_en_i,
+    input  logic indirect_fifo_overflow_err_det_en_i,
 
     // Error outputs (from recovery_receiver)
     output logic pec_err_o,          // PEC/CRC mismatch error
     output logic length_err_o,       // Length mismatch error
     output logic readonly_err_o,     // Write to read-only error
-    output logic unsupported_err_o   // Unsupported command error
+    output logic unsupported_err_o,  // Unsupported command error
+    output logic rx_fifo_overflow_err_o,       // RX FIFO overflow error (always reported)
+    output logic indirect_fifo_overflow_err_o  // INDIRECT_FIFO overflow error
 );
 
   //============================================================================
@@ -337,6 +341,12 @@ module recovery_handler
   //----------------------------------------------------------------------------
   logic                               tti_ibi_queue_req;
   logic                               tti_ibi_queue_ack;
+
+  //----------------------------------------------------------------------------
+  // RX FIFO Overflow Detection
+  //----------------------------------------------------------------------------
+  // Detect overflow when controller tries to write but FIFO is not ready
+  logic rx_fifo_overflow_raw;
 
   //----------------------------------------------------------------------------
   // Width Converter Signals (8-to-N and N-to-8)
@@ -804,6 +814,8 @@ module recovery_handler
   assign ctl_tti_rx_data_queue_ready_thld_o = tti_rx_data_queue_ready_thld_o;
   assign ctl_tti_rx_data_queue_ready_thld_trig_o = tti_rx_data_queue_ready_thld_trig;
 
+  assign rx_fifo_overflow_raw =  tti_rx_data_queue_wvalid_q && !tti_rx_data_queue_wready_q;
+
   //----------------------------------------------------------------------------
   // TX Data Queue Mux
   //----------------------------------------------------------------------------
@@ -1018,6 +1030,9 @@ module recovery_handler
       .length_err_det_en_i(length_err_det_en_i),
       .readonly_err_det_en_i(readonly_err_det_en_i),
       .unsupported_err_det_en_i(unsupported_err_det_en_i),
+      .rx_fifo_overflow_err_det_en_i(rx_fifo_overflow_err_det_en_i),
+      .rx_fifo_overflow_raw_i(rx_fifo_overflow_raw),
+      .indirect_fifo_overflow_err_det_en_i(indirect_fifo_overflow_err_det_en_i),
       .recovery_mode_csr_active_i(recovery_mode_csr_active),
 
       .desc_valid_i(recv_tti_rx_desc_valid),
@@ -1095,6 +1110,8 @@ module recovery_handler
       .length_err_o(length_err_o),
       .readonly_err_o(readonly_err_o),
       .unsupported_err_o(unsupported_err_o),
+      .rx_fifo_overflow_err_o(rx_fifo_overflow_err_o),
+      .indirect_fifo_overflow_err_o(indirect_fifo_overflow_err_o),
       .exec_pending_o(recovery_exec_pending),
       .recovery_mode_enter_o(recovery_mode_enter_o)
   );

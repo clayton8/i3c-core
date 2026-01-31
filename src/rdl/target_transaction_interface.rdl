@@ -633,6 +633,20 @@ regfile TargetTransactionInterfaceRegisters #(
         name = "TTI Target Error Detection Control";
         desc = "Target Error Detection Control. Set bits to enable error detection. Clear to disable.";
         field {
+            name = "RI_INDIRECT_FIFO_OVERFLOW_ERR_DET_EN";
+            desc = "Enable Recovery Interface INDIRECT FIFO overflow error detection and transition to Error state. Set to 0 to disable (overflow is still recorded in interrupt status).";
+            sw = rw;
+            hw = r;
+            reset = 1'b1;
+        } RI_INDIRECT_FIFO_OVERFLOW_ERR_DET_EN[12:12];
+        field {
+            name = "RI_RX_FIFO_OVERFLOW_ERR_DET_EN";
+            desc = "Enable Recovery Interface RX FIFO overflow error detection and transition to Error state. Set to 0 to disable (overflow is still recorded in interrupt status).";
+            sw = rw;
+            hw = r;
+            reset = 1'b1;
+        } RI_RX_FIFO_OVERFLOW_ERR_DET_EN[11:11];
+        field {
             name = "RI_UNSUPPORTED_ERR_DET_EN";
             desc = "Enable Recovery Interface unsupported command error detection. Set to 0 to disable.";
             sw = rw;
@@ -716,6 +730,24 @@ regfile TargetTransactionInterfaceRegisters #(
     reg {
         name = "TTI Target Error Interrupt Status";
         desc = "Target Error Interrupt Status. Write 1 to clear individual bits.";
+        field {
+            name = "RI_INDIRECT_FIFO_OVERFLOW_ERR_STAT";
+            desc = "Recovery Interface INDIRECT FIFO overflow error detected";
+            sw = rw;
+            hw = rw;
+            woclr = true;
+            we = true;
+            reset = 1'b0;
+        } RI_INDIRECT_FIFO_OVERFLOW_ERR_STAT[13:13];
+        field {
+            name = "RI_RX_FIFO_OVERFLOW_ERR_STAT";
+            desc = "Recovery Interface RX FIFO overflow error detected";
+            sw = rw;
+            hw = rw;
+            woclr = true;
+            we = true;
+            reset = 1'b0;
+        } RI_RX_FIFO_OVERFLOW_ERR_STAT[12:12];
         field {
             name = "RI_UNSUPPORTED_ERR_STAT";
             desc = "Recovery Interface unsupported command error detected";
@@ -820,6 +852,20 @@ regfile TargetTransactionInterfaceRegisters #(
         name = "TTI Target Error Interrupt Enable";
         desc = "Target Error Interrupt Enable. Set bits to enable corresponding interrupts.";
         field {
+            name = "RI_INDIRECT_FIFO_OVERFLOW_ERR_EN";
+            desc = "Enables the corresponding interrupt bit `RI_INDIRECT_FIFO_OVERFLOW_ERR_STAT`";
+            sw = rw;
+            hw = r;
+            reset = 1'b0;
+        } RI_INDIRECT_FIFO_OVERFLOW_ERR_EN[13:13];
+        field {
+            name = "RI_RX_FIFO_OVERFLOW_ERR_EN";
+            desc = "Enables the corresponding interrupt bit `RI_RX_FIFO_OVERFLOW_ERR_STAT`";
+            sw = rw;
+            hw = r;
+            reset = 1'b0;
+        } RI_RX_FIFO_OVERFLOW_ERR_EN[12:12];
+        field {
             name = "RI_UNSUPPORTED_ERR_EN";
             desc = "Enables the corresponding interrupt bit `RI_UNSUPPORTED_ERR_STAT`";
             sw = rw;
@@ -900,6 +946,20 @@ regfile TargetTransactionInterfaceRegisters #(
     reg {
         name = "TTI Target Error Interrupt Force";
         desc = "Target Error Interrupt Force. Set bits to force corresponding interrupts for testing.";
+        field {
+            name = "RI_INDIRECT_FIFO_OVERFLOW_ERR_FORCE";
+            desc = "Forces the corresponding interrupt bit `RI_INDIRECT_FIFO_OVERFLOW_ERR_STAT` to be set to 1";
+            sw = rw;
+            hw = r;
+            reset = 1'b0;
+        } RI_INDIRECT_FIFO_OVERFLOW_ERR_FORCE[13:13];
+        field {
+            name = "RI_RX_FIFO_OVERFLOW_ERR_FORCE";
+            desc = "Forces the corresponding interrupt bit `RI_RX_FIFO_OVERFLOW_ERR_STAT` to be set to 1";
+            sw = rw;
+            hw = r;
+            reset = 1'b0;
+        } RI_RX_FIFO_OVERFLOW_ERR_FORCE[12:12];
         field {
             name = "RI_UNSUPPORTED_ERR_FORCE";
             desc = "Forces the corresponding interrupt bit `RI_UNSUPPORTED_ERR_STAT` to be set to 1";
@@ -1123,6 +1183,32 @@ regfile TargetTransactionInterfaceRegisters #(
             reset = 8'h00;
         } CNT[7:0];
     } TARGET_ERR_CNT_RI_UNSUPPORTED;
+
+    reg {
+        name = "Recovery Interface RX FIFO Overflow Error Counter";
+        desc = "Counts Recovery Interface RX FIFO overflow errors. Saturates at 255. Write 0 to clear.";
+        field {
+            name = "CNT";
+            desc = "Error count (saturates at 255). Write 0 to clear.";
+            sw = rw;
+            hw = rw;
+            we = true;
+            reset = 8'h00;
+        } CNT[7:0];
+    } TARGET_ERR_CNT_RI_RX_FIFO_OVERFLOW;
+
+    reg {
+        name = "Recovery Interface INDIRECT FIFO Overflow Error Counter";
+        desc = "Counts Recovery Interface INDIRECT FIFO overflow errors. Saturates at 255. Write 0 to clear.";
+        field {
+            name = "CNT";
+            desc = "Error count (saturates at 255). Write 0 to clear.";
+            sw = rw;
+            hw = rw;
+            we = true;
+            reset = 8'h00;
+        } CNT[7:0];
+    } TARGET_ERR_CNT_RI_INDIRECT_FIFO_OVERFLOW;
 
     external reg {
         name = "TTI RX Descriptor Queue Port";

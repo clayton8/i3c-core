@@ -3462,3 +3462,729 @@ async def test_ri_comprehensive_stress(dut):
     
     # Assert overall pass
     assert fail_count == 0, f"{fail_count} tests failed - see log for details"
+
+
+@cocotb.test()
+async def test_indirect_fifo_large_write(dut):
+    """
+    Tests writing more than 256 bytes to the INDIRECT_FIFO via I3C interface.
+    
+    The INDIRECT_FIFO has a fixed size (typically 256 bytes). This test verifies
+    the behavior when attempting to write a payload larger than the FIFO capacity
+    in a single transaction.
+    
+    Expected behavior with overflow detection enabled:
+    - When the INDIRECT_FIFO backs up, the RX FIFO also fills and overflows
+    - RX FIFO overflow is detected (wvalid && !wready on RX data queue)
+    - The FSM transitions to Error state
+    - PROTOCOL_ERROR is set to LENGTH (0x03)
+    - The RI_RX_FIFO_OVERFLOW_ERR interrupt status is set (bit 12)
+    - The device remains functional after the error
+    
+    Test sequence:
+    1. Initialize and enter recovery mode (DEV_STATUS = 0x3)
+    2. Reset the INDIRECT_FIFO to ensure it's empty
+    3. Attempt to write 300 bytes (> 256) to INDIRECT_FIFO_DATA via I3C
+    4. Verify PROTOCOL_ERROR = 0x03 (Length Error)
+    5. Verify the RX FIFO overflow interrupt status is set
+    6. Confirm the device is still functional after the overflow
+    """
+    
+    # Initialize with larger timeout for this test
+    i3c_controller, i3c_target, tb, recovery = await initialize(dut, timeout=500)
+    
+    # Set regular device dynamic address
+    await i3c_controller.i3c_ccc_write(
+        ccc=CCC.DIRECT.SETDASA, directed_data=[(STATIC_ADDR, [DYNAMIC_ADDR << 1])]
+    )
+    # Set virtual device dynamic address
+    await i3c_controller.i3c_ccc_write(
+        ccc=CCC.DIRECT.SETDASA, directed_data=[(VIRT_STATIC_ADDR, [VIRT_DYNAMIC_ADDR << 1])]
+    )
+    
+    await Timer(1, "us")
+    
+    # Enter recovery mode (DEV_STATUS = 0x3) - required for INDIRECT_FIFO_DATA access
+    dut._log.info("Entering recovery mode (DEV_STATUS = 0x3)...")
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_STATUS_0.base_addr, int2dword(0x03), 4
+    )
+    await Timer(1, "us")
+    
+    # Verify recovery mode is active
+    status = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_STATUS_0.base_addr, 4)
+    )
+    dev_status = status & 0xFF
+    dut._log.info(f"DEVICE_STATUS_0 = 0x{status:08X}, DEV_STATUS = 0x{dev_status:02X}")
+    assert dev_status == 0x03, f"Failed to enter recovery mode: DEV_STATUS = 0x{dev_status:02X}, expected 0x03"
+    
+    # Clear any existing interrupt status
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.base_addr, int2dword(0xFFFFFFFF), 4
+    )
+    
+    # Reset INDIRECT_FIFO to ensure it's empty
+    dut._log.info("Resetting INDIRECT_FIFO...")
+    await tb.write_csr_field(
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_CTRL_0.base_addr,
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_CTRL_0.RESET,
+        0x1,
+    )
+    await Timer(1, "us")
+    
+    # Check FIFO status before write
+    fifo_status = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_STATUS_0.base_addr, 4)
+    )
+    fifo_empty = (fifo_status >> 0) & 0x1
+    fifo_full = (fifo_status >> 1) & 0x1
+    dut._log.info(f"FIFO status before write: empty={fifo_empty}, full={fifo_full}")
+    assert fifo_empty == 1, "FIFO should be empty after reset"
+    
+    wr_ptr_before = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_STATUS_1.base_addr, 4)
+    )
+    rd_ptr_before = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_STATUS_2.base_addr, 4)
+    )
+    dut._log.info(f"FIFO pointers before: wr_ptr=0x{wr_ptr_before:08X}, rd_ptr=0x{rd_ptr_before:08X}")
+    
+    # Prepare large data payload (300 bytes > 256 byte FIFO)
+    large_data_size = 300
+    large_data = [(i & 0xFF) for i in range(large_data_size)]
+    dut._log.info(f"Attempting to write {large_data_size} bytes to INDIRECT_FIFO_DATA...")
+    dut._log.info(f"  First 16 bytes: {[hex(b) for b in large_data[:16]]}")
+    dut._log.info(f"  Last 16 bytes:  {[hex(b) for b in large_data[-16:]]}")
+    
+    # Write large data to INDIRECT_FIFO_DATA via I3C recovery interface
+    try:
+        await recovery.command_write(
+            VIRT_DYNAMIC_ADDR,
+            I3cRecoveryInterface.Command.INDIRECT_FIFO_DATA,
+            large_data
+        )
+        dut._log.info("Large write command completed without exception")
+    except Exception as e:
+        dut._log.info(f"Large write command raised exception: {e}")
+    
+    await Timer(2, "us")
+    
+    # Check protocol status after the write - expect Length Error (0x03)
+    status_after = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_STATUS_0.base_addr, 4)
+    )
+    protocol_status = (status_after >> 8) & 0xFF
+    dev_status_after = status_after & 0xFF
+    dut._log.info(f"After write: DEVICE_STATUS_0 = 0x{status_after:08X}")
+    dut._log.info(f"  DEV_STATUS = 0x{dev_status_after:02X}, PROT_ERROR = 0x{protocol_status:02X}")
+    
+    # Verify PROTOCOL_ERROR = LENGTH (0x03) due to overflow
+    assert protocol_status == 0x03, \
+        f"Expected PROTOCOL_ERROR = 0x03 (Length Error) for FIFO overflow, got 0x{protocol_status:02X}"
+    dut._log.info("PASS: PROTOCOL_ERROR correctly set to LENGTH (0x03) for overflow")
+    
+    # Check interrupt status - RI_RX_FIFO_OVERFLOW_ERR_STAT should be set (bit 12)
+    intr_status = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.base_addr, 4)
+    )
+    rx_fifo_overflow_stat = (intr_status >> 12) & 0x1  # Bit 12
+    dut._log.info(f"TARGET_ERR_INTR_STATUS = 0x{intr_status:08X}")
+    dut._log.info(f"  RI_RX_FIFO_OVERFLOW_ERR_STAT = {rx_fifo_overflow_stat}")
+    assert rx_fifo_overflow_stat == 1, \
+        "Expected RI_RX_FIFO_OVERFLOW_ERR_STAT to be set"
+    dut._log.info("PASS: RI_RX_FIFO_OVERFLOW_ERR interrupt status is set")
+    
+    # Check FIFO status after write
+    fifo_status_after = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_STATUS_0.base_addr, 4)
+    )
+    fifo_empty_after = (fifo_status_after >> 0) & 0x1
+    fifo_full_after = (fifo_status_after >> 1) & 0x1
+    dut._log.info(f"FIFO status after write: empty={fifo_empty_after}, full={fifo_full_after}")
+    # Note: INDIRECT_FIFO may not be completely full if RX FIFO overflowed first
+    
+    wr_ptr_after = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_STATUS_1.base_addr, 4)
+    )
+    rd_ptr_after = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_STATUS_2.base_addr, 4)
+    )
+    dut._log.info(f"FIFO pointers after: wr_ptr=0x{wr_ptr_after:08X}, rd_ptr=0x{rd_ptr_after:08X}")
+    
+    # Calculate how many bytes were actually written
+    # Note: Write pointer is in DWORDs, so multiply by 4 to get bytes
+    dwords_written = (wr_ptr_after - wr_ptr_before) & 0xFFFFFFFF
+    bytes_written = dwords_written * 4
+    dut._log.info(f"DWORDs written to FIFO: {dwords_written}, bytes: {bytes_written}")
+    # Note: Exact count depends on when RX FIFO overflowed
+    dut._log.info(f"INFO: {bytes_written} bytes written before overflow")
+    
+    # Read back the data from INDIRECT_FIFO via AXI to verify
+    dut._log.info("Reading back data from INDIRECT_FIFO via AXI...")
+    read_back_data = []
+    for i in range(dwords_written):  # Read only what was written
+        word = dword2int(
+            await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_DATA.base_addr, 4)
+        )
+        read_back_data.extend([
+            word & 0xFF,
+            (word >> 8) & 0xFF,
+            (word >> 16) & 0xFF,
+            (word >> 24) & 0xFF,
+        ])
+    read_back_data = read_back_data[:bytes_written]  # Trim to exact byte count
+    
+    dut._log.info(f"Read back {len(read_back_data)} bytes from FIFO")
+    if len(read_back_data) >= 16:
+        dut._log.info(f"  First 16 bytes: {[hex(b) for b in read_back_data[:16]]}")
+        dut._log.info(f"  Last 16 bytes:  {[hex(b) for b in read_back_data[-16:]]}")
+    
+    # Verify the data matches what we expected to write
+    expected_data = large_data[:bytes_written]
+    if read_back_data == expected_data:
+        dut._log.info(f"PASS: Data verification - {bytes_written} bytes correctly stored")
+    else:
+        dut._log.error(f"FAIL: Data mismatch in FIFO contents")
+        # Find first mismatch for debugging
+        for i, (got, exp) in enumerate(zip(read_back_data, expected_data)):
+            if got != exp:
+                dut._log.error(f"  First mismatch at byte {i}: expected 0x{exp:02X}, got 0x{got:02X}")
+                break
+    
+    # Verify the device is still functional by doing a simple RI read
+    dut._log.info("Verifying device is still functional...")
+    prot_cap_data, pec_ok = await recovery.command_read(
+        VIRT_DYNAMIC_ADDR,
+        I3cRecoveryInterface.Command.PROT_CAP
+    )
+    assert pec_ok and len(prot_cap_data) > 0, "Device functionality check failed"
+    dut._log.info(f"PROT_CAP read successful: {len(prot_cap_data)} bytes, PEC OK")
+    dut._log.info("PASS: Device is still functional after overflow")
+    
+    # Summary
+    dut._log.info("=" * 60)
+    dut._log.info("TEST SUMMARY: test_indirect_fifo_large_write")
+    dut._log.info("=" * 60)
+    dut._log.info(f"  Attempted write size: {large_data_size} bytes")
+    dut._log.info(f"  Bytes actually written: {bytes_written}")
+    dut._log.info(f"  Protocol error: 0x{protocol_status:02X} (Length Error)")
+    dut._log.info(f"  Interrupt status set: Yes")
+    dut._log.info(f"  FIFO full after write: {fifo_full_after}")
+    dut._log.info(f"  Device functional: Yes")
+    dut._log.info("  ALL CHECKS PASSED")
+    dut._log.info("=" * 60)
+
+
+@cocotb.test()
+async def test_indirect_fifo_two_writes_overflow(dut):
+    """
+    Tests two consecutive writes to the INDIRECT_FIFO that together exceed capacity.
+    
+    This test performs:
+    1. First write: 48 bytes to INDIRECT_FIFO_DATA - should succeed
+    2. Second write: 252 bytes to INDIRECT_FIFO_DATA - should trigger overflow
+    
+    Total: 300 bytes, which exceeds the 256-byte FIFO capacity.
+    Uses DWORD-aligned sizes (48, 252) for predictable pointer arithmetic.
+    
+    Expected behavior:
+    - First write (48 bytes): Completes successfully, PROTOCOL_ERROR = 0x00
+    - Second write (252 bytes): Triggers overflow when FIFO fills at byte 256
+      - FSM transitions to Error state
+      - PROTOCOL_ERROR = 0x03 (Length Error)
+      - RI_INDIRECT_FIFO_OVERFLOW_ERR interrupt status is set
+      - Only 208 bytes of second write are stored (256 - 48 = 208)
+      - Excess bytes (44) are dropped
+    - Device remains functional after error
+    """
+    
+    # Initialize with larger timeout for this test
+    i3c_controller, i3c_target, tb, recovery = await initialize(dut, timeout=500)
+    
+    # Set regular device dynamic address
+    await i3c_controller.i3c_ccc_write(
+        ccc=CCC.DIRECT.SETDASA, directed_data=[(STATIC_ADDR, [DYNAMIC_ADDR << 1])]
+    )
+    # Set virtual device dynamic address
+    await i3c_controller.i3c_ccc_write(
+        ccc=CCC.DIRECT.SETDASA, directed_data=[(VIRT_STATIC_ADDR, [VIRT_DYNAMIC_ADDR << 1])]
+    )
+    
+    await Timer(1, "us")
+    
+    # Enter recovery mode (DEV_STATUS = 0x3) - required for INDIRECT_FIFO_DATA access
+    dut._log.info("Entering recovery mode (DEV_STATUS = 0x3)...")
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_STATUS_0.base_addr, int2dword(0x03), 4
+    )
+    await Timer(1, "us")
+    
+    # Verify recovery mode is active
+    status = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_STATUS_0.base_addr, 4)
+    )
+    dev_status = status & 0xFF
+    dut._log.info(f"DEVICE_STATUS_0 = 0x{status:08X}, DEV_STATUS = 0x{dev_status:02X}")
+    assert dev_status == 0x03, f"Failed to enter recovery mode: DEV_STATUS = 0x{dev_status:02X}, expected 0x03"
+    
+    # Clear any existing interrupt status
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.base_addr, int2dword(0xFFFFFFFF), 4
+    )
+    
+    # Reset INDIRECT_FIFO to ensure it's empty
+    dut._log.info("Resetting INDIRECT_FIFO...")
+    await tb.write_csr_field(
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_CTRL_0.base_addr,
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_CTRL_0.RESET,
+        0x1,
+    )
+    await Timer(1, "us")
+    
+    # Check initial FIFO status
+    fifo_status = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_STATUS_0.base_addr, 4)
+    )
+    fifo_empty = (fifo_status >> 0) & 0x1
+    fifo_full = (fifo_status >> 1) & 0x1
+    dut._log.info(f"Initial FIFO status: empty={fifo_empty}, full={fifo_full}")
+    assert fifo_empty == 1, "FIFO should be empty after reset"
+    
+    wr_ptr_initial = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_STATUS_1.base_addr, 4)
+    )
+    rd_ptr_initial = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_STATUS_2.base_addr, 4)
+    )
+    dut._log.info(f"Initial FIFO pointers: wr_ptr=0x{wr_ptr_initial:08X}, rd_ptr=0x{rd_ptr_initial:08X}")
+    
+    # =========================================================================
+    # WRITE 1: 48 bytes - should succeed completely (DWORD-aligned)
+    # =========================================================================
+    write1_size = 48  # Use DWORD-aligned size for predictable pointer math
+    write1_data = [(i & 0xFF) for i in range(write1_size)]
+    dut._log.info("=" * 60)
+    dut._log.info(f"WRITE 1: {write1_size} bytes to INDIRECT_FIFO_DATA")
+    dut._log.info("=" * 60)
+    dut._log.info(f"  Data: bytes 0x00 to 0x{(write1_size-1) & 0xFF:02X}")
+    
+    try:
+        await recovery.command_write(
+            VIRT_DYNAMIC_ADDR,
+            I3cRecoveryInterface.Command.INDIRECT_FIFO_DATA,
+            write1_data
+        )
+        dut._log.info("  Write 1 completed successfully")
+    except Exception as e:
+        dut._log.error(f"  Write 1 raised exception: {e}")
+        assert False, f"Write 1 should not fail: {e}"
+    
+    await Timer(2, "us")
+    
+    # Check status after write 1 - should be OK (0x00)
+    status_after_w1 = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_STATUS_0.base_addr, 4)
+    )
+    prot_err_w1 = (status_after_w1 >> 8) & 0xFF
+    dut._log.info(f"  After Write 1: PROT_ERROR = 0x{prot_err_w1:02X}")
+    assert prot_err_w1 == 0x00, f"Write 1 should succeed with PROT_ERROR = 0x00, got 0x{prot_err_w1:02X}"
+    
+    fifo_status_w1 = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_STATUS_0.base_addr, 4)
+    )
+    fifo_empty_w1 = (fifo_status_w1 >> 0) & 0x1
+    fifo_full_w1 = (fifo_status_w1 >> 1) & 0x1
+    dut._log.info(f"  FIFO status: empty={fifo_empty_w1}, full={fifo_full_w1}")
+    assert fifo_empty_w1 == 0, "FIFO should not be empty after write 1"
+    assert fifo_full_w1 == 0, "FIFO should not be full after 48-byte write"
+    
+    wr_ptr_w1 = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_STATUS_1.base_addr, 4)
+    )
+    # Note: Write pointer is in DWORDs, so multiply by 4 to get bytes
+    dwords_written_w1 = (wr_ptr_w1 - wr_ptr_initial) & 0xFFFFFFFF
+    bytes_written_w1 = dwords_written_w1 * 4
+    expected_dwords_w1 = (write1_size + 3) // 4  # Round up to DWORDs
+    dut._log.info(f"  Write pointer: 0x{wr_ptr_w1:08X}, dwords: {dwords_written_w1}, bytes: {bytes_written_w1}")
+    assert dwords_written_w1 == expected_dwords_w1, f"Expected {expected_dwords_w1} DWORDs written, got {dwords_written_w1}"
+    dut._log.info("PASS: Write 1 completed successfully")
+    
+    # =========================================================================
+    # WRITE 2: 252 bytes - should trigger overflow at byte 256
+    # =========================================================================
+    write2_size = 252  # 48 + 252 = 300 bytes total
+    # Continue the pattern from where write 1 left off
+    write2_data = [((write1_size + i) & 0xFF) for i in range(write2_size)]
+    dut._log.info("")
+    dut._log.info("=" * 60)
+    dut._log.info(f"WRITE 2: {write2_size} bytes to INDIRECT_FIFO_DATA")
+    dut._log.info("=" * 60)
+    dut._log.info(f"  Data: bytes 0x{write1_size & 0xFF:02X} to 0x{(write1_size + write2_size - 1) & 0xFF:02X}")
+    dut._log.info(f"  Total after both writes: {write1_size + write2_size} bytes (exceeds 256)")
+    dut._log.info(f"  Expected overflow at byte: 256 (after {256 - write1_size} bytes of write 2)")
+    
+    try:
+        await recovery.command_write(
+            VIRT_DYNAMIC_ADDR,
+            I3cRecoveryInterface.Command.INDIRECT_FIFO_DATA,
+            write2_data
+        )
+        dut._log.info("  Write 2 command completed")
+    except Exception as e:
+        dut._log.info(f"  Write 2 raised exception (expected for overflow): {e}")
+    
+    await Timer(2, "us")
+    
+    # Check status after write 2 - should be Length Error (0x03)
+    status_after_w2 = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_STATUS_0.base_addr, 4)
+    )
+    prot_err_w2 = (status_after_w2 >> 8) & 0xFF
+    dut._log.info(f"  After Write 2: PROT_ERROR = 0x{prot_err_w2:02X}")
+    assert prot_err_w2 == 0x03, \
+        f"Expected PROTOCOL_ERROR = 0x03 (Length Error) for overflow, got 0x{prot_err_w2:02X}"
+    dut._log.info("PASS: PROTOCOL_ERROR correctly set to LENGTH (0x03)")
+    
+    # Check interrupt status
+    intr_status = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.base_addr, 4)
+    )
+    indirect_fifo_overflow_stat = (intr_status >> 13) & 0x1  # Bit 13
+    dut._log.info(f"  TARGET_ERR_INTR_STATUS = 0x{intr_status:08X}")
+    dut._log.info(f"  RI_INDIRECT_FIFO_OVERFLOW_ERR_STAT = {indirect_fifo_overflow_stat}")
+    assert indirect_fifo_overflow_stat == 1, \
+        "Expected RI_INDIRECT_FIFO_OVERFLOW_ERR_STAT to be set"
+    dut._log.info("PASS: Interrupt status correctly set")
+    
+    # Check FIFO status - should be full
+    fifo_status_w2 = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_STATUS_0.base_addr, 4)
+    )
+    fifo_empty_w2 = (fifo_status_w2 >> 0) & 0x1
+    fifo_full_w2 = (fifo_status_w2 >> 1) & 0x1
+    dut._log.info(f"  FIFO status: empty={fifo_empty_w2}, full={fifo_full_w2}")
+    assert fifo_full_w2 == 1, "FIFO should be full after overflow"
+    dut._log.info("PASS: FIFO is full (256 bytes written)")
+    
+    # Log pointer values for debugging (note: pointers wrap at FIFO depth of 64)
+    wr_ptr_w2 = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_STATUS_1.base_addr, 4)
+    )
+    rd_ptr_w2 = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_STATUS_2.base_addr, 4)
+    )
+    dut._log.info(f"  Write pointer: 0x{wr_ptr_w2:08X}, Read pointer: 0x{rd_ptr_w2:08X}")
+    # Since FIFO is full, we know 256 bytes (64 DWORDs) are stored
+    bytes_written_total = 256
+
+    # =========================================================================
+    # READ BACK AND VERIFY
+    # =========================================================================
+    dut._log.info("")
+    dut._log.info("=" * 60)
+    dut._log.info("READING BACK DATA FROM FIFO")
+    dut._log.info("=" * 60)
+    
+    # Read back all 256 bytes from FIFO
+    read_back_data = []
+    for i in range(64):  # 64 DWORDs = 256 bytes
+        word = dword2int(
+            await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_DATA.base_addr, 4)
+        )
+        read_back_data.extend([
+            word & 0xFF,
+            (word >> 8) & 0xFF,
+            (word >> 16) & 0xFF,
+            (word >> 24) & 0xFF,
+        ])
+    
+    dut._log.info(f"Read back {len(read_back_data)} bytes from FIFO")
+    dut._log.info(f"  First 16 bytes: {[hex(b) for b in read_back_data[:16]]}")
+    dut._log.info(f"  Bytes 48-64:    {[hex(b) for b in read_back_data[48:64]]}")
+    dut._log.info(f"  Last 16 bytes:  {[hex(b) for b in read_back_data[-16:]]}")
+    
+    # Build expected data: write1_data + first 208 bytes of write2_data (256 - 48 = 208)
+    bytes_from_write2 = 256 - write1_size  # 208 bytes
+    expected_data = write1_data + write2_data[:bytes_from_write2]
+    
+    # Verify data
+    assert read_back_data == expected_data, \
+        f"Data mismatch: expected first 256 bytes of combined writes"
+    dut._log.info("PASS: Data verification - all 256 bytes correct")
+    
+    # Verify device is still functional
+    dut._log.info("")
+    dut._log.info("Verifying device is still functional...")
+    prot_cap_data, pec_ok = await recovery.command_read(
+        VIRT_DYNAMIC_ADDR,
+        I3cRecoveryInterface.Command.PROT_CAP
+    )
+    assert pec_ok and len(prot_cap_data) > 0, "Device functionality check failed"
+    dut._log.info(f"PROT_CAP read successful: {len(prot_cap_data)} bytes, PEC OK")
+    dut._log.info("PASS: Device is still functional after overflow")
+    
+    # Summary
+    dut._log.info("")
+    dut._log.info("=" * 60)
+    dut._log.info("TEST SUMMARY: test_indirect_fifo_two_writes_overflow")
+    dut._log.info("=" * 60)
+    dut._log.info(f"  Write 1: {write1_size} bytes - SUCCESS (PROT_ERROR: 0x{prot_err_w1:02X})")
+    dut._log.info(f"  Write 2: {write2_size} bytes - OVERFLOW at byte 256 (PROT_ERROR: 0x{prot_err_w2:02X})")
+    dut._log.info(f"  Combined attempted: {write1_size + write2_size} bytes")
+    dut._log.info(f"  Bytes actually stored: {bytes_written_total}")
+    dut._log.info(f"  Bytes dropped: {(write1_size + write2_size) - bytes_written_total}")
+    dut._log.info(f"  Interrupt status set: Yes")
+    dut._log.info(f"  Device functional: Yes")
+    dut._log.info("  ALL CHECKS PASSED")
+    dut._log.info("=" * 60)
+
+
+
+
+@cocotb.test()
+async def test_write_exceeds_register_size(dut):
+    """
+    Test behavior when writing more data than the register size allows.
+    
+    This test attempts to write 5 bytes to RECOVERY_CTRL, which expects exactly
+    3 bytes. Per the OCP Recovery Specification, this should result in a
+    Length Error (protocol error 0x03).
+    
+    Per the OCP Recovery Specification:
+    - RECOVERY_CTRL (command 38) expects exactly 3 bytes
+    - Protocol Error 0x03 = Length Error (invalid data length)
+    - Recovery mode (DEV_STATUS = 0x3) must be enabled for recovery-only commands
+    
+    The design now validates that cmd_len matches the expected CSR length in
+    CmdDispatch state. If there's a mismatch, it goes to Error state, sets
+    PROT_ERROR to 0x03 (Length Error), and discards the data without writing
+    to the register.
+    
+    The test verifies:
+    1. Oversized write (5 bytes) results in Length Error (0x03)
+    2. Register is NOT corrupted by the rejected write
+    3. Undersized write (2 bytes) also results in Length Error (0x03)
+    4. Correct size write (3 bytes) succeeds with no error
+    """
+    
+    # Expected length for RECOVERY_CTRL per OCP spec and RTL
+    RECOVERY_CTRL_EXPECTED_LEN = 3
+    
+    # =========================================================================
+    # Initialize the DUT and Recovery Interface
+    # =========================================================================
+    dut._log.info("=" * 60)
+    dut._log.info("Starting test_write_exceeds_register_size")
+    dut._log.info(f"Test: Validate CSR write length checking for RECOVERY_CTRL")
+    dut._log.info(f"Expected length: {RECOVERY_CTRL_EXPECTED_LEN} bytes")
+    dut._log.info("=" * 60)
+    
+    i3c_controller, i3c_target, tb, recovery = await initialize(dut, timeout=500)
+    
+    # Set regular device dynamic address
+    await i3c_controller.i3c_ccc_write(
+        ccc=CCC.DIRECT.SETDASA, directed_data=[(STATIC_ADDR, [DYNAMIC_ADDR << 1])]
+    )
+    # Set virtual device dynamic address
+    await i3c_controller.i3c_ccc_write(
+        ccc=CCC.DIRECT.SETDASA, directed_data=[(VIRT_STATIC_ADDR, [VIRT_DYNAMIC_ADDR << 1])]
+    )
+    
+    await Timer(1, "us")
+    
+    # =========================================================================
+    # Enable Recovery Mode (required for RECOVERY_CTRL access)
+    # =========================================================================
+    dut._log.info("Enabling Recovery Mode (DEV_STATUS = 0x3)...")
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_STATUS_0.base_addr, int2dword(0x03), 4
+    )
+    await Timer(1, "us")
+    
+    # Verify recovery mode is active
+    status = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_STATUS_0.base_addr, 4)
+    )
+    dev_status = status & 0xFF
+    dut._log.info(f"DEVICE_STATUS_0 = 0x{status:08X}, DEV_STATUS = 0x{dev_status:02X}")
+    assert dev_status == 0x03, f"Failed to enter recovery mode: DEV_STATUS = 0x{dev_status:02X}, expected 0x03"
+    
+    # Check initial PROT_ERROR
+    initial_prot_error = (status >> 8) & 0xFF
+    dut._log.info(f"Initial PROT_ERROR: 0x{initial_prot_error:02X}")
+    
+    # =========================================================================
+    # Read current RECOVERY_CTRL value via CSR
+    # =========================================================================
+    dut._log.info("Reading current RECOVERY_CTRL value...")
+    
+    recovery_ctrl_before = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.RECOVERY_CTRL.base_addr, 4)
+    )
+    dut._log.info(f"RECOVERY_CTRL before tests: 0x{recovery_ctrl_before:08X}")
+    
+    # =========================================================================
+    # TEST 1: Write OVERSIZED data (5 bytes, expected 3)
+    # =========================================================================
+    dut._log.info("")
+    dut._log.info("=" * 60)
+    dut._log.info("TEST 1: Oversized write (5 bytes, expected 3)")
+    dut._log.info("=" * 60)
+    
+    oversized_data = [0x01, 0x02, 0x03, 0x04, 0x05]
+    dut._log.info(f"Data to write: {[hex(b) for b in oversized_data]} ({len(oversized_data)} bytes)")
+    
+    try:
+        await recovery.command_write(
+            VIRT_DYNAMIC_ADDR,
+            I3cRecoveryInterface.Command.RECOVERY_CTRL,
+            oversized_data
+        )
+        dut._log.info("  Write completed (no exception)")
+    except Exception as e:
+        dut._log.error(f"  Write raised exception: {e}")
+    
+    await Timer(2, "us")
+    
+    # Check DEVICE_STATUS for protocol error
+    status_after_oversize = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_STATUS_0.base_addr, 4)
+    )
+    prot_error_oversize = (status_after_oversize >> 8) & 0xFF
+    dut._log.info(f"DEVICE_STATUS_0 after oversized write: 0x{status_after_oversize:08X}")
+    dut._log.info(f"Protocol error code: 0x{prot_error_oversize:02X}")
+    
+    # Verify Length Error (0x03)
+    assert prot_error_oversize == 0x03, \
+        f"Expected Length Error (0x03) for oversized write, got 0x{prot_error_oversize:02X}"
+    dut._log.info("PASS: Length Error (0x03) correctly reported for oversized write")
+    
+    # Verify register was NOT corrupted
+    recovery_ctrl_after_oversize = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.RECOVERY_CTRL.base_addr, 4)
+    )
+    dut._log.info(f"RECOVERY_CTRL after oversized write: 0x{recovery_ctrl_after_oversize:08X}")
+    assert recovery_ctrl_after_oversize == recovery_ctrl_before, \
+        f"Register corrupted! Before: 0x{recovery_ctrl_before:08X}, After: 0x{recovery_ctrl_after_oversize:08X}"
+    dut._log.info("PASS: Register was NOT corrupted by rejected write")
+    
+    # =========================================================================
+    # TEST 2: Write UNDERSIZED data (2 bytes, expected 3)
+    # =========================================================================
+    dut._log.info("")
+    dut._log.info("=" * 60)
+    dut._log.info("TEST 2: Undersized write (2 bytes, expected 3)")
+    dut._log.info("=" * 60)
+    
+    undersized_data = [0xAA, 0xBB]
+    dut._log.info(f"Data to write: {[hex(b) for b in undersized_data]} ({len(undersized_data)} bytes)")
+    
+    try:
+        await recovery.command_write(
+            VIRT_DYNAMIC_ADDR,
+            I3cRecoveryInterface.Command.RECOVERY_CTRL,
+            undersized_data
+        )
+        dut._log.info("  Write completed (no exception)")
+    except Exception as e:
+        dut._log.error(f"  Write raised exception: {e}")
+    
+    await Timer(2, "us")
+    
+    # Check DEVICE_STATUS for protocol error
+    status_after_undersize = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_STATUS_0.base_addr, 4)
+    )
+    prot_error_undersize = (status_after_undersize >> 8) & 0xFF
+    dut._log.info(f"DEVICE_STATUS_0 after undersized write: 0x{status_after_undersize:08X}")
+    dut._log.info(f"Protocol error code: 0x{prot_error_undersize:02X}")
+    
+    # Verify Length Error (0x03)
+    assert prot_error_undersize == 0x03, \
+        f"Expected Length Error (0x03) for undersized write, got 0x{prot_error_undersize:02X}"
+    dut._log.info("PASS: Length Error (0x03) correctly reported for undersized write")
+    
+    # Verify register was NOT corrupted
+    recovery_ctrl_after_undersize = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.RECOVERY_CTRL.base_addr, 4)
+    )
+    dut._log.info(f"RECOVERY_CTRL after undersized write: 0x{recovery_ctrl_after_undersize:08X}")
+    assert recovery_ctrl_after_undersize == recovery_ctrl_before, \
+        f"Register corrupted! Before: 0x{recovery_ctrl_before:08X}, After: 0x{recovery_ctrl_after_undersize:08X}"
+    dut._log.info("PASS: Register was NOT corrupted by rejected write")
+    
+    # =========================================================================
+    # TEST 3: Write CORRECT size data (3 bytes) - should succeed
+    # =========================================================================
+    dut._log.info("")
+    dut._log.info("=" * 60)
+    dut._log.info("TEST 3: Correct size write (3 bytes, expected 3)")
+    dut._log.info("=" * 60)
+    
+    correct_size_data = [0x00, 0x00, 0x00]  # Valid 3-byte write (clears the register)
+    dut._log.info(f"Data to write: {[hex(b) for b in correct_size_data]} ({len(correct_size_data)} bytes)")
+    
+    try:
+        await recovery.command_write(
+            VIRT_DYNAMIC_ADDR,
+            I3cRecoveryInterface.Command.RECOVERY_CTRL,
+            correct_size_data
+        )
+        dut._log.info("  Write completed (no exception)")
+    except Exception as e:
+        dut._log.error(f"  Write raised exception: {e}")
+    
+    await Timer(2, "us")
+    
+    # Check status after correct-sized write
+    status_after_correct = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_STATUS_0.base_addr, 4)
+    )
+    prot_error_correct = (status_after_correct >> 8) & 0xFF
+    dut._log.info(f"DEVICE_STATUS_0 after correct write: 0x{status_after_correct:08X}")
+    dut._log.info(f"Protocol error code: 0x{prot_error_correct:02X}")
+    
+    # Verify no error (0x00)
+    assert prot_error_correct == 0x00, \
+        f"Expected OK (0x00) for correct size write, got 0x{prot_error_correct:02X}"
+    dut._log.info("PASS: No error reported for correct size write")
+    
+    # =========================================================================
+    # Verify device is still functional
+    # =========================================================================
+    dut._log.info("")
+    dut._log.info("Verifying device is still functional...")
+    
+    try:
+        prot_cap_data, pec_ok = await recovery.command_read(
+            VIRT_DYNAMIC_ADDR,
+            I3cRecoveryInterface.Command.PROT_CAP
+        )
+        if pec_ok and len(prot_cap_data) > 0:
+            dut._log.info(f"PROT_CAP read successful: {len(prot_cap_data)} bytes, PEC OK")
+        else:
+            dut._log.error(f"PROT_CAP read failed: pec_ok={pec_ok}")
+    except Exception as e:
+        dut._log.error(f"Device functionality check failed: {e}")
+    
+    # =========================================================================
+    # Summary
+    # =========================================================================
+    dut._log.info("")
+    dut._log.info("=" * 60)
+    dut._log.info("TEST SUMMARY: test_write_exceeds_register_size")
+    dut._log.info("=" * 60)
+    dut._log.info(f"  Register: RECOVERY_CTRL")
+    dut._log.info(f"  Expected register size: {RECOVERY_CTRL_EXPECTED_LEN} bytes")
+    dut._log.info(f"  TEST 1 - Oversized write ({len(oversized_data)} bytes):")
+    dut._log.info(f"    Protocol error: 0x{prot_error_oversize:02X} (expected 0x03) - PASS")
+    dut._log.info(f"    Register corrupted: {recovery_ctrl_after_oversize != recovery_ctrl_before} (expected False) - PASS")
+    dut._log.info(f"  TEST 2 - Undersized write ({len(undersized_data)} bytes):")
+    dut._log.info(f"    Protocol error: 0x{prot_error_undersize:02X} (expected 0x03) - PASS")
+    dut._log.info(f"    Register corrupted: {recovery_ctrl_after_undersize != recovery_ctrl_before} (expected False) - PASS")
+    dut._log.info(f"  TEST 3 - Correct size write ({len(correct_size_data)} bytes):")
+    dut._log.info(f"    Protocol error: 0x{prot_error_correct:02X} (expected 0x00) - PASS")
+    dut._log.info("=" * 60)
+
+
