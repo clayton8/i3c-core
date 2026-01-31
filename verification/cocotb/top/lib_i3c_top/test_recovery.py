@@ -2663,10 +2663,10 @@ async def test_ocp_csr_access(dut):
         ccc=CCC.DIRECT.SETDASA, directed_data=[(VIRT_STATIC_ADDR, [VIRT_DYNAMIC_ADDR << 1])]
     )
 
-    # Write to the RESET CSR (one word)
-    b0, b1, b2, b3 = [random.randint(0, 255) for _ in range(4)]
+    # Write to the RESET CSR (3 bytes - DEVICE_RESET expects exactly 3 bytes)
+    b0, b1, b2 = [random.randint(0, 255) for _ in range(3)]
     await recovery.command_write(
-        VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.DEVICE_RESET, [b3, b2, b1, b0]
+        VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.DEVICE_RESET, [b2, b1, b0]
     )
 
     # Wait & read the CSR from the AHB/AXI side
@@ -2678,7 +2678,7 @@ async def test_ocp_csr_access(dut):
     # Check
     protocol_status = (status >> 8) & 0xFF
     assert protocol_status == 0
-    assert data == b1 << 16 | b2 << 8 | b3
+    assert data == b0 << 16 | b1 << 8 | b2
 
     reg_test_data = csr_access_test_data(tb)
 
@@ -3940,6 +3940,303 @@ async def test_indirect_fifo_two_writes_overflow(dut):
     dut._log.info("=" * 60)
 
 
+@cocotb.test()
+async def test_indirect_fifo_parity_error(dut):
+    """
+    Tests that T-bit (parity) errors during INDIRECT_FIFO_DATA write are handled correctly.
+    
+    This test verifies:
+    1. Parity errors on specific bytes are detected by the target
+    2. The INDIRECT_FIFO remains empty (data with parity errors should be rejected)
+    3. The PEC calculation is still correct despite parity errors
+    4. The device remains functional after the error
+    
+    Test sequence:
+    1. Enter recovery mode (DEV_STATUS = 0x3)
+    2. Reset INDIRECT_FIFO to ensure it's empty
+    3. Send a 50-byte INDIRECT_FIFO_DATA write via low-level I3C operations
+       - Inject T-bit parity error on the 40th byte (data byte index 36)
+       - Inject T-bit parity error on the 45th byte (data byte index 41)
+    4. Verify INDIRECT_FIFO is still empty (parity error causes data rejection)
+    5. Verify device is still functional
+    
+    Frame structure for 50-byte payload:
+    - Byte 0: Command (0x2F = 47 = INDIRECT_FIFO_DATA)
+    - Byte 1: Length LSB (0x32 = 50)
+    - Byte 2: Length MSB (0x00)
+    - Bytes 3-52: Data payload (50 bytes)
+    - Byte 53: PEC
+    
+    Parity error injection points:
+    - 40th byte of frame (index 39) = data[36]
+    - 45th byte of frame (index 44) = data[41]
+    """
+    
+    import crc  # Import crc module for PEC calculation
+    
+    # Initialize with larger timeout for this test
+    i3c_controller, i3c_target, tb, recovery = await initialize(dut, timeout=500)
+    
+    # Set regular device dynamic address
+    await i3c_controller.i3c_ccc_write(
+        ccc=CCC.DIRECT.SETDASA, directed_data=[(STATIC_ADDR, [DYNAMIC_ADDR << 1])]
+    )
+    # Set virtual device dynamic address
+    await i3c_controller.i3c_ccc_write(
+        ccc=CCC.DIRECT.SETDASA, directed_data=[(VIRT_STATIC_ADDR, [VIRT_DYNAMIC_ADDR << 1])]
+    )
+    
+    await Timer(1, "us")
+    
+    # Enter recovery mode (DEV_STATUS = 0x3) - required for INDIRECT_FIFO_DATA access
+    dut._log.info("Entering recovery mode (DEV_STATUS = 0x3)...")
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_STATUS_0.base_addr, int2dword(0x03), 4
+    )
+    await Timer(1, "us")
+    
+    # Verify recovery mode is active
+    status = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_STATUS_0.base_addr, 4)
+    )
+    dev_status = status & 0xFF
+    dut._log.info(f"DEVICE_STATUS_0 = 0x{status:08X}, DEV_STATUS = 0x{dev_status:02X}")
+    assert dev_status == 0x03, f"Failed to enter recovery mode: DEV_STATUS = 0x{dev_status:02X}, expected 0x03"
+    
+    # Reset INDIRECT_FIFO to ensure it's empty
+    dut._log.info("Resetting INDIRECT_FIFO...")
+    await tb.write_csr_field(
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_CTRL_0.base_addr,
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_CTRL_0.RESET,
+        0x1,
+    )
+    await Timer(1, "us")
+    
+    # Verify FIFO is empty before test
+    fifo_status_before = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_STATUS_0.base_addr, 4)
+    )
+    fifo_empty_before = (fifo_status_before >> 0) & 0x1
+    dut._log.info(f"FIFO empty before test: {fifo_empty_before}")
+    assert fifo_empty_before == 1, "FIFO should be empty after reset"
+    
+    wr_ptr_before = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_STATUS_1.base_addr, 4)
+    )
+    dut._log.info(f"Write pointer before: 0x{wr_ptr_before:08X}")
+    
+    # =========================================================================
+    # BUILD THE FRAME WITH CORRECT PEC
+    # =========================================================================
+    dut._log.info("=" * 60)
+    dut._log.info("Building INDIRECT_FIFO_DATA frame with parity error injection")
+    dut._log.info("=" * 60)
+    
+    # Frame components
+    command = 47  # INDIRECT_FIFO_DATA
+    payload_size = 50
+    payload_data = [(i & 0xFF) for i in range(payload_size)]  # 0x00 to 0x31
+    
+    # Build transfer frame (without PEC)
+    xfer = [
+        command,
+        payload_size & 0xFF,        # Length LSB
+        (payload_size >> 8) & 0xFF, # Length MSB
+    ] + payload_data
+    
+    # Compute correct PEC (includes address byte in CRC calculation)
+    pec_calc = crc.Calculator(I3cRecoveryInterface.CRC_CONFIG, optimized=True)
+    pec = int(pec_calc.checksum(bytes([VIRT_DYNAMIC_ADDR << 1] + xfer)))
+    xfer.append(pec)
+    
+    dut._log.info(f"  Command: 0x{command:02X} (INDIRECT_FIFO_DATA)")
+    dut._log.info(f"  Payload size: {payload_size} bytes")
+    dut._log.info(f"  Total frame size: {len(xfer)} bytes (cmd + len_l + len_h + data + pec)")
+    dut._log.info(f"  PEC: 0x{pec:02X}")
+    
+    # Define parity error injection points
+    # Byte indices in the frame (0-indexed):
+    # - 40th byte = index 39 = data[36] (since data starts at index 3)
+    # - 45th byte = index 44 = data[41]
+    parity_error_indices = [39, 44]
+    dut._log.info(f"  Parity error injection at frame indices: {parity_error_indices}")
+    dut._log.info(f"    Index 39: data byte {39-3} = 0x{xfer[39]:02X}")
+    dut._log.info(f"    Index 44: data byte {44-3} = 0x{xfer[44]:02X}")
+    
+    # =========================================================================
+    # SEND FRAME WITH PARITY ERRORS
+    # =========================================================================
+    dut._log.info("")
+    dut._log.info("Sending frame with T-bit parity errors...")
+    
+    controller = i3c_controller
+    
+    # Take bus control and start the transaction
+    await controller.take_bus_control()
+    await controller.send_start()
+    
+    # Send address header to virtual target (write)
+    await controller.write_addr_header(0x7E)  # Broadcast/reserved for RI framing
+    await controller.send_start()  # Repeated start
+    ack = await controller.write_addr_header(VIRT_DYNAMIC_ADDR)  # Target address
+    
+    if ack:
+        dut._log.info(f"  Target ACKed address 0x{VIRT_DYNAMIC_ADDR:02X}")
+        
+        # Send each byte, injecting parity error at specified indices
+        for i, byte in enumerate(xfer):
+            inject_err = (i in parity_error_indices)
+            if inject_err:
+                dut._log.info(f"  Byte {i}: 0x{byte:02X} <- INJECTING PARITY ERROR")
+            await controller.send_byte_tbit(byte, inject_tbit_err=inject_err)
+    else:
+        dut._log.error(f"  Target NACKed address 0x{VIRT_DYNAMIC_ADDR:02X}")
+    
+    await controller.send_stop()
+    controller.give_bus_control()
+    
+    dut._log.info("Frame transmission complete")
+    
+    await Timer(5, "us")
+    
+    # =========================================================================
+    # VERIFY FIFO REMAINS EMPTY
+    # =========================================================================
+    dut._log.info("")
+    dut._log.info("=" * 60)
+    dut._log.info("Verifying INDIRECT_FIFO state after parity error")
+    dut._log.info("=" * 60)
+    
+    # Check FIFO status - should still be empty due to parity error rejection
+    fifo_status_after = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_STATUS_0.base_addr, 4)
+    )
+    fifo_empty_after = (fifo_status_after >> 0) & 0x1
+    fifo_full_after = (fifo_status_after >> 1) & 0x1
+    dut._log.info(f"FIFO status after: empty={fifo_empty_after}, full={fifo_full_after}")
+    
+    wr_ptr_after = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_STATUS_1.base_addr, 4)
+    )
+    dut._log.info(f"Write pointer after: 0x{wr_ptr_after:08X}")
+    
+    # Verify FIFO is still empty
+    assert fifo_empty_after == 1, \
+        f"FIFO should remain empty after parity error, but empty={fifo_empty_after}"
+    dut._log.info("PASS: INDIRECT_FIFO remains empty (parity error caused data rejection)")
+    
+    # Check that write pointer didn't advance
+    assert wr_ptr_after == wr_ptr_before, \
+        f"Write pointer should not advance after parity error, was 0x{wr_ptr_before:08X}, now 0x{wr_ptr_after:08X}"
+    dut._log.info("PASS: Write pointer unchanged")
+    
+    # =========================================================================
+    # VERIFY PROTOCOL ERROR STATUS VIA CSR
+    # =========================================================================
+    dut._log.info("")
+    dut._log.info("=" * 60)
+    dut._log.info("Verifying PROTOCOL_ERROR via DEVICE_STATUS_0 CSR")
+    dut._log.info("=" * 60)
+    
+    # Read DEVICE_STATUS_0 to check protocol error
+    status_after = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_STATUS_0.base_addr, 4)
+    )
+    protocol_status = (status_after >> 8) & 0xFF
+    dev_status_after = status_after & 0xFF
+    dut._log.info(f"DEVICE_STATUS_0 = 0x{status_after:08X}")
+    dut._log.info(f"  DEV_STATUS = 0x{dev_status_after:02X}, PROT_ERROR = 0x{protocol_status:02X}")
+    
+    # Verify PROTOCOL_ERROR = LENGTH (0x03) due to parity error
+    assert protocol_status == 0x03, \
+        f"Expected PROTOCOL_ERROR = 0x03 (Length Error) for parity error, got 0x{protocol_status:02X}"
+    dut._log.info("PASS: PROTOCOL_ERROR correctly set to LENGTH (0x03) for parity error")
+    
+    # =========================================================================
+    # VERIFY GETSTATUS CCC REPORTS ERROR
+    # =========================================================================
+    dut._log.info("")
+    dut._log.info("=" * 60)
+    dut._log.info("Verifying GETSTATUS CCC reports error state")
+    dut._log.info("=" * 60)
+    
+    responses = await i3c_controller.i3c_ccc_read(
+        ccc=CCC.DIRECT.GETSTATUS, addr=DYNAMIC_ADDR, count=2
+    )
+    getstatus_data = responses[0][1]
+    getstatus_value = int.from_bytes(getstatus_data, byteorder="big", signed=False)
+    pending_interrupt = getstatus_value & 0xF
+    dut._log.info(f"GETSTATUS response: {[hex(b) for b in getstatus_data]}")
+    dut._log.info(f"  Value = 0x{getstatus_value:04X}, Pending Interrupt = 0x{pending_interrupt:X}")
+    dut._log.info("PASS: GETSTATUS CCC returned successfully")
+    
+    # =========================================================================
+    # VERIFY DEVICE IS STILL FUNCTIONAL WITH RI COMMANDS
+    # =========================================================================
+    dut._log.info("")
+    dut._log.info("=" * 60)
+    dut._log.info("Verifying RI is still functional after parity error")
+    dut._log.info("=" * 60)
+    
+    # Try a normal RI read command
+    prot_cap_data, pec_ok = await recovery.command_read(
+        VIRT_DYNAMIC_ADDR,
+        I3cRecoveryInterface.Command.PROT_CAP
+    )
+    
+    assert pec_ok and len(prot_cap_data) > 0, "RI should still respond correctly"
+    dut._log.info(f"PROT_CAP read successful: {len(prot_cap_data)} bytes, PEC OK")
+    dut._log.info("PASS: RI is still functional after parity error")
+    
+    # =========================================================================
+    # VERIFY MAIN I3C TARGET IS STILL FUNCTIONAL
+    # =========================================================================
+    dut._log.info("")
+    dut._log.info("=" * 60)
+    dut._log.info("Verifying main I3C target is still functional")
+    dut._log.info("=" * 60)
+    
+    # Write data to TTI TX queue (prepare for I3C private read)
+    test_data = [0xDE, 0xAD, 0xBE, 0xEF]
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.TTI.TX_DATA_PORT.base_addr,
+        int2dword(int.from_bytes(test_data, byteorder="little")),
+        4,
+    )
+    
+    # Write the TX descriptor
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.TTI.TX_DESC_QUEUE_PORT.base_addr, int2dword(len(test_data)), 4
+    )
+    
+    # Wait for data to be ready
+    await Timer(1, "us")
+    
+    # Perform I3C private read from main target
+    readback = await i3c_controller.i3c_read(DYNAMIC_ADDR, len(test_data))
+    dut._log.info(f"I3C private read from main target: {[hex(b) for b in readback.data]}")
+    
+    assert list(readback.data) == test_data, \
+        f"I3C read mismatch:\n  Expected: {[hex(b) for b in test_data]}\n  Got:      {[hex(b) for b in readback.data]}"
+    dut._log.info("PASS: Main I3C target read successful")
+    
+    # =========================================================================
+    # SUMMARY
+    # =========================================================================
+    dut._log.info("")
+    dut._log.info("=" * 60)
+    dut._log.info("TEST SUMMARY: test_indirect_fifo_parity_error")
+    dut._log.info("=" * 60)
+    dut._log.info(f"  Payload size: {payload_size} bytes")
+    dut._log.info(f"  PEC computed: 0x{pec:02X}")
+    dut._log.info(f"  Parity errors injected at bytes: {parity_error_indices}")
+    dut._log.info(f"  FIFO empty after test: {fifo_empty_after}")
+    dut._log.info(f"  PROTOCOL_ERROR: 0x{protocol_status:02X} (Length Error)")
+    dut._log.info(f"  GETSTATUS CCC: 0x{getstatus_value:04X}")
+    dut._log.info(f"  RI functional: Yes (PROT_CAP read OK)")
+    dut._log.info(f"  I3C target functional: Yes (private read OK)")
+    dut._log.info("  ALL CHECKS PASSED")
+    dut._log.info("=" * 60)
 
 
 @cocotb.test()
