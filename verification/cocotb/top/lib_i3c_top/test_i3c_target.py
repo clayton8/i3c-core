@@ -244,10 +244,8 @@ async def test_i3c_target_read(dut):
         tx_data = await make_transfer()
         rx_data = await i3c_controller.i3c_read(TARGET_ADDRESS, len(tx_data))
         rx_data = list(rx_data.data)
-        await Timer(1, "us")
         compare(tx_data, rx_data)
 
-    await Timer(1, "us")
 
     # Test N consecutive transfers. First enqueue, then service
     dut._log.info("N consecutive transfers, enqueued then serviced")
@@ -258,10 +256,8 @@ async def test_i3c_target_read(dut):
     for i in range(3):
         rx_data = await i3c_controller.i3c_read(TARGET_ADDRESS, len(tx_data[i]))
         rx_data = list(rx_data.data)
-        await Timer(1, "us")
         compare(tx_data[i], rx_data)
 
-    await Timer(1, "us")
 
     # Test N consecutive transfers. First enqueue, then service. Occasionally
     # read less data.
@@ -279,10 +275,8 @@ async def test_i3c_target_read(dut):
 
         rx_data = await i3c_controller.i3c_read(TARGET_ADDRESS, lnt)
         rx_data = list(rx_data.data)
-        await Timer(1, "us")
         compare(tx_data[i], rx_data, lnt)
 
-    await Timer(1, "us")
 
     # Test N consecutive transfers. Do not queue new transfers before completion
     dut._log.info("N consecutive transfers, one at a time (again)")
@@ -290,11 +284,9 @@ async def test_i3c_target_read(dut):
         tx_data = await make_transfer()
         rx_data = await i3c_controller.i3c_read(TARGET_ADDRESS, len(tx_data))
         rx_data = list(rx_data.data)
-        await Timer(1, "us")
         compare(tx_data, rx_data)
 
     # Dummy wait
-    await Timer(1, "us")
 
 
 @cocotb.test()
