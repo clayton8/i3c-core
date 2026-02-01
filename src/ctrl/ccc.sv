@@ -1471,7 +1471,7 @@ module ccc
               mwl_next[7:0] = rx_data;
               set_mwl_next  = 1'b1;
             end
-            default: ;
+            default: begin end
           endcase
         end
         CCC_DIRECT_SETMRL: begin
@@ -1485,7 +1485,7 @@ module ccc
               ibil_next     = rx_data;
               set_ibil_next = 1'b1;
             end
-            default: ;
+            default: begin end
           endcase
         end
         CCC_DIRECT_ENEC: begin
@@ -1512,7 +1512,7 @@ module ccc
               mwl_next[7:0] = rx_data;
               set_mwl_next  = 1'b1;
             end
-            default: ;
+            default: begin end
           endcase
         end
         CCC_BCAST_SETMRL: begin
@@ -1526,7 +1526,7 @@ module ccc
               ibil_next     = rx_data;
               set_ibil_next = 1'b1;
             end
-            default: ;
+            default: begin end
           endcase
         end
         CCC_BCAST_ENEC: begin
@@ -1543,7 +1543,7 @@ module ccc
             disec_hj_next  = rx_data[3];
           end
         end
-        default: ;
+        default: begin end
       endcase
     end
 
@@ -1563,7 +1563,7 @@ module ccc
           rst_action_valid_next = 1'b1;
         end
       end
-      default: ;
+      default: begin end
     endcase
   end
 
@@ -1645,7 +1645,7 @@ module ccc
           end
         end
       end
-      default: ;
+      default: begin end
     endcase
   end
 

@@ -178,7 +178,7 @@ module bus_tx_flow import i3c_pkg::*; (
           end
         end
       end
-      default: ;
+      default: begin end
     endcase
 
     // Allow to abort and go back to Idle if needed
