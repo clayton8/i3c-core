@@ -191,7 +191,8 @@ module controller_standby_i3c
     // recovery mode
     input  logic recovery_mode_enter_i,
     output logic virtual_device_sel_o,
-    output logic xfer_in_progress_o
+    output logic xfer_in_progress_o,
+    output logic in_hdr_mode_o
 );
 
   // Bus TX flow
@@ -233,7 +234,6 @@ module controller_standby_i3c
   // Special bus patterns
   logic target_reset_detect;
   logic hdr_exit_detect;
-  logic is_in_hdr_mode;
 
   // SubFSMs status
   logic ibi_pending;
@@ -422,7 +422,7 @@ module controller_standby_i3c
     .target_reset_detect_i      (target_reset_detect),
 
     .hdr_exit_detect_i          (hdr_exit_detect),
-    .in_hdr_mode_i              (is_in_hdr_mode),
+    .in_hdr_mode_i              (in_hdr_mode_o),
 
     .ibi_enable_i               (ibi_enable_i),
     .ibi_pending_i              (ibi_pending),
@@ -528,7 +528,7 @@ module controller_standby_i3c
     .tm_o    (/* unused */),
 
     .exit_hdr_i    (hdr_exit_detect),
-    .in_hdr_mode_o (is_in_hdr_mode),
+    .in_hdr_mode_o (in_hdr_mode_o),
 
     .dasa_o,
     .set_dasa_o,
@@ -634,7 +634,7 @@ module controller_standby_i3c
 
     .bus_i                (ctrl_bus_i),
 
-    .is_in_hdr_mode_i     (is_in_hdr_mode),
+    .is_in_hdr_mode_i     (in_hdr_mode_o),
 
     .hdr_exit_detect_o    (hdr_exit_detect),
     .target_reset_detect_o(target_reset_detect)

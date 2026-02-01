@@ -259,7 +259,8 @@ module i3c_target_fsm import i3c_pkg::*; #(
 
   // TE0 error: Invalid reserved address + RnW combinations
   // Uses shared function from i3c_pkg to ensure consistency with ccc.sv
-  assign te0_err_o = te0_enable_i && is_te0_rsvd_addr_err(bus_addr_q, bus_rnw_q);
+  // Qualified with last_addr_valid_o to only report when address is valid
+  assign te0_err_o = te0_enable_i && last_addr_valid_o && is_te0_rsvd_addr_err(bus_addr_q, bus_rnw_q);
 
   // Latch whether this transaction is to be NACK'd.
   always_ff @(posedge clk_i or negedge rst_ni) begin : clk_nack_transaction
@@ -299,7 +300,7 @@ module i3c_target_fsm import i3c_pkg::*; #(
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (~rst_ni) begin
       last_addr_valid_o <= '0;
-    end else if (bus_start_det) begin
+    end else if (bus_start_det || bus_stop_det_i || in_hdr_mode_i) begin
       last_addr_valid_o <= '0;
     end else if (bus_addr_valid) begin
       last_addr_valid_o <= '1;

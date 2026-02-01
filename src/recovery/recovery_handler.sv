@@ -121,8 +121,10 @@ module recovery_handler
     output logic                            ctl_tti_ibi_queue_ready_thld_trig_o,
 
     // S/Sr and P bus condition
-    input logic ctl_bus_start_i,
+    input logic ctl_bus_start_i,   // Start condition (S)
+    input logic ctl_bus_rstart_i,  // Repeated Start condition (Sr)
     input logic ctl_bus_stop_i,
+    input logic ctl_in_hdr_mode_i,
 
     // Received I2C/I3C address along with RnW# bit
     input logic [7:0] ctl_bus_addr_i,
@@ -428,6 +430,7 @@ module recovery_handler
   // PEC Computation Signals
   //----------------------------------------------------------------------------
   // RX PEC
+  logic        ctl_bus_any_start;
   logic        bus_addr_valid;
   logic        pec_init;
   logic        rx_pec_clear;
@@ -519,6 +522,43 @@ module recovery_handler
       virtual_target_active_q <= virtual_target_active;
 
   assign virtual_target_start = virtual_target_active && !virtual_target_active_q;
+
+  //----------------------------------------------------------------------------
+  // Other Target Start Detection
+  // Generates pulse when a different target (not virtual device) is addressed.
+  // Used to detect protocol errors like Sr + Addr(other) during READ command.
+  //
+  // Timing: ctl_bus_addr_valid_i asserts 1 cycle before virtual_device_sel_i
+  // is updated, and they deassert on the same cycle. We detect posedge of
+  // ctl_bus_addr_valid_i and delay it by 1 cycle to align with virtual_device_sel_i.
+  //
+  // Cycle N:   ctl_bus_addr_valid_i rises (0→1), virtual_device_sel_i = old
+  // Cycle N+1: posedge_q fires, virtual_device_sel_i = updated (valid)
+  //            → other_target_start = posedge_q && !virtual_device_sel_i
+  //----------------------------------------------------------------------------
+  logic ctl_bus_addr_valid_q;
+  logic ctl_bus_addr_valid_posedge;
+  logic ctl_bus_addr_valid_posedge_q;
+  logic other_target_start;
+
+  always_ff @(posedge clk_i or negedge rst_ni)
+    if (!rst_ni)
+      ctl_bus_addr_valid_q <= 1'b0;
+    else
+      ctl_bus_addr_valid_q <= ctl_bus_addr_valid_i;
+
+  // Posedge detect: was 0 last cycle, is 1 this cycle (fires on cycle N)
+  assign ctl_bus_addr_valid_posedge = ctl_bus_addr_valid_i && !ctl_bus_addr_valid_q;
+
+  // Delay posedge by 1 cycle to align with virtual_device_sel_i (fires on cycle N+1)
+  always_ff @(posedge clk_i or negedge rst_ni)
+    if (!rst_ni)
+      ctl_bus_addr_valid_posedge_q <= 1'b0;
+    else
+      ctl_bus_addr_valid_posedge_q <= ctl_bus_addr_valid_posedge;
+
+  // Other target addressed: delayed posedge (aligned) but not for us
+  assign other_target_start = ctl_bus_addr_valid_posedge_q && !virtual_device_sel_i;
 
   //============================================================================
   //
@@ -975,10 +1015,13 @@ module recovery_handler
   // PEC Initialization
   // Initializes PEC on first address byte of transaction
   //----------------------------------------------------------------------------
+  // Any start (S or Sr) resets address valid tracking
+  assign ctl_bus_any_start = ctl_bus_start_i | ctl_bus_rstart_i;
+
   always @(posedge clk_i or negedge rst_ni)
     if (~rst_ni) begin
       bus_addr_valid <= '0;
-    end else if (ctl_bus_start_i) begin
+    end else if (ctl_bus_any_start) begin
       bus_addr_valid <= '0;
     end else if (~bus_addr_valid && ctl_bus_addr_valid_i) begin
       bus_addr_valid <= '1;
@@ -1008,7 +1051,7 @@ module recovery_handler
   end
 
   // Clear PEC on bus start (S or Sr)
-  assign rx_pec_clear = ctl_bus_start_i;
+  assign rx_pec_clear = ctl_bus_any_start;
 
   //============================================================================
   //
@@ -1068,8 +1111,12 @@ module recovery_handler
       .indirect_rx_empty_i (indirect_rx_empty),
       .indirect_rx_clr_o   (indirect_rx_clr),
 
-      .bus_start_i(ctl_bus_start_i),
-      .bus_stop_i (ctl_bus_stop_i),
+      .bus_start_i (ctl_bus_start_i),
+      .bus_rstart_i(ctl_bus_rstart_i),
+      .bus_any_start_i(ctl_bus_any_start),
+      .bus_stop_i  (ctl_bus_stop_i),
+      .in_hdr_mode_i(ctl_in_hdr_mode_i),
+      .bus_addr_i  (ctl_bus_addr_i),
 
       .pec_crc_i   (recv_pec_crc),
       .pec_enable_o(recv_pec_enable),
@@ -1093,8 +1140,6 @@ module recovery_handler
       .tx_pec_enable_o(xmit_pec_enable),
       .tx_pec_soft_rst_n_o(tx_pec_soft_rst_n),
 
-      .host_abort_i(ctl_tti_tx_host_nack_i | ctl_bus_stop_i),
-
       .payload_available_o(payload_available_o),
       .image_activated_o  (image_activated_o),
 
@@ -1105,6 +1150,7 @@ module recovery_handler
       .hwif_socmgmt_o,
 
       .virtual_target_start_i(virtual_target_start),
+      .other_target_start_i(other_target_start),
 
       .pec_err_o(pec_err_o),
       .length_err_o(length_err_o),

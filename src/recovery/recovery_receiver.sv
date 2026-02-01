@@ -126,8 +126,12 @@ module recovery_receiver
     //--------------------------------------------------------------------------
     // Bus Condition Signals
     //--------------------------------------------------------------------------
-    input  logic bus_start_i,
+    input  logic bus_start_i,      // Start condition (S)
+    input  logic bus_rstart_i,     // Repeated Start condition (Sr)
+    input  logic bus_any_start_i,  // Any start (S or Sr) - from recovery_handler
     input  logic bus_stop_i,
+    input  logic in_hdr_mode_i,
+    input  logic [7:0] bus_addr_i, // Received I2C/I3C address with RnW bit (bit 0)
 
     //--------------------------------------------------------------------------
     // RX PEC Interface
@@ -165,8 +169,8 @@ module recovery_receiver
     //--------------------------------------------------------------------------
     // Control Signals
     //--------------------------------------------------------------------------
-    input  logic host_abort_i,
     input  logic virtual_target_start_i,
+    input  logic other_target_start_i,   // Pulse when different target addressed (Sr to other)
 
     //--------------------------------------------------------------------------
     // Status Outputs
@@ -493,7 +497,9 @@ module recovery_receiver
 
   // Length validation - Raw detection (always active, no state qualification)
   assign all_data_received       = (payload_byte_cnt == cmd_len);
-  assign length_underrun_err_raw = (rx_data_last_i || bus_stop_i) && (payload_byte_cnt < cmd_len);
+  // Underrun: either we haven't received all data bytes, OR we're in RxPec but
+  // haven't captured the PEC yet (stop/last before PEC)
+  assign length_underrun_err_raw = (payload_byte_cnt < cmd_len) || pec_rx_byte_cnt  == 0;
   assign length_overrun_err_raw  = (pec_rx_byte_cnt > 1);
 
   // Length validation - Enabled errors (masked with length_err_det_en_i)
@@ -598,22 +604,36 @@ module recovery_receiver
     unique case (state_q)
       //------------------------------------------------------------------------
       // Idle: Wait for new transaction
+      // OCP Recovery protocol requires a WRITE phase first (S + Addr+W + CMD...)
+      // A READ directly from Idle (without prior command) is not supported.
       //------------------------------------------------------------------------
       Idle: begin
-        if (virtual_target_start_i) state_d = RxCmd;
+        if (virtual_target_start_i) begin
+          if (bus_addr_i[0]) begin
+            // RnW=1 (Read) directly from Idle - unsupported
+            // Read transactions must be preceded by a write command phase
+            unsupported_err = unsupported_err_det_en_i;
+            state_d         = Error;
+          end else begin
+            // RnW=0 (Write) - valid start of recovery transaction
+            state_d = RxCmd;
+          end
+        end
       end
 
       //------------------------------------------------------------------------
       // RxCmd: Receive command byte
       //------------------------------------------------------------------------
       RxCmd: begin
-        if (rx_flow) begin
+        if (bus_stop_i || rx_data_last_i)  begin
+          // Premature Stop detected
+          premature_stop      = 1'b1;
+          length_underrun_err = length_err_det_en_i;  // Report as length error (underrun)
+          state_d             = Error;
+        end
+        else if (rx_flow) begin
           capture_cmd = 1'b1;
           state_d     = RxLenL;
-        end
-        else if (bus_start_i) begin
-          set_cmd_is_rd = 1'b1;
-          state_d       = CmdDispatch;
         end
       end
 
@@ -621,7 +641,13 @@ module recovery_receiver
       // RxLenL: Receive length LSB (WRITE) or PEC byte (READ)
       //------------------------------------------------------------------------
       RxLenL: begin
-        if (rx_flow) begin
+        if (bus_stop_i || rx_data_last_i)  begin
+          // Premature Stop detected
+          premature_stop      = 1'b1;
+          length_underrun_err = length_err_det_en_i;  // Report as length error (underrun)
+          state_d             = Error;
+        end
+        else if (rx_flow) begin
           capture_len_lsb = 1'b1;
           state_d         = RxLenH;
         end
@@ -631,7 +657,14 @@ module recovery_receiver
       // RxLenH: Receive length MSB or detect restart for READ
       //------------------------------------------------------------------------
       RxLenH: begin
-        if (bus_start_i) begin
+        if (bus_stop_i)  begin
+          // Premature Stop detected
+          premature_stop      = 1'b1;
+          length_underrun_err = length_err_det_en_i;  // Report as length error (underrun)
+          state_d             = Error;
+        end
+        else if (bus_rstart_i) begin
+          // Repeated Start (Sr) indicates READ command - controller wants to read
           set_cmd_is_rd      = 1'b1;
           latch_pec_from_len = 1'b1;
           state_d            = CmdDispatch;
@@ -646,12 +679,14 @@ module recovery_receiver
       // RxData: Collect payload bytes until expected length reached
       //------------------------------------------------------------------------
       RxData: begin
-        if (all_data_received) state_d = RxPec;
-        else if (length_underrun_err_en || rx_fifo_overflow_err_en) begin
-          length_underrun_err = length_underrun_err_en;
+        if (bus_stop_i || rx_data_last_i)  begin
+          // Premature Stop detected
+          premature_stop       = 1'b1;
+          length_underrun_err  = length_underrun_err_en;  // Report as length error (underrun)
           rx_fifo_overflow_err = rx_fifo_overflow_err_en;
-          state_d = Error;
+          state_d              = Error;
         end
+        else if (all_data_received) state_d = RxPec;
       end
 
       //------------------------------------------------------------------------
@@ -664,6 +699,12 @@ module recovery_receiver
           length_overrun_err = 1'b1;
           state_d = Error;
         end
+        else if (bus_stop_i || rx_data_last_i) begin
+          // Premature Stop/last before PEC byte received - length underrun
+          premature_stop      = 1'b1;
+          length_underrun_err = length_underrun_err_en;
+          state_d             = Error;
+        end
         else if (rx_data_last_i) begin
           state_d = CmdDispatch;
         end
@@ -671,6 +712,8 @@ module recovery_receiver
 
       //------------------------------------------------------------------------
       // CmdDispatch: Validate command and route to appropriate execution state
+      // For WRITE commands: Transition immediately to execution state
+      // For READ commands: Transition to TxDesc to queue descriptor before Sr+Addr+R
       //------------------------------------------------------------------------
       CmdDispatch: begin
         load_csr_sel    = 1'b1;
@@ -685,14 +728,20 @@ module recovery_receiver
         if (pec_err || readonly_err || unsupported_err || csr_length_err)
           state_d = Error;
         else if (!cmd_is_rd) begin
+          // WRITE command - proceed to execution immediately
           state_d = (cmd_cmd == CMD_INDIRECT_FIFO_DATA) ? ExecFifoWrite : ExecCsrWrite;
         end
-        else 
+        else begin
+          // READ command - go to TxDesc immediately to queue descriptor
+          // This prepares the target FSM to ACK the upcoming Sr + Addr+R
           state_d = TxDesc;
+        end
       end
 
       //------------------------------------------------------------------------
       // ExecCsrWrite: Write received data to target CSR
+      // NOTE: No bus_stop/bus_rstart checks needed - the I3C WRITE transaction
+      // is complete. We are writing buffered data from the RX queue to CSRs.
       //------------------------------------------------------------------------
       ExecCsrWrite: begin
         if (tti_rx_rack_i) inc_csr_sel = 1'b1;
@@ -701,6 +750,8 @@ module recovery_receiver
 
       //------------------------------------------------------------------------
       // ExecFifoWrite: Stream firmware data to indirect FIFO
+      // NOTE: No bus_stop/bus_rstart checks needed - the I3C WRITE transaction
+      // is complete. We are streaming buffered data from the RX queue to FIFO.
       //------------------------------------------------------------------------
       ExecFifoWrite: begin
         // Check for FIFO overflow - transition to Error if enabled
@@ -715,18 +766,29 @@ module recovery_receiver
       end
 
       //------------------------------------------------------------------------
-      // TxDesc: Send TX descriptor
+      // TxDesc: Send TX descriptor and wait for Sr + Addr+R
+      // The descriptor is queued so target FSM will ACK the read address.
+      // Detect protocol errors: STOP, Sr to other target, Sr + Addr+W
       //------------------------------------------------------------------------
       TxDesc: begin
-        if (host_abort_i)        state_d = Done;
-        else if (tx_desc_ready_i) state_d = TxLenL;
+        if (bus_stop_i || other_target_start_i || (virtual_target_start_i && !bus_addr_i[0])) begin
+          // Protocol errors:
+          // - STOP instead of Sr (incomplete read transaction)
+          // - Sr + Addr to different target (abandoned our transaction)
+          // - Sr + Addr+W (expected read but got write)
+          unsupported_err = unsupported_err_det_en_i;
+          state_d         = Error;
+        end
+        else if (tx_desc_ready_i) begin
+          state_d = TxLenL;
+        end
       end
 
       //------------------------------------------------------------------------
       // TxLenL: Send response length LSB
       //------------------------------------------------------------------------
       TxLenL: begin
-        if (host_abort_i)        state_d = Done;
+        if (bus_rstart_i)         state_d = Done;  // Controller aborted read via Sr
         else if (tx_data_ready_i) state_d = TxLenH;
       end
 
@@ -734,7 +796,7 @@ module recovery_receiver
       // TxLenH: Send response length MSB
       //------------------------------------------------------------------------
       TxLenH: begin
-        if (host_abort_i)        state_d = Done;
+        if (bus_rstart_i)         state_d = Done;  // Controller aborted read via Sr
         else if (tx_data_ready_i) state_d = TxData;
       end
 
@@ -743,7 +805,8 @@ module recovery_receiver
       //------------------------------------------------------------------------
       TxData: begin
         if (tx_data_ready_i && tx_data_valid_o && (bcnt == 3)) inc_csr_sel = 1'b1;
-        if (host_abort_i) state_d = Done;
+
+        if (bus_rstart_i) state_d = Done;  // Controller aborted read via Sr
         else if (tx_data_ready_i && tx_data_valid_o && (dcnt == 1)) state_d = TxPec;
       end
 
@@ -751,7 +814,7 @@ module recovery_receiver
       // TxPec: Send PEC byte
       //------------------------------------------------------------------------
       TxPec: begin
-        if (tx_data_ready_i && tx_data_valid_o) state_d = Done;
+        if ((tx_data_ready_i && tx_data_valid_o) || bus_rstart_i) state_d = Done;
       end
 
       //------------------------------------------------------------------------
@@ -761,9 +824,9 @@ module recovery_receiver
         // Wait for the I3C bus transaction to end before proceeding to Done.
         // This ensures we drain all incoming bytes during the error condition.
         // Converters are reset via conv_soft_reset_o which is asserted in Error.
-        // Exit on Stop, Repeated Start, or if we entered due to premature stop
-        // (premature_stop_q is set since the stop pulse already occurred).
-        if (bus_stop_i || bus_start_i || premature_stop_q)
+        // Exit on Stop, any Start (S or Sr), HDR mode, or if we entered due to
+        // premature stop (premature_stop_q is set since the stop pulse already occurred).
+        if (bus_stop_i || bus_any_start_i || premature_stop_q || in_hdr_mode_i)
           state_d = Done;
         // else stay in Error, continue accepting and discarding bytes
       end
@@ -774,30 +837,16 @@ module recovery_receiver
       Done:    state_d = Idle;
       default: state_d = Idle;
     endcase
-
+    
     //--------------------------------------------------------------------------
-    // Global Premature Bus Stop Detection
-    // A premature stop occurs when bus_stop_i is seen in any state where the
-    // protocol transaction has not completed normally. This is a protocol error.
-    // We go to Error state to properly clear FIFOs and converters. The
-    // premature_stop signal is registered so the Error state can see it and
-    // exit immediately (since the bus_stop_i pulse has already passed).
-    //
-    // Special case: In RxPec, bus_stop_i coincides with rx_data_last_i when the
-    // PEC byte is successfully received - this is normal completion, not premature.
+    // Global HDR Mode Check
+    // If HDR mode is entered unexpectedly (TE0/TE1) while in any active state,
+    // immediately transition to Error. This handles cases like:
+    // - TE0: Invalid address during Sr + Addr+R phase of READ command
+    // - TE1: Parity error during CCC (should be idle, but defensive)
     //--------------------------------------------------------------------------
-    if (bus_stop_i && state_q inside {RxCmd, RxLenL, RxLenH, RxData, RxPec,
-                                       CmdDispatch, ExecCsrWrite, ExecFifoWrite}) begin
-      // In RxPec, if rx_data_last_i is also asserted, this is normal completion
-      if (!(state_q == RxPec && rx_data_last_i)) begin
-        premature_stop      = 1'b1;
-        state_d             = Error;
-        
-        if (length_underrun_err_en) begin
-          length_underrun_err = 1'b1;  // Report as length error (underrun)
-        end
-      end
-    end
+    if (in_hdr_mode_i && !(state_q inside {Idle, Error, Done}))
+      state_d = Error;
   end
 
   //============================================================================
@@ -959,9 +1008,9 @@ module recovery_receiver
   // PEC CRC Latch
   //----------------------------------------------------------------------------
   always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni)        pec_crc_latched <= '0;
-    else if (bus_start_i) pec_crc_latched <= '0;
-    else if (pec_enable_q) pec_crc_latched <= pec_crc_i;
+    if (!rst_ni)            pec_crc_latched <= '0;
+    else if (bus_any_start_i) pec_crc_latched <= '0;
+    else if (pec_enable_q)  pec_crc_latched <= pec_crc_i;
 
   //----------------------------------------------------------------------------
   // PEC Receive Capture

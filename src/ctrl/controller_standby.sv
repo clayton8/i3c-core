@@ -203,7 +203,8 @@ module controller_standby
     input  logic framing_err_det_en_i,
 
     output logic virtual_device_sel_o,
-    output logic xfer_in_progress_o
+    output logic xfer_in_progress_o,
+    output logic in_hdr_mode_o
 );
 
   logic sel_i2c_i3c;  // i2c = 0; i3c = 1;
@@ -528,7 +529,8 @@ module controller_standby
       .escalated_reset_o,
       .recovery_mode_enter_i(recovery_mode_enter_i),
       .virtual_device_sel_o(virtual_device_sel_o),
-      .xfer_in_progress_o(xfer_in_progress_o)
+      .xfer_in_progress_o(xfer_in_progress_o),
+      .in_hdr_mode_o(in_hdr_mode_o)
   );
 
   always_comb begin

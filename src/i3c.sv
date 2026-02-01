@@ -554,6 +554,7 @@ module i3c
   logic recovery_mode_enter;
   logic virtual_device_sel;
   logic xfer_in_progress;
+  logic in_hdr_mode;
 
   logic arbitration_lost, arbitration_lost_q;
   logic bus_scl_posedge;
@@ -786,7 +787,8 @@ module i3c
       .framing_err_det_en_i(hwif_tti_out.TARGET_ERR_CTRL.FRAMING_ERR_DET_EN.value),
 
       .virtual_device_sel_o(virtual_device_sel),
-      .xfer_in_progress_o(xfer_in_progress)
+      .xfer_in_progress_o(xfer_in_progress),
+      .in_hdr_mode_o(in_hdr_mode)
   );
 
   // HCI
@@ -1250,8 +1252,10 @@ module i3c
       .image_activated_o  (recovery_image_activated_o),
 
       // I2C/I3C bus condition detection
-      .ctl_bus_start_i(bus_start | bus_rstart),  // S/Sr are both used to reset PEC
-      .ctl_bus_stop_i (bus_stop),
+      .ctl_bus_start_i (bus_start),   // Start condition (S)
+      .ctl_bus_rstart_i(bus_rstart),  // Repeated Start condition (Sr)
+      .ctl_bus_stop_i  (bus_stop),
+      .ctl_in_hdr_mode_i(in_hdr_mode),
 
       // Received I2C/I3C address along with RnW# bit
       .ctl_bus_addr_i(rx_bus_addr),
