@@ -669,8 +669,8 @@ module recovery_receiver
       // RxCmd: Receive command byte
       //------------------------------------------------------------------------
       RxCmd: begin
-        if (bus_stop_i || rx_data_last_i)  begin
-          // Premature Stop detected
+        if (bus_stop_i || bus_rstart_i || rx_data_last_i)  begin
+          // Premature Stop or Repeated Start detected
           premature_stop      = 1'b1;
           length_underrun_err = length_err_det_en_i;  // Report as length error (underrun)
           state_d             = Error;
@@ -685,8 +685,8 @@ module recovery_receiver
       // RxLenL: Receive length LSB (WRITE) or PEC byte (READ)
       //------------------------------------------------------------------------
       RxLenL: begin
-        if (bus_stop_i || rx_data_last_i)  begin
-          // Premature Stop detected
+        if (bus_stop_i || bus_rstart_i || rx_data_last_i)  begin
+          // Premature Stop or Repeated Start detected
           premature_stop      = 1'b1;
           length_underrun_err = length_err_det_en_i;  // Report as length error (underrun)
           state_d             = Error;
@@ -723,8 +723,8 @@ module recovery_receiver
       // RxData: Collect payload bytes until expected length reached
       //------------------------------------------------------------------------
       RxData: begin
-        if (bus_stop_i || rx_data_last_i)  begin
-          // Premature Stop detected
+        if (bus_stop_i || bus_rstart_i || rx_data_last_i)  begin
+          // Premature Stop or Repeated Start detected
           premature_stop       = 1'b1;
           length_underrun_err  = length_underrun_err_en;  // Report as length error (underrun)
           rx_fifo_overflow_err = rx_fifo_overflow_err_en;
@@ -743,8 +743,8 @@ module recovery_receiver
           length_overrun_err = 1'b1;
           state_d = Error;
         end
-        else if ((pec_rx_byte_cnt == '0) && (bus_stop_i || rx_data_last_i)) begin
-          // Premature Stop/last before PEC byte received - length underrun
+        else if ((pec_rx_byte_cnt == '0) && (bus_stop_i || bus_rstart_i || rx_data_last_i)) begin
+          // Premature Stop/Repeated Start/last before PEC byte received - length underrun
           premature_stop      = 1'b1;
           length_underrun_err = length_underrun_err_en;
           state_d             = Error;

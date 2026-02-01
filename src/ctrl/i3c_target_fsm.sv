@@ -349,13 +349,10 @@ module i3c_target_fsm import i3c_pkg::*; #(
       end
     end
   end
-  // Last RX byte when we leave Private Write loop
-  // Fire when:
-  // 1. In RxPWriteData and next state is RxFByte or Idle (repeated start or stop during byte)
-  // 2. In RxPWriteTbit and next state is Idle (stop detected during T-bit - common case)
-  // 3. In RxPWriteTbit and next state is RxFByte (repeated start during T-bit)
-  assign rx_last_byte_o = ((state_q == RxPWriteData) & (state_d inside {RxFByte, Idle})) |
-                          ((state_q == RxPWriteTbit) & (state_d inside {RxFByte, Idle}));
+  // Last RX byte when we leave Private Write loop after receiving a complete byte
+  // Fire when in RxPWriteTbit and next state is Idle or RxFByte (stop or repeated start after T-bit)
+  // This aligns with rx_fifo_wvalid timing so the last byte is counted correctly
+  assign rx_last_byte_o = (state_q == RxPWriteTbit) & (state_d inside {RxFByte, Idle});
 
   // TX FIFO ready when we start writing byte (enter TxPReadData)
   // Enterng the TXPReadData state, then asserting rready will cause a byte to be
