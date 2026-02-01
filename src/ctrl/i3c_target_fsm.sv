@@ -630,7 +630,7 @@ module i3c_target_fsm import i3c_pkg::*; #(
           state_d = Idle;
         end
       end
-      default: ;
+      default: begin end
     endcase
 
     // Priority overrides for bus conditions and HDR mode

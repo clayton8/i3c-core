@@ -983,7 +983,7 @@ module recovery_receiver
       TxDesc:                      dcnt_next = csr_length;
       TxData:                      dcnt_next = (tx_data_valid_o && tx_data_ready_i) ? 
                                                (dcnt - 16'h1) : dcnt;
-      default: ;
+      default: begin end
     endcase
   end
 
@@ -999,7 +999,7 @@ module recovery_receiver
     unique case (state_q)
       Idle:   bcnt_next = '0;
       TxData: bcnt_next = (tx_data_valid_o && tx_data_ready_i) ? (bcnt + 2'h1) : bcnt;
-      default: ;
+      default: begin end
     endcase
   end
 
@@ -1016,7 +1016,7 @@ module recovery_receiver
       Idle, RxCmd, RxLenL, RxLenH: payload_byte_cnt_next = '0;
       RxData: payload_byte_cnt_next = rx_data_queue_flow_i ? 
                                       (payload_byte_cnt + 16'h1) : payload_byte_cnt;
-      default: ;
+      default: begin end
     endcase
   end
 
@@ -1120,10 +1120,10 @@ module recovery_receiver
           2'd1:    tx_data_o = csr_data[15:8];
           2'd2:    tx_data_o = csr_data[23:16];
           2'd3:    tx_data_o = csr_data[31:24];
-          default: ;
+          default: begin end
         endcase
       end
-      default: ;
+      default: begin end
     endcase
   end
 
@@ -1164,7 +1164,7 @@ module recovery_receiver
       CMD_INDIRECT_FIFO_CTRL:   begin csr_sel_next = CSR_INDIRECT_FIFO_CTRL_0; csr_end_next = CSR_INDIRECT_FIFO_CTRL_1; end
       CMD_INDIRECT_FIFO_STATUS: begin csr_sel_next = CSR_INDIRECT_FIFO_STATUS_0; csr_end_next = CSR_INDIRECT_FIFO_STATUS_4; end
       CMD_INDIRECT_FIFO_DATA:   begin csr_sel_next = CSR_INDIRECT_FIFO_DATA;   csr_end_next = CSR_INDIRECT_FIFO_DATA; end
-      default: ;
+      default: begin end
     endcase
   end
 
@@ -1196,7 +1196,7 @@ module recovery_receiver
       CMD_HW_STATUS:            csr_length_next = 16'd4;
       CMD_INDIRECT_FIFO_CTRL:   csr_length_next = 16'd6;
       CMD_INDIRECT_FIFO_STATUS: csr_length_next = 16'd20;
-      default: ;
+      default: begin end
     endcase
   end
 
@@ -1212,7 +1212,7 @@ module recovery_receiver
     unique case (csr_sel)
       CSR_DEVICE_RESET, CSR_RECOVERY_CTRL, 
       CSR_INDIRECT_FIFO_CTRL_0, CSR_INDIRECT_FIFO_CTRL_1: csr_writeable = 1'b1;
-      default: ;
+      default: begin end
     endcase
   end
 
@@ -1334,7 +1334,7 @@ module recovery_receiver
       CSR_INDIRECT_FIFO_STATUS_2: csr_data_next = hwif_rec_i.INDIRECT_FIFO_STATUS_2.READ_INDEX.value;
       CSR_INDIRECT_FIFO_STATUS_3: csr_data_next = hwif_rec_i.INDIRECT_FIFO_STATUS_3.FIFO_SIZE.value;
       CSR_INDIRECT_FIFO_STATUS_4: csr_data_next = hwif_rec_i.INDIRECT_FIFO_STATUS_4.MAX_TRANSFER_SIZE.value;
-      default: ;
+      default: begin end
     endcase
   end
 
