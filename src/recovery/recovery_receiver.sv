@@ -22,15 +22,59 @@
 //   protocol parsing, PEC validation, command execution, and response
 //   generation.
 //
-// FSM Flow:
-//   WRITE: Idle -> RxCmd -> RxLenL -> RxLenH -> RxData -> RxPec -> 
-//          CmdDispatch -> Exec* -> Done
-//   READ:  Idle -> RxCmd -> RxPec -> CmdDispatch -> TxDesc -> TxLenL -> 
-//          TxLenH -> TxData -> TxPec -> Done
+// OCP Recovery Protocol Frame Formats:
 //
-// Frame Formats:
-//   WRITE: S + Addr+W + CMD + LEN_L + LEN_H + DATA[0..N-1] + PEC + P
-//   READ:  S + Addr+W + CMD + PEC + Sr + Addr+R + LEN_L + LEN_H + DATA + PEC
+//   WRITE (Controller to Target):
+//     S/Sr + Addr+W + CMD + LEN_L + LEN_H + DATA[0..N-1] + PEC + Sr/P
+//     |     |        |     |       |       |              |     |
+//     |     |        |     |       |       |              |     +-- Stop or Repeated Start
+//     |     |        |     |       |       |              +-- CRC-8 over CMD+LEN+DATA
+//     |     |        |     |       |       +-- N bytes of payload data
+//     |     |        |     |       +-- Length MSB (bits 15:8)
+//     |     |        |     +-- Length LSB (bits 7:0)
+//     |     |        +-- Command code (34-47)
+//     |     +-- Virtual target address with Write bit (RnW=0)
+//     +-- Start or Repeated Start condition
+//
+//   READ (Controller to Target, then Target to Controller):
+//     S/Sr + Addr+W + CMD + PEC + Sr + Addr+R + (T) LEN_L + (T) LEN_H + (T) DATA[0..N-1] + (T) PEC + Sr/P
+//     |     |        |     |      |    |        |          |          |                   |          |
+//     |     |        |     |      |    |        |          |          |                   |          +-- Stop or Sr
+//     |     |        |     |      |    |        |          |          |                   +-- (T) CRC-8 over LEN+DATA
+//     |     |        |     |      |    |        |          |          +-- (T) N bytes of response data
+//     |     |        |     |      |    |        |          +-- (T) Length MSB
+//     |     |        |     |      |    |        +-- (T) Length LSB
+//     |     |        |     |      |    +-- Virtual target address with Read bit (RnW=1)
+//     |     |        |     |      +-- Repeated Start (triggers target to respond)
+//     |     |        |     +-- CRC-8 over CMD only (no length bytes in write phase)
+//     |     |        +-- Command code (34-47)
+//     |     +-- Virtual target address with Write bit (RnW=0)
+//     +-- Start or Repeated Start condition
+//     Note: (T) indicates bytes transmitted by Target
+//
+// FSM State Flow:
+//
+//   WRITE Command:
+//     Idle ─(S/Sr+Addr+W)─> RxCmd ─(CMD)─> RxLenL ─(LEN_L)─> RxLenH ─(LEN_H)─> RxData
+//                                                                                 │
+//       ┌─────────────────────────────────────────────────────────────────────────┘
+//       │
+//       └─(all data received)─> RxPec ─(PEC+last)─> CmdDispatch ─> ExecCsrWrite ─> Done
+//                                                               └─> ExecFifoWrite ─> Done
+//
+//   READ Command:
+//     Idle ─(S/Sr+Addr+W)─> RxCmd ─(CMD)─> RxLenL ─(PEC*)─> RxLenH ─(Sr detected)─> CmdDispatch
+//                                                                                        │
+//       ┌────────────────────────────────────────────────────────────────────────────────┘
+//       │
+//       └─> TxDesc ─(desc queued)─> TxLenL ─(LEN_L sent)─> TxLenH ─(LEN_H sent)─> TxData
+//                                                                                     │
+//       ┌─────────────────────────────────────────────────────────────────────────────┘
+//       │
+//       └─(all data sent)─> TxPec ─(PEC sent)─> Done
+//
+//     * For READ: PEC byte is received in RxLenL state (stored as len_lsb) and latched
+//       as the actual PEC when Sr is detected in RxLenH via latch_pec_from_len signal.
 //
 // Supported Commands (OCP Recovery v1.1):
 //   34: PROT_CAP           (R)  - Protocol capabilities
@@ -699,7 +743,7 @@ module recovery_receiver
           length_overrun_err = 1'b1;
           state_d = Error;
         end
-        else if (bus_stop_i || rx_data_last_i) begin
+        else if ((pec_rx_byte_cnt == '0) && (bus_stop_i || rx_data_last_i)) begin
           // Premature Stop/last before PEC byte received - length underrun
           premature_stop      = 1'b1;
           length_underrun_err = length_underrun_err_en;
