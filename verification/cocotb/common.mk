@@ -2,7 +2,7 @@
 
 TOPLEVEL_LANG    = verilog
 SIM             ?= verilator
-WAVES           ?= 0
+WAVES           ?= 1
 
 # Paths
 CURDIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
