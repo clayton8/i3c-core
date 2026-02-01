@@ -96,9 +96,10 @@ def _verify(session, test_group, test_type, test_name, coverage=None, simulator=
                     [
                         "+verilator+rand+reset+2",
                         f"+verilator+seed+{seed}",
-                        "--trace",
                     ]
                 )
+                if os.getenv("WAVES", "0") == "1":
+                    plusargs.append("--trace")
             if coverage:
                 args.append("COVERAGE_TYPE=" + coverage)
 

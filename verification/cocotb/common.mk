@@ -50,7 +50,9 @@ ifeq ($(SIM), verilator)
     COMPILE_ARGS += -Wall -Wno-fatal
     COMPILE_ARGS += --x-assign unique --x-initial unique
 
-    EXTRA_ARGS += --trace --trace-structs --trace-fst
+    ifeq ($(WAVES), 1)
+        EXTRA_ARGS += --trace --trace-structs --trace-fst
+    endif
     EXTRA_ARGS += $(VERILATOR_COVERAGE)
     EXTRA_ARGS += -Wno-DECLFILENAME -Wno-TIMESCALEMOD
 endif
@@ -60,15 +62,14 @@ ifeq ($(SIM), vcs)
     COMPILE_ARGS += -deraceclockdata +libext+.sv +libext+.v
     COMPILE_ARGS += $(foreach dir,$(VERILOG_INCLUDE_DIRS),-y $(dir))
     COMPILE_ARGS += -assert svaext
+    COMPILE_ARGS += -debug_access+all +memcbk -assert svaext
     COMPILE_ARGS += -Xcflags='-Wno-error=implicit-function-declaration -Wno-error=int-conversion'
-    SIM_ARGS += +dumpon
+    COMPILE_ARGS += -kdb +vcs+fsdbon
+    # Verdi FSDB PLI for waveform dumping
+    COMPILE_ARGS += -P $(VERDI_HOME)/share/PLI/VCS/LINUX64/novas.tab $(VERDI_HOME)/share/PLI/VCS/LINUX64/pli.a
+    SIM_ARGS += +fsdbfile+dump.fsdb +fsdb+all=on +fsdb+mda=on
+    EXTRA_ARGS += +vcs+lic+wait
 
-    ifeq ($(WAVES), 1)
-        EXTRA_ARGS += +vcs+vcdpluson +vpdfile+dump.vpd
-        COMPILE_ARGS += -debug_access+all +memcbk -kdb
-        SIM_ARGS += +dumpon
-        SIM_ARGS += -ucli -do $(CURDIR)/vcs.tcl
-    endif
 
     ifneq ($(COVERAGE_TYPE),)
         EXTRA_ARGS += -cm line+cond+fsm+tgl+branch -lca
