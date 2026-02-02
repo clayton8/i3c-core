@@ -8,7 +8,7 @@ from boot import boot_init
 from bus2csr import compare_values, dword2int, int2bytes, int2dword
 from ccc import CCC
 from cocotb_helpers import reset_n
-from cocotbext_i3c.i3c_controller import I3cController
+from i3c_controller_fixed import I3cControllerFixed as I3cController
 from cocotbext_i3c.i3c_recovery_interface import I3cRecoveryInterface
 from cocotbext_i3c.i3c_target import I3CTarget
 from interface import I3CTopTestInterface

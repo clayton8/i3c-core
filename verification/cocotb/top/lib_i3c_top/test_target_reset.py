@@ -4,7 +4,7 @@ import logging
 
 from boot import boot_init
 from ccc import CCC
-from cocotbext_i3c.i3c_controller import I3cController
+from i3c_controller_fixed import I3cControllerFixed as I3cController
 from interface import I3CTopTestInterface
 
 import cocotb

@@ -32,8 +32,8 @@ module i3c_target_fsm import i3c_pkg::*; #(
   parameter int unsigned TxDataWidth  = 8,
   parameter int unsigned IbiDataWidth = 8
 ) (
-  input clk_i,  // clock
-  input rst_ni, // active low reset
+  input  clk_i,  // clock
+  input  rst_ni, // active low reset
 
   input  logic target_enable_i,  // enable target functionality
 
@@ -133,13 +133,6 @@ module i3c_target_fsm import i3c_pkg::*; #(
   logic nack_transaction_q, nack_transaction_d;
   logic rx_overflow_err_q, rx_overflow_err_r; // TODO figure out what 'r' refers to
 
-  logic [RxDataWidth-1:0] rx_data_byte;
-  logic                   rx_data_byte_valid;
-
-  logic [TxDataWidth-1:0] tx_data_byte;
-  logic                   tx_data_byte_valid;
-  logic                   tx_end_xfer;
-
   i3c_byte_t last_byte;
 
   logic bus_tx_req_bit;
@@ -189,8 +182,11 @@ module i3c_target_fsm import i3c_pkg::*; #(
     RxPWriteTbit,
     // Send data in Private Read transfer
     TxPReadData,
-    TxPReadTbit,
-    // Transfer is not targeted to us, wait for SR or P
+    // Signal to Controller in Tbit to transfer more bytes
+    TxPReadTbitCont,
+    // Signal to Controller in Tbit to end the transfer
+    TxPReadTbitEnd,
+    // Transfer is not targeted to us or we are not ready, NAck and wait for SR or P
     WaitStart,
 
     // If bus is available and an IBI is pending
@@ -349,30 +345,6 @@ module i3c_target_fsm import i3c_pkg::*; #(
   // a stop we transition to Idle. 
   assign rx_last_byte_o = (state_q == RxPWriteData) && (state_d inside {RxFByte, Idle});
 
-  // TX FIFO ready when we start writing byte (enter TxPReadData)
-  // Enterng the TXPReadData state, then asserting rready will cause a byte to be
-  // consumed from the FIFO, but we might cancel TxPReadData if Rstart occurs.
-  // On TX cancel, we flush the FIFO, aborting transaction.
-  assign tx_fifo_rready_o = (state_q != TxPReadData) && (state_d == TxPReadData);
-
-  always_ff @(posedge clk_i or negedge rst_ni) begin : set_last_byte_in_xfer
-    if (~rst_ni) begin
-      tx_end_xfer <= '0;
-    end else begin
-      if (bus_tx_rsp_i.done && bus_tx_req_bit) begin
-        tx_end_xfer <= tx_last_byte_i;
-      end
-    end
-  end
-
-  always_ff @(posedge clk_i or negedge rst_ni) begin : capture_tx_data_from_queue
-    if (~rst_ni) begin
-      tx_data_byte <= '0;
-    end else begin
-      if (tx_fifo_rready_o) tx_data_byte <= tx_fifo_rdata_i;
-    end
-  end
-
   // Logic for latching CCC code
   always_ff @(posedge clk_i or negedge rst_ni) begin : latch_ccc_data
     if (~rst_ni) begin
@@ -407,6 +379,8 @@ module i3c_target_fsm import i3c_pkg::*; #(
       data:       '1
     };
 
+    tx_fifo_rready_o = 1'b0;
+
     bus_rx_req_bit  = 1'b0;
     bus_rx_req_byte = 1'b0;
 
@@ -425,6 +399,7 @@ module i3c_target_fsm import i3c_pkg::*; #(
           end
         end
       end
+
       RxFByte: begin
         bus_rx_req_byte = !bus_start_det;
         if (bus_rx_rsp_i.done) begin
@@ -437,7 +412,7 @@ module i3c_target_fsm import i3c_pkg::*; #(
       end
       CheckFByte: begin
         // Signal begin of a private read
-        tx_pr_start_o = !is_rsvd_byte_match && is_any_addr_match && bus_rnw_q;
+        tx_pr_start_o = is_any_addr_match && bus_rnw_q;
 
         if (is_rsvd_byte_match || is_any_addr_match) begin
           // Do not ACK transaction if it is a read and we don't have data to send
@@ -453,8 +428,7 @@ module i3c_target_fsm import i3c_pkg::*; #(
       end
       TxAckFByte: begin
         bus_tx_req_o.req_valid = 1'b1;
-        bus_tx_req_o.req_type  = RawBit;
-        bus_tx_req_o.data[7]   = 1'b0;
+        bus_tx_req_o.req_type  = bus_rnw_q ? AckRegular : AckWrite;
 
         if (bus_tx_rsp_i.done) begin
           if (is_rsvd_byte_match) begin
@@ -466,6 +440,7 @@ module i3c_target_fsm import i3c_pkg::*; #(
           end
         end
       end
+
       RxSByte: begin
         bus_rx_req_byte = !bus_start_det;
 
@@ -492,17 +467,13 @@ module i3c_target_fsm import i3c_pkg::*; #(
       end
       CheckSByte: begin
         if (is_any_addr_match) begin
-          if (bus_rnw_q) begin
-            // Signal begin of a private read
-            // TODO gate this with tx_desc_avail_i ?
-            tx_pr_start_o = 1'b1;
-          end
-          // ACK the transaction if it is a write
-          // If read, ACK only if we have data to send
-          if (tx_desc_avail_i || ~bus_rnw_q) begin
+          // Signal begin of a private read
+          tx_pr_start_o = bus_rnw_q;
+          if (!bus_rnw_q || tx_desc_avail_i) begin
+            // Either private write or private read and data available
             state_d = TxAckSByte;
           end else begin
-            // if there is no data to be sent, NACK the transaction
+            // NAck in case of private read without data available
             state_d = WaitStart;
           end
         end else begin
@@ -511,15 +482,10 @@ module i3c_target_fsm import i3c_pkg::*; #(
       end
       TxAckSByte: begin
         bus_tx_req_o.req_valid = 1'b1;
-        bus_tx_req_o.req_type  = RawBit;
-        bus_tx_req_o.data[7]   = 1'b0;
+        bus_tx_req_o.req_type  = AckRegular;
 
         if (bus_tx_rsp_i.done) begin
-          if (is_any_addr_match) begin
-            state_d = bus_rnw_q ? TxPReadData : RxPWriteData;
-          end else begin
-            state_d = WaitStart;
-          end
+          state_d = bus_rnw_q ? TxPReadData : RxPWriteData;
         end
       end
 
@@ -552,36 +518,47 @@ module i3c_target_fsm import i3c_pkg::*; #(
         bus_tx_req_o.drive_type = PushPull;
         bus_tx_req_o.req_valid  = 1'b1;
         bus_tx_req_o.req_type   = RawByte;
-        bus_tx_req_o.data       = tx_data_byte;
+        bus_tx_req_o.data       = tx_fifo_rdata_i;
 
-        tx_pr_abort_o = bus_start_det || bus_stop_det_i;
+        // Neither stop nor restart may occur as SDA is under control of target. Therefore, we do
+        // not check for Rs or P here.
 
-        if (bus_start_det) begin
-          state_d = RxFByte;
-        end else if (bus_tx_rsp_i.done) begin
-          state_d = TxPReadTbit;
+        if (bus_tx_rsp_i.done) begin
+          // Acknowledge consumption of current byte
+          tx_fifo_rready_o = 1'b1;
+          // Signal continue or end of read
+          state_d = tx_last_byte_i ? TxPReadTbitEnd : TxPReadTbitCont;
         end
       end
-      TxPReadTbit: begin
-        bus_tx_req_o.drive_type = PushPull;
-        bus_tx_req_o.req_valid  = 1'b1;
-        bus_tx_req_o.req_type   = RawBit;
-        bus_tx_req_o.data[7]    = ~tx_end_xfer;
+      TxPReadTbitEnd: begin
+        bus_tx_req_o.req_valid = 1'b1;
+        bus_tx_req_o.req_type  = TReadEnd;
 
-        tx_pr_abort_o = bus_start_det || bus_stop_det_i;
+        if (bus_tx_rsp_i.done) begin
+          state_d = WaitStart;
+        end
+      end
+      TxPReadTbitCont: begin
+        // Special request type: We have to wait until the following SCL negedge to know whether the
+        // Controller has aborted the read prematurely. However, if not, we need to provide the MSB
+        // of the next byte on that very negedge. Therefore, already provide the next byte as part
+        // of this Tbit request; bus_tx_flow will handle all the low-level details.
+        bus_tx_req_o.req_valid = 1'b1;
+        bus_tx_req_o.req_type  = TReadCont;
+        bus_tx_req_o.data      = tx_fifo_rdata_i;
 
-        // FIXME While waiting for a restart condition when the controller wants to abort the read,
-        // the bus_tx_rsp_i.done below can happen first, leading to erroneous draining of the FIFO.
         if (bus_start_det) begin
+          // The host has pulled SDA low before the next SCL negedge to end the transfer (this is
+          // equivalent to a Rs condition)
+          tx_pr_abort_o = 1'b1;
           state_d = RxFByte;
+        end else if (bus_stop_det_i) begin
+          // Should not be possible: SDA is controlled in PP-high by us until the next SCL posedge
+          tx_pr_abort_o = 1'b1;
+          state_d = WaitStart;
         end else if (bus_tx_rsp_i.done) begin
-          if ((tx_fifo_rvalid_i || tx_last_byte_i) && !tx_end_xfer) begin
-            // Continue transfer if FIFO is not empty or if it's the last byte
-            state_d = TxPReadData;
-          end else begin
-            // Wait for START or STOP if it was the last byte already
-            state_d = WaitStart;
-          end
+          // TBit was successfully transmitted as high, we may therefore continue with the next byte
+          state_d = TxPReadData;
         end
       end
 
@@ -696,7 +673,7 @@ module i3c_target_fsm import i3c_pkg::*; #(
   // TODO: Also sub FSM should contribute
   // TODO: Maybe we can do it based on write module rather than states
   assign target_transmitting_o =
-  (state_q inside {TxAckFByte, TxAckSByte, TxPReadData, TxPReadTbit});
+  (state_q inside {TxAckFByte, TxAckSByte, TxPReadData, TxPReadTbitCont, TxPReadTbitEnd});
 
   // TODO: Count which transaction and transfers were addressed to us
   // TODO: Expose xfer,xact counters
@@ -742,11 +719,11 @@ module i3c_target_fsm import i3c_pkg::*; #(
       bins valid_start_trans =
         (Idle => RxFByte);
       bins valid_rstart_trans =
-        (RxPWriteData, TxPReadData, TxPReadTbit, WaitStart => RxFByte),
+        (RxPWriteData, TxPReadData, TxPReadTbitCont, WaitStart => RxFByte),
         (RxSByte => RxSByteRepeated);
       bins valid_stop_trans =
         (RxFByte, CheckFByte, TxAckFByte, RxSByte, RxSByteRepeated, CheckSByte, TxAckSByte,
-         RxPWriteData, RxPWriteTbit, TxPReadData, TxPReadTbit, WaitStart, DoIBI, DoneIBI, DoCCC,
+         RxPWriteData, RxPWriteTbit, TxPReadData, WaitStart, DoIBI, DoneIBI, DoCCC,
          DoneCCC, DoHotJoin, DoRstAction, InHDRMode => Idle);
     }
     BusStartEvent: coverpoint bus_start_det_i {

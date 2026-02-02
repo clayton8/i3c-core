@@ -20,7 +20,7 @@ Usage:
 from typing import Iterable
 
 from cocotbext_i3c.i3c_controller import I3cController, I3cXferMode
-from cocotbext_i3c.common import I3C_RSVD_BYTE, I3cPWResp
+from cocotbext_i3c.common import I3C_RSVD_BYTE, I3cPWResp, I3cState
 
 
 class I3cControllerFixed(I3cController):
@@ -140,3 +140,33 @@ class I3cControllerFixed(I3cController):
         """
         await self.send_stop()
         self.give_bus_control()
+
+    async def recv_addr_ack(self) -> bool:
+        self.scl = 0
+        self.sda = 1
+        # We don't hold the data here, because it's on the target to pull it down
+        # after the required amount of time
+        await self.tdig_l
+        if self.sda_i is None:
+            b = False
+        else:
+            b = bool(self.sda)
+        
+        # Take over driving in case of an ACK by target
+        if b == False:
+            self.sda = 0
+        self.scl = 1
+        await self.tdig_h
+        self.hold_data = False
+
+        return b
+
+    async def send_byte(self, b: int, addr: bool = False) -> bool:
+        self._state = I3cState.ADDR if addr else I3cState.DATA_WR
+        for i in range(8):
+            await self.send_bit(b & (1 << 7 - i))
+        self._state = I3cState.ACK
+        if addr and not(b & 1):
+            return await self.recv_addr_ack()
+        else:
+            return await self.recv_bit_od()

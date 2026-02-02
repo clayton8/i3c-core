@@ -1123,23 +1123,24 @@ module ccc
         tx_req_ccc.req_type   = RawByte;
         tx_req_ccc.data       = tx_data;
 
-        if (bus_tx_rsp_i.done) state_d = TxDataTbit;
+        if (bus_tx_rsp_i.done) begin
+          // Increment byte counter as we need the next data byte for the Tbit request
+          inc_tx_byte_num = 1'b1;
+          state_d = TxDataTbit;
+        end
       end
       
       TxDataTbit: begin
-        tx_req_ccc.drive_type = PushPull;
-        tx_req_ccc.req_valid  = 1'b1;
-        tx_req_ccc.req_type   = RawBit;
         // TBit: 0 = end of data, 1 = more data available
-        tx_req_ccc.data[7]    = ~tx_data_last_byte;
+        tx_req_ccc.req_valid  = 1'b1;
+        tx_req_ccc.req_type   = tx_data_last_byte ? TReadEnd : TReadCont;
+        tx_req_ccc.data       = tx_data;
 
         if (bus_rstart_det_i) begin
           // Controller abort: Target sent T=1 but Controller issued Sr
           state_d = RxTargetAddr;
           set_tx_data_complete = 1'b1;
         end else if (bus_tx_rsp_i.done) begin
-          inc_tx_byte_num = 1'b1;
-
           if (tx_data_last_byte) begin
             // Target complete: Target sent T=0, wait for Sr or STOP
             set_tx_data_complete = 1'b1;
@@ -1221,8 +1222,8 @@ module ccc
     end
   end
 
-  // Last byte when we've reached (tx_byte_total - 1)
-  assign tx_data_last_byte = (tx_byte_num == tx_byte_total - 1);
+  // Last byte when we've reached tx_byte_total
+  assign tx_data_last_byte = (tx_byte_num == tx_byte_total);
 
   // TX complete tracking: set by FSM when last T-bit completes normally
   always_ff @(posedge clk_i or negedge rst_ni) begin : proc_tx_data_complete

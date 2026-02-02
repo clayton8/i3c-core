@@ -4,7 +4,7 @@ import logging
 import random
 
 from boot import boot_init
-from cocotbext_i3c.i3c_controller import I3cController
+from i3c_controller_fixed import I3cControllerFixed as I3cController
 from cocotbext_i3c.i3c_target import I3CTarget
 from interface import I3CTopTestInterface
 
@@ -74,7 +74,7 @@ async def test_enter_exit_hdr_mode_write(dut):
 
         assert (
         int(dut.xi3c_wrapper.i3c.xcontroller.xcontroller_standby.xcontroller_standby_i3c.xi3c_target_fsm.state_d.value)
-            == 19
+            == 20
         )  # InHDRMode
         test_addr = random.choice(remaining_addrs)
 
@@ -133,7 +133,7 @@ async def test_enter_restart_exit_hdr_mode_write(dut):
 
         assert (
         int(dut.xi3c_wrapper.i3c.xcontroller.xcontroller_standby.xcontroller_standby_i3c.xi3c_target_fsm.state_d.value)
-            == 19
+            == 20
         )  # InHDRMode
         transactions = random.randint(10, 15)
         for i in range(transactions):
@@ -196,7 +196,7 @@ async def test_enter_exit_hdr_mode_read(dut):
 
         assert (
         int(dut.xi3c_wrapper.i3c.xcontroller.xcontroller_standby.xcontroller_standby_i3c.xi3c_target_fsm.state_d.value)
-            == 19
+            == 20
         )  # InHDRMode
         test_addr = random.choice(remaining_addrs)
 
@@ -259,7 +259,7 @@ async def test_enter_restart_exit_hdr_mode_read(dut):
 
         assert (
         int(dut.xi3c_wrapper.i3c.xcontroller.xcontroller_standby.xcontroller_standby_i3c.xi3c_target_fsm.state_d.value)
-            == 19
+            == 20
         )  # InHDRMode
         transactions = random.randint(10, 15)
         for i in range(transactions):
