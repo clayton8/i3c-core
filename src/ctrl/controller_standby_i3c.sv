@@ -648,7 +648,7 @@ module controller_standby_i3c
 
     .enable_i         (i3c_standby_en_i),
 
-    .restart_counter_i(ctrl_bus_i.stop_det),
+    .restart_counter_i(ctrl_bus_i.stop_det || in_hdr_mode_o),
 
     .t_bus_free_i     (t_bus_free_i),
     .t_bus_idle_i     (t_bus_idle_i),
