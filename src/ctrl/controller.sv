@@ -620,7 +620,6 @@ module controller
       .peripheral_reset_done_i,
       .escalated_reset_o,
       .recovery_mode_enter_i(recovery_mode_enter_i),
-      .recovery_pec_err_i(recovery_pec_err_i),
       .te0_err_o(te0_err_o),
       .te1_err_o(te1_err_o),
       .te2_err_o(te2_err_o),

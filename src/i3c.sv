@@ -767,7 +767,6 @@ module i3c
 
       .err_o(controller_error),
       .recovery_mode_enter_i(recovery_mode_enter),
-      .recovery_pec_err_i(ri_pec_err),
 
       .te0_err_o(te0_err),
       .te1_err_o(te1_err),
