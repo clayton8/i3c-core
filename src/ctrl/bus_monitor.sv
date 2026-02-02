@@ -18,7 +18,14 @@ module bus_monitor
     input logic [19:0] t_r_i,       // Rise time
     input logic [19:0] t_f_i,       // Fall time
 
-    output bus_state_t state_o  // Output bus state
+    // HDR mode gating: when high, state_o signals are gated
+    input logic in_hdr_mode_i,
+
+    // Gated output: all signals masked during HDR mode
+    output bus_state_t state_o,
+
+    // Ungated output: only contains signals needed for HDR exit detection
+    output bus_state_t hdr_exit_state_o
 );
   logic enable;
 
@@ -39,6 +46,7 @@ module bus_monitor
   logic sda_posedge_i;
   logic sda_edge;
   logic sda_stable_high;
+  logic sda_stable_low;
   logic sda_internal;
 
 
@@ -143,6 +151,14 @@ module bus_monitor
       .stable_o(scl_stable_low)
   );
 
+  stable_high_detector stable_detector_sda_low (
+      .clk_i(clk_i),
+      .rst_ni(rst_ni),
+      .line_i(!sda_i_q),
+      .delay_count_i(t_f_i),
+      .stable_o(sda_stable_low)
+  );
+
   // Synchronize input SDA/SCL to edge detectors
   logic sda_r;
   logic scl_r;
@@ -217,20 +233,41 @@ module bus_monitor
   assign stop_det = enable & stop_det_pending;
 
   // Detection output
-  assign state_o.sda.value          = sda;
-  assign state_o.sda.pos_edge       = sda_posedge;
-  assign state_o.sda.neg_edge       = sda_negedge;
-  assign state_o.sda.stable_high    = sda_stable_high;
-  assign state_o.sda.stable_low     = '0; // Unused
 
-  assign state_o.scl.value          = scl;
-  assign state_o.scl.pos_edge       = scl_posedge;
-  assign state_o.scl.neg_edge       = scl_negedge;
-  assign state_o.scl.stable_high    = scl_stable_high;
-  assign state_o.scl.stable_low     = scl_stable_low;
+  // Gated output: all signals masked during HDR mode to prevent false
+  // START/STOP/RSTART detection from corrupting bus_timers and FSM state
+  assign state_o.sda.value          = sda          & ~in_hdr_mode_i;
+  assign state_o.sda.pos_edge       = sda_posedge  & ~in_hdr_mode_i;
+  assign state_o.sda.neg_edge       = sda_negedge  & ~in_hdr_mode_i;
+  assign state_o.sda.stable_high    = sda_stable_high & ~in_hdr_mode_i;
+  assign state_o.sda.stable_low     = sda_stable_low & ~in_hdr_mode_i;
 
-  assign state_o.start_det  = start_det & ~rstart_detection_en;
-  assign state_o.rstart_det = start_det &  rstart_detection_en;
-  assign state_o.stop_det   = stop_det;
+  assign state_o.scl.value          = scl          & ~in_hdr_mode_i;
+  assign state_o.scl.pos_edge       = scl_posedge  & ~in_hdr_mode_i;
+  assign state_o.scl.neg_edge       = scl_negedge  & ~in_hdr_mode_i;
+  assign state_o.scl.stable_high    = scl_stable_high & ~in_hdr_mode_i;
+  assign state_o.scl.stable_low     = scl_stable_low  & ~in_hdr_mode_i;
+
+  assign state_o.start_det  = start_det & ~rstart_detection_en & ~in_hdr_mode_i;
+  assign state_o.rstart_det = start_det &  rstart_detection_en & ~in_hdr_mode_i;
+  assign state_o.stop_det   = stop_det  & ~in_hdr_mode_i;
+
+  // Ungated output: provides signals needed for HDR exit pattern detection
+  // All signals are passed through ungated
+  assign hdr_exit_state_o.sda.value       = sda;
+  assign hdr_exit_state_o.sda.pos_edge    = sda_posedge;
+  assign hdr_exit_state_o.sda.neg_edge    = sda_negedge;
+  assign hdr_exit_state_o.sda.stable_high = sda_stable_high;
+  assign hdr_exit_state_o.sda.stable_low  = sda_stable_low;
+
+  assign hdr_exit_state_o.scl.value       = scl;
+  assign hdr_exit_state_o.scl.pos_edge    = scl_posedge;
+  assign hdr_exit_state_o.scl.neg_edge    = scl_negedge;
+  assign hdr_exit_state_o.scl.stable_high = scl_stable_high;
+  assign hdr_exit_state_o.scl.stable_low  = scl_stable_low;
+
+  assign hdr_exit_state_o.start_det  = start_det & ~rstart_detection_en;
+  assign hdr_exit_state_o.rstart_det = start_det &  rstart_detection_en;
+  assign hdr_exit_state_o.stop_det   = stop_det;
 
 endmodule

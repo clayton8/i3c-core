@@ -21,6 +21,8 @@ module controller_standby_i3c
 
     // Interface to/from SDA/SCL
     input  bus_state_t ctrl_bus_i,
+    // Ungated bus state for HDR exit pattern detection
+    input  bus_state_t hdr_exit_bus_i,
     output logic       ctrl_scl_o,
     output logic       ctrl_sda_o,
     output logic       phy_sel_od_pp_o,
@@ -632,7 +634,7 @@ module controller_standby_i3c
 
     .enable_i             (i3c_standby_en_i),
 
-    .bus_i                (ctrl_bus_i),
+    .bus_i                (hdr_exit_bus_i),
 
     .is_in_hdr_mode_i     (in_hdr_mode_o),
 

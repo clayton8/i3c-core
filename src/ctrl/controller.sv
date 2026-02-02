@@ -317,7 +317,10 @@ module controller
   logic recovery_mode;
 
   // I2C/I3C Bus state monitor
+  // 'bus' is gated during HDR mode to prevent false START/STOP/RSTART detection
+  // 'hdr_exit_bus' provides ungated signals for HDR exit pattern detection
   bus_state_t bus;
+  bus_state_t hdr_exit_bus;
   bus_monitor xbus_monitor (
     .clk_i,
     .rst_ni,
@@ -330,7 +333,10 @@ module controller
     .t_r_i      (t_r),
     .t_f_i      (t_f),
 
-    .state_o    (bus)
+    .in_hdr_mode_i   (in_hdr_mode_o),
+
+    .state_o         (bus),
+    .hdr_exit_state_o(hdr_exit_bus)
   );
 
   assign bus_scl_posedge_o = bus.scl.pos_edge;
@@ -495,6 +501,7 @@ module controller
       .clk_i(clk_i),
       .rst_ni(rst_ni),
       .ctrl_bus_i(ctrl_bus_i[2:3]),
+      .hdr_exit_bus_i(hdr_exit_bus),
       .ctrl_scl_o(ctrl_scl_o[2:3]),
       .ctrl_sda_o(ctrl_sda_o[2:3]),
       .phy_sel_od_pp_o(ctrl_sel_od_pp_i[2:3]),

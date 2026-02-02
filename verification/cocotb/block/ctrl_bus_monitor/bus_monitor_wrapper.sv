@@ -13,6 +13,9 @@ module bus_monitor_wrapper
     input logic [19:0] t_r_i,       // Rise time
     input logic [19:0] t_f_i,       // Fall time
 
+    // HDR mode gating input - tie to 0 for non-HDR tests
+    input logic in_hdr_mode_i,
+
     output logic sda_o,
     output logic sda_posedge_o,
     output logic sda_negedge_o,
@@ -31,6 +34,7 @@ module bus_monitor_wrapper
 );
 
   bus_state_t state;
+  bus_state_t hdr_exit_state; // Unused in this wrapper
 
   always_comb begin
     sda_o               = state.sda.value;
@@ -51,7 +55,8 @@ module bus_monitor_wrapper
   end
 
   bus_monitor xmonitor (
-    .state_o (state),
+    .state_o         (state),
+    .hdr_exit_state_o(hdr_exit_state),
     .*
   );
 
