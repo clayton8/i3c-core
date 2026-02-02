@@ -32,6 +32,8 @@ module controller_standby
     input logic rst_ni,
     // Interface to SDA/SCL
     input bus_state_t ctrl_bus_i[2],
+    // Ungated bus state for HDR exit pattern detection
+    input bus_state_t hdr_exit_bus_i,
     output logic ctrl_scl_o[2],
     output logic ctrl_sda_o[2],
     output logic phy_sel_od_pp_o[2],
@@ -419,6 +421,7 @@ module controller_standby
       .clk_i(clk_i),
       .rst_ni(rst_ni),
       .ctrl_bus_i(ctrl_bus_i[1]),
+      .hdr_exit_bus_i(hdr_exit_bus_i),
       .ctrl_scl_o(ctrl_scl_o[1]),
       .ctrl_sda_o(ctrl_sda_o[1]),
       .arbitration_lost_i(arbitration_lost_i),

@@ -7,26 +7,30 @@ typedef enum logic [2:0] {
 } target_reset_detector_state_e;
 
 module target_reset_detector
-  import controller_pkg::*;
+  import i3c_pkg::*;
 (
     input logic clk_i,
     input logic rst_ni,
 
     input logic enable_i,
 
-    input logic scl_low,
-    input logic scl_high,
-    input logic scl_negedge,
-    input logic scl_posedge,
-    input logic sda_low,
-    input logic sda_posedge,
-    input logic sda_negedge,
-
-    input start_detected_i,
-    stop_detected_i,
+    // Bus state (provides stable signals for glitch immunity)
+    input bus_state_t bus_i,
 
     output logic target_reset_detect_o
 );
+
+  // Gate bus signals with enable - when disabled, bus appears idle (high, no edges/events)
+  bus_state_t bus;
+  always_comb begin
+    if (enable_i) begin
+      bus = bus_i;
+    end else begin
+      // When disabled: force idle state
+      bus = '1;
+    end
+  end
+
   logic count_sda_transition_en;
 
   logic [3:0] sda_transition_count_q;
@@ -35,14 +39,18 @@ module target_reset_detector
   target_reset_detector_state_e state_q, state_d;
 
   always_comb begin
-    if ((state_q == AwaitPattern) & (sda_transition_count_q < 4'he))
-      count_sda_transition_en = (sda_posedge & (sda_transition_count_q != 0)) | sda_negedge;
-    else count_sda_transition_en = 0;
-    if (scl_high) sda_transition_count_d = 4'h0;
-    else
-      sda_transition_count_d = count_sda_transition_en ?
-                                  sda_transition_count_q + 4'h1 :
-                                  sda_transition_count_q;
+    if ((state_q == AwaitPattern) & (sda_transition_count_q < 4'he)) begin
+      count_sda_transition_en = (bus.sda.pos_edge & (sda_transition_count_q != 0)) | bus.sda.neg_edge;
+      if (bus.scl.stable_high) sda_transition_count_d = 4'h0;
+      else
+        sda_transition_count_d = count_sda_transition_en ?
+                                    sda_transition_count_q + 4'h1 :
+                                    sda_transition_count_q;
+    end else begin
+      count_sda_transition_en = 1'b0;
+      if (bus.scl.stable_high) sda_transition_count_d = 4'h0;
+      else sda_transition_count_d = sda_transition_count_q;
+    end
   end
 
   always_ff @(posedge clk_i or negedge rst_ni) begin : target_reset_sda_transition_counter
@@ -69,29 +77,29 @@ module target_reset_detector
       AwaitSCL: begin
         state_d = AwaitSCL;
         // Bus state has changed, go back
-        if (scl_high | sda_low) begin
+        if (bus.scl.stable_high | bus.sda.stable_low) begin
           state_d = AwaitPattern;
-        end else if (scl_posedge) begin
+        end else if (bus.scl.pos_edge) begin
           state_d = AwaitSr;
         end
       end
       AwaitSr: begin
         state_d = AwaitSr;
         // If SDA posedge is detected, it means that it toggled from LOW to HIGH before fulfilling
-        // the START condition hold timing, otherwise `start_detected_i` would be asserted
-        if (scl_low | sda_posedge) begin
+        // the START condition hold timing, otherwise `start_detected` would be asserted
+        if (bus.scl.stable_low | bus.sda.pos_edge) begin
           state_d = AwaitPattern;
-        end else if (start_detected_i) begin
+        end else if (bus.start_det | bus.rstart_det) begin
           state_d = AwaitP;
         end
       end
       AwaitP: begin
         state_d = AwaitP;
         // If SDA negedge is detected, it means that it toggled from HIGH to LOW before fulfilling
-        // the STOP condition hold timing, otherwise `stop_detected_i` would be asserted
-        if (scl_low | sda_negedge) begin
+        // the STOP condition hold timing, otherwise `stop_detected` would be asserted
+        if (bus.scl.stable_low | bus.sda.neg_edge) begin
           state_d = AwaitPattern;
-        end else if (stop_detected_i) begin
+        end else if (bus.stop_det) begin
           state_d = ResetDetected;
         end
       end

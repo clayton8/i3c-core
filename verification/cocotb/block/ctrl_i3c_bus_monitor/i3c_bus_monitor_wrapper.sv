@@ -18,15 +18,19 @@ module i3c_bus_monitor_wrapper
     output logic target_reset_detect_o  // Detected Target Reset condtition
 );
 
-  bus_state_t state;
+  bus_state_t state;           // Gated bus state (unused here)
+  bus_state_t hdr_exit_state;  // Ungated bus state for HDR exit detection
 
   bus_monitor xmonitor (
-    .state_o (state),
+    .in_hdr_mode_i   (is_in_hdr_mode_i),
+    .state_o         (state),
+    .hdr_exit_state_o(hdr_exit_state),
     .*
   );
 
+  // i3c_bus_monitor uses the ungated signals for HDR exit detection
   i3c_bus_monitor xi3c_monitor(
-    .bus_i (state),
+    .bus_i (hdr_exit_state),
     .*
   );
 
