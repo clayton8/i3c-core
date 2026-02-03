@@ -1989,10 +1989,10 @@ Component Memory Space (CMS):</p>
 
 | Bits|      Identifier     | Access |Reset|                       Name                       |
 |-----|---------------------|--------|-----|--------------------------------------------------|
-|  0  |   PENDING_RX_NACK   |   rw   |  —  |                  Pending RX NACK                 |
-|  1  |  HANDOFF_DELAY_NACK |   rw   |  —  |                Handoff Delay NACK                |
-|  2  |  ACR_FSM_OP_SELECT  |   rw   |  —  |             Active Controller Select             |
-|  3  |PRIME_ACCEPT_GETACCCR|   rw   |  —  |          Prime to Accept Controller Role         |
+|  0  |   PENDING_RX_NACK   |   rw   | 0x0 |                  Pending RX NACK                 |
+|  1  |  HANDOFF_DELAY_NACK |   rw   | 0x0 |                Handoff Delay NACK                |
+|  2  |  ACR_FSM_OP_SELECT  |   rw   | 0x0 |             Active Controller Select             |
+|  3  |PRIME_ACCEPT_GETACCCR|   rw   | 0x0 |          Prime to Accept Controller Role         |
 |  4  |  HANDOFF_DEEP_SLEEP |rw, wset| 0x0 |                Handoff Deep Sleep                |
 |  5  |   CR_REQUEST_SEND   |    w   | 0x0 |           Send Controller Role Request           |
 | 10:8|  BAST_CCC_IBI_RING  |   rw   | 0x0 |Ring Bundle IBI Selector for Broadcast CCC Capture|
@@ -2220,9 +2220,9 @@ which supports extended capabilities</p>
 
 |Bits|    Identifier   |Access|Reset|       Name      |
 |----|-----------------|------|-----|-----------------|
-|  2 |  AC_CURRENT_OWN |  rw  |  —  |  AC_CURRENT_OWN |
-| 7:5|SIMPLE_CRR_STATUS|  rw  |  —  |SIMPLE_CRR_STATUS|
-|  8 |  HJ_REQ_STATUS  |  rw  |  —  |  HJ_REQ_STATUS  |
+|  2 |  AC_CURRENT_OWN |  rw  | 0x0 |  AC_CURRENT_OWN |
+| 7:5|SIMPLE_CRR_STATUS|  rw  | 0x0 |SIMPLE_CRR_STATUS|
+|  8 |  HJ_REQ_STATUS  |  rw  | 0x0 |  HJ_REQ_STATUS  |
 
 #### AC_CURRENT_OWN field
 
@@ -2313,19 +2313,19 @@ which supports extended capabilities</p>
 
 |Bits|        Identifier        |Access|Reset|                    Name                   |
 |----|--------------------------|------|-----|-------------------------------------------|
-|  0 |ACR_HANDOFF_OK_REMAIN_STAT|  rw  |  —  |                                           |
-|  1 |ACR_HANDOFF_OK_PRIMED_STAT|  rw  |  —  |                                           |
-|  2 | ACR_HANDOFF_ERR_FAIL_STAT|  rw  |  —  |                                           |
-|  3 |  ACR_HANDOFF_ERR_M3_STAT |  rw  |  —  |                                           |
-| 10 |     CRR_RESPONSE_STAT    |  rw  |  —  |                                           |
-| 11 |   STBY_CR_DYN_ADDR_STAT  |  rw  |  —  |                                           |
-| 12 |STBY_CR_ACCEPT_NACKED_STAT|  rw  |  —  |                                           |
-| 13 |  STBY_CR_ACCEPT_OK_STAT  |  rw  |  —  |                                           |
-| 14 |  STBY_CR_ACCEPT_ERR_STAT |  rw  |  —  |                                           |
+|  0 |ACR_HANDOFF_OK_REMAIN_STAT|  rw  | 0x0 |                                           |
+|  1 |ACR_HANDOFF_OK_PRIMED_STAT|  rw  | 0x0 |                                           |
+|  2 | ACR_HANDOFF_ERR_FAIL_STAT|  rw  | 0x0 |                                           |
+|  3 |  ACR_HANDOFF_ERR_M3_STAT |  rw  | 0x0 |                                           |
+| 10 |     CRR_RESPONSE_STAT    |  rw  | 0x0 |                                           |
+| 11 |   STBY_CR_DYN_ADDR_STAT  |  rw  | 0x0 |                                           |
+| 12 |STBY_CR_ACCEPT_NACKED_STAT|  rw  | 0x0 |                                           |
+| 13 |  STBY_CR_ACCEPT_OK_STAT  |  rw  | 0x0 |                                           |
+| 14 |  STBY_CR_ACCEPT_ERR_STAT |  rw  | 0x0 |                                           |
 | 16 |  STBY_CR_OP_RSTACT_STAT  |  rw  | 0x0 |Secondary Controller Operation Reset Action|
-| 17 |  CCC_PARAM_MODIFIED_STAT |  rw  |  —  |                                           |
-| 18 |  CCC_UNHANDLED_NACK_STAT |  rw  |  —  |                                           |
-| 19 | CCC_FATAL_RSTDAA_ERR_STAT|  rw  |  —  |                                           |
+| 17 |  CCC_PARAM_MODIFIED_STAT |  rw  | 0x0 |                                           |
+| 18 |  CCC_UNHANDLED_NACK_STAT |  rw  | 0x0 |                                           |
+| 19 | CCC_FATAL_RSTDAA_ERR_STAT|  rw  | 0x0 |                                           |
 
 #### ACR_HANDOFF_OK_REMAIN_STAT field
 
@@ -2408,19 +2408,19 @@ STBY_CR_INTR_STATUS, the Host Controller shall assert an interrupt to the Host.<
 
 |Bits|           Identifier          |Access|Reset|Name|
 |----|-------------------------------|------|-----|----|
-|  0 |ACR_HANDOFF_OK_REMAIN_SIGNAL_EN|  rw  |  —  |    |
-|  1 |ACR_HANDOFF_OK_PRIMED_SIGNAL_EN|  rw  |  —  |    |
-|  2 | ACR_HANDOFF_ERR_FAIL_SIGNAL_EN|  rw  |  —  |    |
-|  3 |  ACR_HANDOFF_ERR_M3_SIGNAL_EN |  rw  |  —  |    |
-| 10 |     CRR_RESPONSE_SIGNAL_EN    |  rw  |  —  |    |
-| 11 |   STBY_CR_DYN_ADDR_SIGNAL_EN  |  rw  |  —  |    |
-| 12 |STBY_CR_ACCEPT_NACKED_SIGNAL_EN|  rw  |  —  |    |
-| 13 |  STBY_CR_ACCEPT_OK_SIGNAL_EN  |  rw  |  —  |    |
-| 14 |  STBY_CR_ACCEPT_ERR_SIGNAL_EN |  rw  |  —  |    |
+|  0 |ACR_HANDOFF_OK_REMAIN_SIGNAL_EN|  rw  | 0x0 |    |
+|  1 |ACR_HANDOFF_OK_PRIMED_SIGNAL_EN|  rw  | 0x0 |    |
+|  2 | ACR_HANDOFF_ERR_FAIL_SIGNAL_EN|  rw  | 0x0 |    |
+|  3 |  ACR_HANDOFF_ERR_M3_SIGNAL_EN |  rw  | 0x0 |    |
+| 10 |     CRR_RESPONSE_SIGNAL_EN    |  rw  | 0x0 |    |
+| 11 |   STBY_CR_DYN_ADDR_SIGNAL_EN  |  rw  | 0x0 |    |
+| 12 |STBY_CR_ACCEPT_NACKED_SIGNAL_EN|  rw  | 0x0 |    |
+| 13 |  STBY_CR_ACCEPT_OK_SIGNAL_EN  |  rw  | 0x0 |    |
+| 14 |  STBY_CR_ACCEPT_ERR_SIGNAL_EN |  rw  | 0x0 |    |
 | 16 |  STBY_CR_OP_RSTACT_SIGNAL_EN  |  rw  | 0x0 |    |
-| 17 |  CCC_PARAM_MODIFIED_SIGNAL_EN |  rw  |  —  |    |
-| 18 |  CCC_UNHANDLED_NACK_SIGNAL_EN |  rw  |  —  |    |
-| 19 | CCC_FATAL_RSTDAA_ERR_SIGNAL_EN|  rw  |  —  |    |
+| 17 |  CCC_PARAM_MODIFIED_SIGNAL_EN |  rw  | 0x0 |    |
+| 18 |  CCC_UNHANDLED_NACK_SIGNAL_EN |  rw  | 0x0 |    |
+| 19 | CCC_FATAL_RSTDAA_ERR_SIGNAL_EN|  rw  | 0x0 |    |
 
 #### ACR_HANDOFF_OK_REMAIN_SIGNAL_EN field
 
@@ -2486,15 +2486,15 @@ STBY_CR_INTR_SIGNAL_ENABLE</p>
 
 |Bits|         Identifier        |Access|Reset|Name|
 |----|---------------------------|------|-----|----|
-| 10 |     CRR_RESPONSE_FORCE    |  rw  |  —  |    |
-| 11 |   STBY_CR_DYN_ADDR_FORCE  |  rw  |  —  |    |
-| 12 |STBY_CR_ACCEPT_NACKED_FORCE|  rw  |  —  |    |
-| 13 |  STBY_CR_ACCEPT_OK_FORCE  |  rw  |  —  |    |
-| 14 |  STBY_CR_ACCEPT_ERR_FORCE |  rw  |  —  |    |
-| 16 |  STBY_CR_OP_RSTACT_FORCE  |   w  |  —  |    |
-| 17 |  CCC_PARAM_MODIFIED_FORCE |  rw  |  —  |    |
-| 18 |  CCC_UNHANDLED_NACK_FORCE |  rw  |  —  |    |
-| 19 | CCC_FATAL_RSTDAA_ERR_FORCE|  rw  |  —  |    |
+| 10 |     CRR_RESPONSE_FORCE    |  rw  | 0x0 |    |
+| 11 |   STBY_CR_DYN_ADDR_FORCE  |  rw  | 0x0 |    |
+| 12 |STBY_CR_ACCEPT_NACKED_FORCE|  rw  | 0x0 |    |
+| 13 |  STBY_CR_ACCEPT_OK_FORCE  |  rw  | 0x0 |    |
+| 14 |  STBY_CR_ACCEPT_ERR_FORCE |  rw  | 0x0 |    |
+| 16 |  STBY_CR_OP_RSTACT_FORCE  |   w  | 0x0 |    |
+| 17 |  CCC_PARAM_MODIFIED_FORCE |  rw  | 0x0 |    |
+| 18 |  CCC_UNHANDLED_NACK_FORCE |  rw  | 0x0 |    |
+| 19 | CCC_FATAL_RSTDAA_ERR_FORCE|  rw  | 0x0 |    |
 
 #### CRR_RESPONSE_FORCE field
 
@@ -2542,8 +2542,8 @@ STBY_CR_INTR_SIGNAL_ENABLE</p>
 
 |Bits|      Identifier      |Access|Reset|Name|
 |----|----------------------|------|-----|----|
-| 2:0| F2_CRCAP1_BUS_CONFIG |  rw  |  —  |    |
-|11:8|F2_CRCAP2_DEV_INTERACT|  rw  |  —  |    |
+| 2:0| F2_CRCAP1_BUS_CONFIG |  rw  | 0x0 |    |
+|11:8|F2_CRCAP2_DEV_INTERACT|  rw  | 0x0 |    |
 
 #### F2_CRCAP1_BUS_CONFIG field
 
@@ -2638,7 +2638,7 @@ shall be revoked) with this Target Reset Pattern.</p>
 
 |Bits|Identifier|Access|Reset|  Name  |
 |----|----------|------|-----|--------|
-|31:0|  __rsvd  |  rw  |  —  |Reserved|
+|31:0|  __rsvd  |  rw  | 0x0 |Reserved|
 
 #### __rsvd field
 

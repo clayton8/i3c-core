@@ -2078,6 +2078,7 @@ reg_map = Munch.fromDict({
                 "PENDING_RX_NACK": {
                     "low": 0,
                     "mask": 1,
+                    "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
                     "woclr": 0,
@@ -2087,6 +2088,7 @@ reg_map = Munch.fromDict({
                 "HANDOFF_DELAY_NACK": {
                     "low": 1,
                     "mask": 2,
+                    "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
                     "woclr": 0,
@@ -2096,6 +2098,7 @@ reg_map = Munch.fromDict({
                 "ACR_FSM_OP_SELECT": {
                     "low": 2,
                     "mask": 4,
+                    "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
                     "woclr": 0,
@@ -2105,6 +2108,7 @@ reg_map = Munch.fromDict({
                 "PRIME_ACCEPT_GETACCCR": {
                     "low": 3,
                     "mask": 8,
+                    "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
                     "woclr": 0,
@@ -2350,6 +2354,7 @@ reg_map = Munch.fromDict({
                 "AC_CURRENT_OWN": {
                     "low": 2,
                     "mask": 4,
+                    "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
                     "woclr": 0,
@@ -2359,6 +2364,7 @@ reg_map = Munch.fromDict({
                 "SIMPLE_CRR_STATUS": {
                     "low": 5,
                     "mask": 224,
+                    "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
                     "woclr": 0,
@@ -2368,6 +2374,7 @@ reg_map = Munch.fromDict({
                 "HJ_REQ_STATUS": {
                     "low": 8,
                     "mask": 256,
+                    "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
                     "woclr": 0,
@@ -2439,6 +2446,7 @@ reg_map = Munch.fromDict({
                 "ACR_HANDOFF_OK_REMAIN_STAT": {
                     "low": 0,
                     "mask": 1,
+                    "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
                     "woclr": 0,
@@ -2448,6 +2456,7 @@ reg_map = Munch.fromDict({
                 "ACR_HANDOFF_OK_PRIMED_STAT": {
                     "low": 1,
                     "mask": 2,
+                    "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
                     "woclr": 0,
@@ -2457,6 +2466,7 @@ reg_map = Munch.fromDict({
                 "ACR_HANDOFF_ERR_FAIL_STAT": {
                     "low": 2,
                     "mask": 4,
+                    "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
                     "woclr": 0,
@@ -2466,6 +2476,7 @@ reg_map = Munch.fromDict({
                 "ACR_HANDOFF_ERR_M3_STAT": {
                     "low": 3,
                     "mask": 8,
+                    "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
                     "woclr": 0,
@@ -2475,6 +2486,7 @@ reg_map = Munch.fromDict({
                 "CRR_RESPONSE_STAT": {
                     "low": 10,
                     "mask": 1024,
+                    "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
                     "woclr": 0,
@@ -2484,6 +2496,7 @@ reg_map = Munch.fromDict({
                 "STBY_CR_DYN_ADDR_STAT": {
                     "low": 11,
                     "mask": 2048,
+                    "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
                     "woclr": 0,
@@ -2493,6 +2506,7 @@ reg_map = Munch.fromDict({
                 "STBY_CR_ACCEPT_NACKED_STAT": {
                     "low": 12,
                     "mask": 4096,
+                    "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
                     "woclr": 0,
@@ -2502,6 +2516,7 @@ reg_map = Munch.fromDict({
                 "STBY_CR_ACCEPT_OK_STAT": {
                     "low": 13,
                     "mask": 8192,
+                    "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
                     "woclr": 0,
@@ -2511,6 +2526,7 @@ reg_map = Munch.fromDict({
                 "STBY_CR_ACCEPT_ERR_STAT": {
                     "low": 14,
                     "mask": 16384,
+                    "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
                     "woclr": 0,
@@ -2530,6 +2546,7 @@ reg_map = Munch.fromDict({
                 "CCC_PARAM_MODIFIED_STAT": {
                     "low": 17,
                     "mask": 131072,
+                    "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
                     "woclr": 0,
@@ -2539,6 +2556,7 @@ reg_map = Munch.fromDict({
                 "CCC_UNHANDLED_NACK_STAT": {
                     "low": 18,
                     "mask": 262144,
+                    "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
                     "woclr": 0,
@@ -2548,6 +2566,7 @@ reg_map = Munch.fromDict({
                 "CCC_FATAL_RSTDAA_ERR_STAT": {
                     "low": 19,
                     "mask": 524288,
+                    "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
                     "woclr": 0,
@@ -2575,6 +2594,7 @@ reg_map = Munch.fromDict({
                 "ACR_HANDOFF_OK_REMAIN_SIGNAL_EN": {
                     "low": 0,
                     "mask": 1,
+                    "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
                     "woclr": 0,
@@ -2584,6 +2604,7 @@ reg_map = Munch.fromDict({
                 "ACR_HANDOFF_OK_PRIMED_SIGNAL_EN": {
                     "low": 1,
                     "mask": 2,
+                    "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
                     "woclr": 0,
@@ -2593,6 +2614,7 @@ reg_map = Munch.fromDict({
                 "ACR_HANDOFF_ERR_FAIL_SIGNAL_EN": {
                     "low": 2,
                     "mask": 4,
+                    "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
                     "woclr": 0,
@@ -2602,6 +2624,7 @@ reg_map = Munch.fromDict({
                 "ACR_HANDOFF_ERR_M3_SIGNAL_EN": {
                     "low": 3,
                     "mask": 8,
+                    "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
                     "woclr": 0,
@@ -2611,6 +2634,7 @@ reg_map = Munch.fromDict({
                 "CRR_RESPONSE_SIGNAL_EN": {
                     "low": 10,
                     "mask": 1024,
+                    "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
                     "woclr": 0,
@@ -2620,6 +2644,7 @@ reg_map = Munch.fromDict({
                 "STBY_CR_DYN_ADDR_SIGNAL_EN": {
                     "low": 11,
                     "mask": 2048,
+                    "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
                     "woclr": 0,
@@ -2629,6 +2654,7 @@ reg_map = Munch.fromDict({
                 "STBY_CR_ACCEPT_NACKED_SIGNAL_EN": {
                     "low": 12,
                     "mask": 4096,
+                    "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
                     "woclr": 0,
@@ -2638,6 +2664,7 @@ reg_map = Munch.fromDict({
                 "STBY_CR_ACCEPT_OK_SIGNAL_EN": {
                     "low": 13,
                     "mask": 8192,
+                    "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
                     "woclr": 0,
@@ -2647,6 +2674,7 @@ reg_map = Munch.fromDict({
                 "STBY_CR_ACCEPT_ERR_SIGNAL_EN": {
                     "low": 14,
                     "mask": 16384,
+                    "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
                     "woclr": 0,
@@ -2666,6 +2694,7 @@ reg_map = Munch.fromDict({
                 "CCC_PARAM_MODIFIED_SIGNAL_EN": {
                     "low": 17,
                     "mask": 131072,
+                    "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
                     "woclr": 0,
@@ -2675,6 +2704,7 @@ reg_map = Munch.fromDict({
                 "CCC_UNHANDLED_NACK_SIGNAL_EN": {
                     "low": 18,
                     "mask": 262144,
+                    "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
                     "woclr": 0,
@@ -2684,6 +2714,7 @@ reg_map = Munch.fromDict({
                 "CCC_FATAL_RSTDAA_ERR_SIGNAL_EN": {
                     "low": 19,
                     "mask": 524288,
+                    "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
                     "woclr": 0,
@@ -2697,6 +2728,7 @@ reg_map = Munch.fromDict({
                 "CRR_RESPONSE_FORCE": {
                     "low": 10,
                     "mask": 1024,
+                    "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
                     "woclr": 0,
@@ -2706,6 +2738,7 @@ reg_map = Munch.fromDict({
                 "STBY_CR_DYN_ADDR_FORCE": {
                     "low": 11,
                     "mask": 2048,
+                    "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
                     "woclr": 0,
@@ -2715,6 +2748,7 @@ reg_map = Munch.fromDict({
                 "STBY_CR_ACCEPT_NACKED_FORCE": {
                     "low": 12,
                     "mask": 4096,
+                    "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
                     "woclr": 0,
@@ -2724,6 +2758,7 @@ reg_map = Munch.fromDict({
                 "STBY_CR_ACCEPT_OK_FORCE": {
                     "low": 13,
                     "mask": 8192,
+                    "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
                     "woclr": 0,
@@ -2733,6 +2768,7 @@ reg_map = Munch.fromDict({
                 "STBY_CR_ACCEPT_ERR_FORCE": {
                     "low": 14,
                     "mask": 16384,
+                    "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
                     "woclr": 0,
@@ -2742,6 +2778,7 @@ reg_map = Munch.fromDict({
                 "STBY_CR_OP_RSTACT_FORCE": {
                     "low": 16,
                     "mask": 65536,
+                    "reset": 0,
                     "sw": "w",
                     "hw": "rw",
                     "woclr": 0,
@@ -2751,6 +2788,7 @@ reg_map = Munch.fromDict({
                 "CCC_PARAM_MODIFIED_FORCE": {
                     "low": 17,
                     "mask": 131072,
+                    "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
                     "woclr": 0,
@@ -2760,6 +2798,7 @@ reg_map = Munch.fromDict({
                 "CCC_UNHANDLED_NACK_FORCE": {
                     "low": 18,
                     "mask": 262144,
+                    "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
                     "woclr": 0,
@@ -2769,6 +2808,7 @@ reg_map = Munch.fromDict({
                 "CCC_FATAL_RSTDAA_ERR_FORCE": {
                     "low": 19,
                     "mask": 524288,
+                    "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
                     "woclr": 0,
@@ -2782,6 +2822,7 @@ reg_map = Munch.fromDict({
                 "F2_CRCAP1_BUS_CONFIG": {
                     "low": 0,
                     "mask": 7,
+                    "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
                     "woclr": 0,
@@ -2791,6 +2832,7 @@ reg_map = Munch.fromDict({
                 "F2_CRCAP2_DEV_INTERACT": {
                     "low": 8,
                     "mask": 3840,
+                    "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
                     "woclr": 0,
@@ -2892,6 +2934,7 @@ reg_map = Munch.fromDict({
                 "__rsvd": {
                     "low": 0,
                     "mask": 4294967295,
+                    "reset": 0,
                     "sw": "rw",
                     "hw": "rw",
                     "woclr": 0,

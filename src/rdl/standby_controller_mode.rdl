@@ -155,24 +155,28 @@ regfile StandbyControllerModeRegisters#(
             desc = "";
             hw   = rw;
             sw   = rw;
+            reset = 1'b0;
         } PRIME_ACCEPT_GETACCCR[3:3];
         field {
             name = "Active Controller Select";
             desc = "";
             hw   = rw;
             sw   = rw;
+            reset = 1'b0;
         } ACR_FSM_OP_SELECT[2:2];
         field {
             name = "Handoff Delay NACK";
             desc = "";
             hw   = rw;
             sw   = rw;
+            reset = 1'b0;
         } HANDOFF_DELAY_NACK[1:1];
         field {
             name = "Pending RX NACK";
             desc = "";
             hw   = rw;
             sw   = rw;
+            reset = 1'b0;
         } PENDING_RX_NACK[0:0];
     } STBY_CR_CONTROL;
     reg {
@@ -336,18 +340,21 @@ regfile StandbyControllerModeRegisters#(
             desc = "";
             hw   = rw;
             sw   = rw;
+            reset = 1'b0;
         } HJ_REQ_STATUS[8:8];
         field {
             name = "SIMPLE_CRR_STATUS";
             desc = "";
             hw   = rw;
             sw   = rw;
+            reset = 3'b0;
         } SIMPLE_CRR_STATUS[7:5];
         field {
             name = "AC_CURRENT_OWN";
             desc = "";
             hw   = rw;
             sw   = rw;
+            reset = 1'b0;
         } AC_CURRENT_OWN[2:2];
     } STBY_CR_STATUS;
     reg {
@@ -419,18 +426,21 @@ regfile StandbyControllerModeRegisters#(
             desc = "";
             hw   = rw;
             sw   = rw;
+            reset = 1'b0;
         } CCC_FATAL_RSTDAA_ERR_STAT[19:19];
         field {
             name = "";
             desc = "";
             hw   = rw;
             sw   = rw;
+            reset = 1'b0;
         } CCC_UNHANDLED_NACK_STAT[18:18];
         field {
             name = "";
             desc = "";
             hw   = rw;
             sw   = rw;
+            reset = 1'b0;
         } CCC_PARAM_MODIFIED_STAT[17:17];
         field {
             name = "Secondary Controller Operation Reset Action";
@@ -447,54 +457,63 @@ regfile StandbyControllerModeRegisters#(
             desc = "";
             hw   = rw;
             sw   = rw;
+            reset = 1'b0;
         } STBY_CR_ACCEPT_ERR_STAT[14:14];
         field {
             name = "";
             desc = "";
             hw   = rw;
             sw   = rw;
+            reset = 1'b0;
         } STBY_CR_ACCEPT_OK_STAT[13:13];
         field {
             name = "";
             desc = "";
             hw   = rw;
             sw   = rw;
+            reset = 1'b0;
         } STBY_CR_ACCEPT_NACKED_STAT[12:12];
         field {
             name = "";
             desc = "";
             hw   = rw;
             sw   = rw;
+            reset = 1'b0;
         } STBY_CR_DYN_ADDR_STAT[11:11];
         field {
             name = "";
             desc = "";
             hw   = rw;
             sw   = rw;
+            reset = 1'b0;
         } CRR_RESPONSE_STAT[10:10];
         field {
             name = "";
             desc = "";
             hw   = rw;
             sw   = rw;
+            reset = 1'b0;
         } ACR_HANDOFF_ERR_M3_STAT[3:3];
         field {
             name = "";
             desc = "";
             hw   = rw;
             sw   = rw;
+            reset = 1'b0;
         } ACR_HANDOFF_ERR_FAIL_STAT[2:2];
         field {
             name = "";
             desc = "";
             hw   = rw;
             sw   = rw;
+            reset = 1'b0;
         } ACR_HANDOFF_OK_PRIMED_STAT[1:1];
         field {
             name = "";
             desc = "";
             hw   = rw;
             sw   = rw;
+            reset = 1'b0;
         } ACR_HANDOFF_OK_REMAIN_STAT[0:0];
     } STBY_CR_INTR_STATUS;
     reg {
@@ -517,18 +536,21 @@ regfile StandbyControllerModeRegisters#(
             desc = "";
             hw   = rw;
             sw   = rw;
+            reset = 1'b0;
         } CCC_FATAL_RSTDAA_ERR_SIGNAL_EN[19:19];
         field {
             name = "";
             desc = "";
             hw   = rw;
             sw   = rw;
+            reset = 1'b0;
         } CCC_UNHANDLED_NACK_SIGNAL_EN[18:18];
         field {
             name = "";
             desc = "";
             hw   = rw;
             sw   = rw;
+            reset = 1'b0;
         } CCC_PARAM_MODIFIED_SIGNAL_EN[17:17];
         field {
             name = "";
@@ -543,54 +565,63 @@ regfile StandbyControllerModeRegisters#(
             desc = "";
             hw   = rw;
             sw   = rw;
+            reset = 1'b0;
         } STBY_CR_ACCEPT_ERR_SIGNAL_EN[14:14];
         field {
             name = "";
             desc = "";
             hw   = rw;
             sw   = rw;
+            reset = 1'b0;
         } STBY_CR_ACCEPT_OK_SIGNAL_EN[13:13];
         field {
             name = "";
             desc = "";
             hw   = rw;
             sw   = rw;
+            reset = 1'b0;
         } STBY_CR_ACCEPT_NACKED_SIGNAL_EN[12:12];
         field {
             name = "";
             desc = "";
             hw   = rw;
             sw   = rw;
+            reset = 1'b0;
         } STBY_CR_DYN_ADDR_SIGNAL_EN[11:11];
         field {
             name = "";
             desc = "";
             hw   = rw;
             sw   = rw;
+            reset = 1'b0;
         } CRR_RESPONSE_SIGNAL_EN[10:10];
         field {
             name = "";
             desc = "";
             hw   = rw;
             sw   = rw;
+            reset = 1'b0;
         } ACR_HANDOFF_ERR_M3_SIGNAL_EN[3:3];
         field {
             name = "";
             desc = "";
             hw   = rw;
             sw   = rw;
+            reset = 1'b0;
         } ACR_HANDOFF_ERR_FAIL_SIGNAL_EN[2:2];
         field {
             name = "";
             desc = "";
             hw   = rw;
             sw   = rw;
+            reset = 1'b0;
         } ACR_HANDOFF_OK_PRIMED_SIGNAL_EN [1:1];
         field {
             name = "";
             desc = "";
             hw   = rw;
             sw   = rw;
+            reset = 1'b0;
         } ACR_HANDOFF_OK_REMAIN_SIGNAL_EN[0:0];
     } STBY_CR_INTR_SIGNAL_ENABLE;
     reg {
@@ -603,18 +634,21 @@ regfile StandbyControllerModeRegisters#(
             desc = "";
             hw   = rw;
             sw   = rw;
+            reset = 1'b0;
         } CCC_FATAL_RSTDAA_ERR_FORCE[19:19];
         field {
             name = "";
             desc = "";
             hw   = rw;
             sw   = rw;
+            reset = 1'b0;
         } CCC_UNHANDLED_NACK_FORCE[18:18];
         field {
             name = "";
             desc = "";
             hw   = rw;
             sw   = rw;
+            reset = 1'b0;
         } CCC_PARAM_MODIFIED_FORCE[17:17];
         field {
             name = "    ";
@@ -622,36 +656,42 @@ regfile StandbyControllerModeRegisters#(
             hw   = rw;
             we   = true;
             sw   = w;
+            reset = 1'b0;
         } STBY_CR_OP_RSTACT_FORCE[16:16];
         field {
             name = "";
             desc = "";
             hw   = rw;
             sw   = rw;
+            reset = 1'b0;
         } STBY_CR_ACCEPT_ERR_FORCE[14:14];
         field {
             name = "";
             desc = "";
             hw   = rw;
             sw   = rw;
+            reset = 1'b0;
         } STBY_CR_ACCEPT_OK_FORCE[13:13];
         field {
             name = "";
             desc = "";
             hw   = rw;
             sw   = rw;
+            reset = 1'b0;
         } STBY_CR_ACCEPT_NACKED_FORCE[12:12];
         field {
             name = "";
             desc = "";
             hw   = rw;
             sw   = rw;
+            reset = 1'b0;
         } STBY_CR_DYN_ADDR_FORCE[11:11];
         field {
             name = "";
             desc = "";
             hw   = rw;
             sw   = rw;
+            reset = 1'b0;
         } CRR_RESPONSE_FORCE[10:10];
     } STBY_CR_INTR_FORCE;
     reg {
@@ -662,12 +702,14 @@ regfile StandbyControllerModeRegisters#(
             desc = "";
             hw   = rw;
             sw   = rw;
+            reset = 4'b0;
         } F2_CRCAP2_DEV_INTERACT[11:8];
         field {
             name = "";
             desc = "";
             hw   = rw;
             sw   = rw;
+            reset = 3'b0;
         } F2_CRCAP1_BUS_CONFIG[2:0];
     } STBY_CR_CCC_CONFIG_GETCAPS;
     reg {
@@ -765,6 +807,7 @@ regfile StandbyControllerModeRegisters#(
             desc = "";
             hw   = rw;
             sw   = rw;
+            reset = 32'b0;
         } __rsvd[31:0];
     } __rsvd_3;
 };
