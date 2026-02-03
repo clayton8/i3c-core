@@ -635,7 +635,7 @@ module i3c_target_fsm import i3c_pkg::*; #(
 
     // Priority overrides for bus conditions and HDR mode
     // Order matters: HDR exit has highest priority, then HDR mode entry, then STOP
-    if (hdr_exit_detect_i) begin
+    if (hdr_exit_detect_i && InHDRMode) begin
       // HDR Exit Pattern detected - exit HDR mode
       state_d = Idle;
     end else if (in_hdr_mode_i) begin
