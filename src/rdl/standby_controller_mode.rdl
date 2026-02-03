@@ -622,6 +622,7 @@ regfile StandbyControllerModeRegisters#(
             hw   = rw;
             we   = true;
             sw   = w;
+            reset = 1'b0;
         } STBY_CR_OP_RSTACT_FORCE[16:16];
         field {
             name = "";

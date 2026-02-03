@@ -254,9 +254,12 @@ module i3c_axi_sub_rd import axi_pkg::*; #(
                 end
             end
 
-            // No reset needed on data path -- txn_rvalid (control path) is reset
-            always_ff@(posedge clk) begin
-                txn_xfer_ctx[cp] <= txn_xfer_ctx[cp-1];
+            always_ff@(posedge clk or negedge rst_n) begin
+                if (!rst_n) begin
+                    txn_xfer_ctx[cp] <= '0;
+                end else begin
+                    txn_xfer_ctx[cp] <= txn_xfer_ctx[cp-1];
+                end
             end
         end: CTX_PIPELINE
 
@@ -305,9 +308,10 @@ module i3c_axi_sub_rd import axi_pkg::*; #(
         end
 
         for (ex = 0; ex < ID_NUM; ex++) begin: EX_CTX_TRACKER
-            // TODO: reset?
-            always_ff@(posedge clk) begin
-                if (txn_rvalid[0] && txn_ctx.lock && (txn_ctx.id == ex)) begin
+            always_ff@(posedge clk or negedge rst_n) begin
+                if (!rst_n) begin
+                    ex_ctx[ex] <= '0;
+                end else if (txn_rvalid[0] && txn_ctx.lock && (txn_ctx.id == ex)) begin
                     ex_ctx[ex].addr      <= txn_ctx.addr;
                     ex_ctx[ex].addr_mask <= addr_ex_algn_mask;
                 end

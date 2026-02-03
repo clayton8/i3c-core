@@ -2491,7 +2491,7 @@ STBY_CR_INTR_SIGNAL_ENABLE</p>
 | 12 |STBY_CR_ACCEPT_NACKED_FORCE|  rw  |  —  |    |
 | 13 |  STBY_CR_ACCEPT_OK_FORCE  |  rw  |  —  |    |
 | 14 |  STBY_CR_ACCEPT_ERR_FORCE |  rw  |  —  |    |
-| 16 |  STBY_CR_OP_RSTACT_FORCE  |   w  |  —  |    |
+| 16 |  STBY_CR_OP_RSTACT_FORCE  |   w  | 0x0 |    |
 | 17 |  CCC_PARAM_MODIFIED_FORCE |  rw  |  —  |    |
 | 18 |  CCC_UNHANDLED_NACK_FORCE |  rw  |  —  |    |
 | 19 | CCC_FATAL_RSTDAA_ERR_FORCE|  rw  |  —  |    |

@@ -2742,6 +2742,7 @@ reg_map = Munch.fromDict({
                 "STBY_CR_OP_RSTACT_FORCE": {
                     "low": 16,
                     "mask": 65536,
+                    "reset": 0,
                     "sw": "w",
                     "hw": "rw",
                     "woclr": 0,

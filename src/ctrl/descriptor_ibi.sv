@@ -87,8 +87,12 @@ module descriptor_ibi #(
       endcase
 
   // Capture IBI descriptor
-  always_ff @(posedge clk_i)
-    if (state_q == Idle && ibi_queue_rvalid_i) begin
+  always_ff @(posedge clk_i or negedge rst_ni)
+    if (!rst_ni) begin
+      data_mdb   <= '0;
+      data_len   <= '0;
+      data_words <= '0;
+    end else if (state_q == Idle && ibi_queue_rvalid_i) begin
       data_mdb   <= ibi_queue_rdata_i[31:24];
       // -1 to compensate for comparison with data_cnt
       data_len   <= ibi_queue_rdata_i[7:0] - 1;
@@ -97,8 +101,10 @@ module descriptor_ibi #(
     end
 
   // Data counter
-  always_ff @(posedge clk_i)
-    if (state_q == Idle) begin
+  always_ff @(posedge clk_i or negedge rst_ni)
+    if (!rst_ni) begin
+      data_cnt <= '0;
+    end else if (state_q == Idle) begin
       data_cnt <= '0;
     end else if (state_q == WriteData) begin
       if (ibi_queue_rvalid_i && ibi_byte_ready_i) data_cnt <= data_cnt + 1;

@@ -3494,7 +3494,7 @@ package I3CCSR_uvm;
             this.STBY_CR_ACCEPT_ERR_FORCE = new("STBY_CR_ACCEPT_ERR_FORCE");
             this.STBY_CR_ACCEPT_ERR_FORCE.configure(this, 1, 14, "RW", 1, 'h0, 0, 1, 0);
             this.STBY_CR_OP_RSTACT_FORCE = new("STBY_CR_OP_RSTACT_FORCE");
-            this.STBY_CR_OP_RSTACT_FORCE.configure(this, 1, 16, "WO", 1, 'h0, 0, 1, 0);
+            this.STBY_CR_OP_RSTACT_FORCE.configure(this, 1, 16, "WO", 1, 'h0, 1, 1, 0);
             this.CCC_PARAM_MODIFIED_FORCE = new("CCC_PARAM_MODIFIED_FORCE");
             this.CCC_PARAM_MODIFIED_FORCE.configure(this, 1, 17, "RW", 1, 'h0, 0, 1, 0);
             this.CCC_UNHANDLED_NACK_FORCE = new("CCC_UNHANDLED_NACK_FORCE");
