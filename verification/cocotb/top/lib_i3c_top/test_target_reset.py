@@ -195,7 +195,7 @@ async def test_reset_at_min_timing(dut):
     This tests the target reset detector when the bus operates at the
     minimum timing specified by I3C (140ns per transition).
     """
-    i3c_controller, tb = await test_setup_stress(dut, SYSTEM_CLOCK_FREQ_MHZ)
+    i3c_controller, tb = await test_setup(dut, disable_monitor=True)
 
     dut._log.info(f"Testing reset pattern at minimum timing: tDIG_H = {T_DIG_H_MIN_NS}ns")
 
@@ -222,7 +222,7 @@ async def test_13_transitions_fails(dut):
     The spec requires exactly 14 SDA transitions. With only 13,
     the FSM should remain in AwaitPattern state.
     """
-    i3c_controller, tb = await test_setup_stress(dut, SYSTEM_CLOCK_FREQ_MHZ)
+    i3c_controller, tb = await test_setup(dut, disable_monitor=True)
 
     dut._log.info("Testing 13 SDA transitions (should NOT trigger reset)")
 
@@ -248,7 +248,7 @@ async def test_15_transitions_before_scl(dut):
     Extra transitions beyond 14 while SCL is still low should prevent
     the pattern from being recognized.
     """
-    i3c_controller, tb = await test_setup_stress(dut, SYSTEM_CLOCK_FREQ_MHZ)
+    i3c_controller, tb = await test_setup(dut, disable_monitor=True)
 
     dut._log.info("Testing 15 SDA transitions (should NOT trigger reset)")
 
@@ -275,7 +275,7 @@ async def test_scl_glitch_during_pattern(dut):
     When SCL goes stable high during the 14 SDA transitions,
     the transition counter should reset and pattern detection should fail.
     """
-    i3c_controller, tb = await test_setup_stress(dut, SYSTEM_CLOCK_FREQ_MHZ)
+    i3c_controller, tb = await test_setup(dut, disable_monitor=True)
 
     dut._log.info("Testing SCL glitch during SDA pattern")
 
@@ -301,7 +301,7 @@ async def test_sda_stable_low_during_await_scl(dut):
     In AwaitSCL state, if SDA becomes stable low, FSM should abort
     back to AwaitPattern.
     """
-    i3c_controller, tb = await test_setup_stress(dut, SYSTEM_CLOCK_FREQ_MHZ)
+    i3c_controller, tb = await test_setup(dut, disable_monitor=True)
 
     dut._log.info("Testing SDA stable low during AwaitSCL")
 
@@ -326,7 +326,7 @@ async def test_scl_drops_during_await_sr(dut):
     In AwaitSr state, if SCL becomes stable low before START is detected,
     FSM should abort back to AwaitPattern.
     """
-    i3c_controller, tb = await test_setup_stress(dut, SYSTEM_CLOCK_FREQ_MHZ)
+    i3c_controller, tb = await test_setup(dut, disable_monitor=True)
 
     dut._log.info("Testing SCL drop during AwaitSr")
 
@@ -351,7 +351,7 @@ async def test_scl_drops_during_await_p(dut):
     In AwaitP state, if SCL becomes stable low before STOP is detected,
     FSM should abort back to AwaitPattern.
     """
-    i3c_controller, tb = await test_setup_stress(dut, SYSTEM_CLOCK_FREQ_MHZ)
+    i3c_controller, tb = await test_setup(dut, disable_monitor=True)
 
     dut._log.info("Testing SCL drop during AwaitP")
 
@@ -376,7 +376,7 @@ async def test_back_to_back_resets(dut):
     Verify that the FSM returns cleanly to initial state after reset
     and can detect subsequent reset patterns.
     """
-    i3c_controller, tb = await test_setup_stress(dut, SYSTEM_CLOCK_FREQ_MHZ)
+    i3c_controller, tb = await test_setup(dut, disable_monitor=True)
 
     dut._log.info("Testing back-to-back reset patterns")
 
@@ -405,7 +405,7 @@ async def test_reset_after_failed_pattern(dut):
     """
     Verify FSM recovers after a failed pattern and can detect subsequent valid reset.
     """
-    i3c_controller, tb = await test_setup_stress(dut, SYSTEM_CLOCK_FREQ_MHZ)
+    i3c_controller, tb = await test_setup(dut, disable_monitor=True)
 
     dut._log.info("Testing recovery after failed pattern")
 
@@ -445,7 +445,7 @@ async def test_first_edge_must_be_falling(dut):
     Per FSM logic, the first counted transition must be a falling edge.
     Starting with a rising edge should not count toward the 14 transitions.
     """
-    i3c_controller, tb = await test_setup_stress(dut, SYSTEM_CLOCK_FREQ_MHZ)
+    i3c_controller, tb = await test_setup(dut, disable_monitor=True)
 
     dut._log.info("Testing first edge polarity requirement")
 
@@ -494,7 +494,7 @@ async def test_timing_at_2x_minimum(dut):
     Verify reset detection works at 2x minimum timing (more relaxed timing).
     This serves as a sanity check that the detector isn't too strict.
     """
-    i3c_controller, tb = await test_setup_stress(dut, SYSTEM_CLOCK_FREQ_MHZ)
+    i3c_controller, tb = await test_setup(dut, disable_monitor=True)
 
     relaxed_timing = T_DIG_H_MIN_NS * 2  # 280ns
     dut._log.info(f"Testing reset at relaxed timing: tDIG_H = {relaxed_timing}ns")
@@ -523,7 +523,7 @@ async def test_very_fast_timing_below_spec(dut):
     Note: 40ns is the default tdig_h in cocotbext-i3c, which is below
     the I3C spec minimum of 140ns.
     """
-    i3c_controller, tb = await test_setup_stress(dut, SYSTEM_CLOCK_FREQ_MHZ)
+    i3c_controller, tb = await test_setup(dut, disable_monitor=True)
 
     # Use fast timing (40ns) - this is below spec but tests fast operation
     fast_timing = 40.0  # ns
@@ -550,7 +550,7 @@ async def test_mixed_valid_and_invalid_patterns(dut):
     """
     Send a mix of valid and invalid patterns to stress the FSM transitions.
     """
-    i3c_controller, tb = await test_setup_stress(dut, SYSTEM_CLOCK_FREQ_MHZ)
+    i3c_controller, tb = await test_setup(dut, disable_monitor=True)
 
     dut._log.info("Testing mixed valid/invalid pattern sequence")
 
