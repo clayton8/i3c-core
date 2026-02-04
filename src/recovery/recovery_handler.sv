@@ -254,6 +254,10 @@ module recovery_handler
   logic        virtual_target_active;     // Virtual target currently addressed
   logic        virtual_target_active_q;   // Delayed virtual target active
   logic        virtual_target_start;      // Pulse on virtual target start
+  logic        ctl_bus_addr_valid_q;      // Delayed address valid for posedge detect
+  logic        ctl_bus_addr_valid_posedge;      // Posedge of address valid
+  logic        ctl_bus_addr_valid_posedge_q;    // Delayed posedge aligned with virtual_device_sel_i
+  logic        other_target_start;        // Pulse when other target is addressed
 
   //----------------------------------------------------------------------------
   // TTI RX Descriptor Queue Signals
@@ -481,7 +485,7 @@ module recovery_handler
   // Virtual Device Selection Delay
   // Shift register delays PEC init after virtual device selection
   //----------------------------------------------------------------------------
-  always @(posedge clk_i or negedge rst_ni)
+  always @(posedge clk_i or negedge rst_ni) begin
     if (~rst_ni) begin
       virtual_device_cec_shreg <= 2'b10;
     end else if (virtual_device_sel_i) begin
@@ -489,9 +493,16 @@ module recovery_handler
     end else begin
       virtual_device_cec_shreg <= 2'b10;
     end
+  end
 
   //----------------------------------------------------------------------------
-  // Recovery Pending Extension
+  // Delayed Signal Registers
+  // Single process for all 1-cycle delayed versions of control signals:
+  // - virtual_device_sel_q: Extends recovery_pending by 1 cycle (see TODO below)
+  // - virtual_target_active_q: For edge detection on virtual target addressing
+  // - ctl_bus_addr_valid_q: For posedge detection of address valid
+  // - ctl_bus_addr_valid_posedge_q: Delayed posedge aligned with virtual_device_sel_i
+  //
   // TODO: The descriptor_rx module sends tti_rx_queue_flush 1 cycle after the
   // transfer ends (transfer_ended_q). However, virtual_device_sel_i goes low on
   // the same cycle that transfer_ended fires, causing recovery_pending to
@@ -500,12 +511,23 @@ module recovery_handler
   // Extending virtual_device_sel_i by 1 cycle ensures recovery_pending stays
   // high to block the spurious flush from descriptor_rx.
   //----------------------------------------------------------------------------
-  always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni)
-      virtual_device_sel_q <= 1'b0;
-    else
-      virtual_device_sel_q <= virtual_device_sel_i;
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      virtual_device_sel_q         <= 1'b0;
+      virtual_target_active_q      <= 1'b0;
+      ctl_bus_addr_valid_q         <= 1'b0;
+      ctl_bus_addr_valid_posedge_q <= 1'b0;
+    end else begin
+      virtual_device_sel_q         <= virtual_device_sel_i;
+      virtual_target_active_q      <= virtual_target_active;
+      ctl_bus_addr_valid_q         <= ctl_bus_addr_valid_i;
+      ctl_bus_addr_valid_posedge_q <= ctl_bus_addr_valid_posedge;
+    end
+  end
 
+  //----------------------------------------------------------------------------
+  // Recovery Pending Logic
+  //----------------------------------------------------------------------------
   assign recovery_xfer_pending = xfer_in_progress_i && (virtual_device_sel_i || virtual_device_sel_q);
   assign recovery_pending = recovery_xfer_pending | recovery_exec_pending;
 
@@ -514,13 +536,6 @@ module recovery_handler
   // Generates pulse on rising edge of virtual target being addressed (handles Sr)
   //----------------------------------------------------------------------------
   assign virtual_target_active = ctl_bus_addr_valid_i && virtual_device_sel_i;
-
-  always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni)
-      virtual_target_active_q <= 1'b0;
-    else
-      virtual_target_active_q <= virtual_target_active;
-
   assign virtual_target_start = virtual_target_active && !virtual_target_active_q;
 
   //----------------------------------------------------------------------------
@@ -536,26 +551,8 @@ module recovery_handler
   // Cycle N+1: posedge_q fires, virtual_device_sel_i = updated (valid)
   //            → other_target_start = posedge_q && !virtual_device_sel_i
   //----------------------------------------------------------------------------
-  logic ctl_bus_addr_valid_q;
-  logic ctl_bus_addr_valid_posedge;
-  logic ctl_bus_addr_valid_posedge_q;
-  logic other_target_start;
-
-  always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni)
-      ctl_bus_addr_valid_q <= 1'b0;
-    else
-      ctl_bus_addr_valid_q <= ctl_bus_addr_valid_i;
-
   // Posedge detect: was 0 last cycle, is 1 this cycle (fires on cycle N)
   assign ctl_bus_addr_valid_posedge = ctl_bus_addr_valid_i && !ctl_bus_addr_valid_q;
-
-  // Delay posedge by 1 cycle to align with virtual_device_sel_i (fires on cycle N+1)
-  always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni)
-      ctl_bus_addr_valid_posedge_q <= 1'b0;
-    else
-      ctl_bus_addr_valid_posedge_q <= ctl_bus_addr_valid_posedge;
 
   // Other target addressed: delayed posedge (aligned) but not for us
   assign other_target_start = ctl_bus_addr_valid_posedge_q && !virtual_device_sel_i;
@@ -1018,7 +1015,7 @@ module recovery_handler
   // Any start (S or Sr) resets address valid tracking
   assign ctl_bus_any_start = ctl_bus_start_i | ctl_bus_rstart_i;
 
-  always @(posedge clk_i or negedge rst_ni)
+  always @(posedge clk_i or negedge rst_ni) begin
     if (~rst_ni) begin
       bus_addr_valid <= '0;
     end else if (ctl_bus_any_start) begin
@@ -1026,6 +1023,7 @@ module recovery_handler
     end else if (~bus_addr_valid && ctl_bus_addr_valid_i) begin
       bus_addr_valid <= '1;
     end
+  end
 
   assign pec_init = ctl_bus_addr_valid_i & ~bus_addr_valid;
 
@@ -1178,9 +1176,15 @@ module recovery_handler
 
   // TX PEC mux for initializing it with I2C/I3C address byte
   always_comb begin
-    tx_pec_data  = pec_init ? ctl_bus_addr_i : ctl_tti_tx_data_queue_rdata_o;
-    tx_pec_valid = pec_init ? 1'b1 : xmit_pec_enable;
-    tx_pec_init  = pec_init ? 1'b1 : 1'b0;
+    if (pec_init) begin
+      tx_pec_data  = ctl_bus_addr_i;
+      tx_pec_valid = 1'b1;
+      tx_pec_init  = 1'b1;
+    end else begin
+      tx_pec_data  = ctl_tti_tx_data_queue_rdata_o;
+      tx_pec_valid = xmit_pec_enable;
+      tx_pec_init  = 1'b0;
+    end
   end
 
   //============================================================================
