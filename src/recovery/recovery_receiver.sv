@@ -1753,7 +1753,7 @@ module recovery_receiver
 
   always_comb begin
     hwif_socmgmt_o.REC_INTF_CFG.REC_PAYLOAD_DONE.we   = fifo_xfer_done;
-    hwif_socmgmt_o.REC_INTF_CFG.REC_PAYLOAD_DONE.next = 1'b1;
+    hwif_socmgmt_o.REC_INTF_CFG.REC_PAYLOAD_DONE.next = 1'b0;
   end
 
   always_ff @(posedge clk_i or negedge rst_ni) begin
