@@ -137,7 +137,9 @@ module recovery_receiver
     //--------------------------------------------------------------------------
     // TTI RX Queue Control
     //--------------------------------------------------------------------------
-    output logic rx_data_queue_select_o,
+    // Select=1: Receiver consumes bytes directly (header/PEC)
+    // Select=0: Bytes go to queue (payload)
+    output logic rx_data_queue_select_o, 
     output logic rx_data_queue_flush_o,
     output logic conv_soft_reset_o,  // Assert during Error to reset width converters
     input  logic rx_data_queue_flow_i,
@@ -388,14 +390,6 @@ module recovery_receiver
   //----------------------------------------------------------------------------
   logic        all_data_received;
 
-  // Raw length error detection (no enable masking)
-  logic        length_underrun_err_raw;   // Fewer bytes received than expected
-  logic        length_overrun_err_raw;    // More bytes received than expected  
-
-  // Enabled length errors (masked with length_err_det_en_i)
-  logic        length_underrun_err_en;    // Enabled underrun error
-  logic        length_overrun_err_en;     // Enabled overrun error
-
   //----------------------------------------------------------------------------
   // Bus Condition Signals
   //----------------------------------------------------------------------------
@@ -438,7 +432,7 @@ module recovery_receiver
   //----------------------------------------------------------------------------
   // Indirect FIFO Signals
   //----------------------------------------------------------------------------
-  logic [31:0] fifo_size, fifo_ptr_top;
+  logic [31:0] fifo_size;
   logic [31:0] fifo_wrptr, fifo_rdptr;
   logic        fifo_wrptr_inc, fifo_rdptr_inc;
   logic        fifo_ptr_clr;
@@ -473,21 +467,7 @@ module recovery_receiver
   //----------------------------------------------------------------------------
   // Error Detection Signals
   //----------------------------------------------------------------------------
-  // Raw PEC error detection (no enable masking)
-  logic        pec_err_raw;           // PEC mismatch detected
-  
-  // Enabled PEC error (masked with pec_err_det_en_i)
-  logic        pec_err_en;            // Enabled PEC error
-  
-  // Raw command validation errors (no enable masking)
-  logic        readonly_err_raw;      // Write to read-only command detected
-  logic        unsupported_err_raw;   // Unsupported/out-of-range command detected
-  
-  // Enabled command validation errors
-  logic        readonly_err_en;       // Enabled read-only error
-  logic        unsupported_err_en;    // Enabled unsupported error
-  
-  // FSM-generated error signals (set when enabled error detected in correct state)
+  // FSM-generated error signals (set when masked error detected in correct state)
   logic        pec_err;               // PEC error detected in CmdDispatch
   logic        length_underrun_err;   // Underrun detected in RxData
   logic        length_overrun_err;    // Overrun detected in RxPec
@@ -497,16 +477,8 @@ module recovery_receiver
   logic        premature_stop;        // Premature bus stop detected (combinational)
   logic        premature_stop_q;      // Registered premature stop for Error state exit
   
-  // CSR write length validation errors (cmd_len vs expected csr_length)
-  logic        csr_length_err_raw;    // cmd_len doesn't match expected csr_length_next
-  logic        csr_length_err_en;     // Enabled CSR length error
-  
   // FIFO overflow error signals
-  logic        rx_fifo_overflow_err_raw;     // RX FIFO overflow raw detection
-  logic        rx_fifo_overflow_err_en;      // RX FIFO overflow enabled
   logic        rx_fifo_overflow_err;         // RX FIFO overflow detected in FSM
-  logic        indirect_fifo_overflow_err_raw;   // INDIRECT_FIFO overflow raw detection
-  logic        indirect_fifo_overflow_err_en;    // INDIRECT_FIFO overflow enabled
   logic        indirect_fifo_overflow_err;       // INDIRECT_FIFO overflow detected in FSM
 
   //============================================================================
@@ -541,51 +513,6 @@ module recovery_receiver
 
   // Length validation - Raw detection (always active, no state qualification)
   assign all_data_received       = (payload_byte_cnt == cmd_len);
-  // Underrun: either we haven't received all data bytes, OR we're in RxPec but
-  // haven't captured the PEC yet (stop/last before PEC)
-  assign length_underrun_err_raw = (payload_byte_cnt < cmd_len) || pec_rx_byte_cnt  == 0;
-  assign length_overrun_err_raw  = (pec_rx_byte_cnt > 1);
-
-  // Length validation - Enabled errors (masked with length_err_det_en_i)
-  assign length_underrun_err_en = length_underrun_err_raw && length_err_det_en_i;
-  assign length_overrun_err_en  = length_overrun_err_raw && length_err_det_en_i;
-
-  // PEC validation - Raw detection
-  assign pec_err_raw = (pec_calc != pec_recv);
-  
-  // PEC validation - Enabled error
-  assign pec_err_en = pec_err_raw && pec_err_det_en_i;
-
-  // Command validation - Raw detection (evaluated in CmdDispatch)
-  // Read-only commands: PROT_CAP, DEVICE_ID, DEVICE_STATUS, HW_STATUS, INDIRECT_STATUS, INDIRECT_FIFO_STATUS
-  assign readonly_err_raw = !cmd_is_rd && (
-    (cmd_cmd == CMD_PROT_CAP) ||
-    (cmd_cmd == CMD_DEVICE_ID) ||
-    (cmd_cmd == CMD_DEVICE_STATUS) ||
-    (cmd_cmd == CMD_HW_STATUS) ||
-    (cmd_cmd == CMD_INDIRECT_STATUS) ||
-    (cmd_cmd == CMD_INDIRECT_FIFO_STATUS)
-  );
-  
-  // Unsupported command: out of valid range OR recovery-only command when not in recovery mode
-  assign unsupported_err_raw = 
-    ((cmd_cmd > CMD_INDIRECT_FIFO_DATA) || (cmd_cmd < CMD_PROT_CAP)) ||
-    (~recovery_mode_csr_active_i && (cmd_cmd > CMD_RECOVERY_STATUS));
-  
-  // Command validation - Enabled errors
-  assign readonly_err_en    = readonly_err_raw && readonly_err_det_en_i;
-  assign unsupported_err_en = unsupported_err_raw && unsupported_err_det_en_i;
-
-  // CSR write length validation - Raw detection (evaluated in CmdDispatch)
-  // Check if received cmd_len matches expected csr_length_next for WRITE commands
-  // Exclude INDIRECT_FIFO_DATA which has variable length
-  // Only applies to WRITE commands (!cmd_is_rd)
-  assign csr_length_err_raw = !cmd_is_rd && 
-    (cmd_cmd != CMD_INDIRECT_FIFO_DATA) && 
-    (cmd_len != csr_length_next);
-  
-  // CSR write length validation - Enabled error
-  assign csr_length_err_en = csr_length_err_raw && length_err_det_en_i;
 
 
   //============================================================================
@@ -597,19 +524,28 @@ module recovery_receiver
   //----------------------------------------------------------------------------
   // State Register
   //----------------------------------------------------------------------------
-  always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni) state_q <= Idle;
-    else         state_q <= state_d;
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      state_q <= Idle;
+    end else begin
+      state_q <= state_d;
+    end
+  end
 
   //----------------------------------------------------------------------------
   // Premature Stop Register
   //----------------------------------------------------------------------------
   // Capture premature_stop for one cycle so Error state can see it and exit.
   // Clear when leaving Error state (entering Done).
-  always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni)             premature_stop_q <= 1'b0;
-    else if (premature_stop) premature_stop_q <= 1'b1;
-    else if (state_q == Done) premature_stop_q <= 1'b0;
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      premature_stop_q <= 1'b0;
+    end else if (premature_stop) begin
+      premature_stop_q <= 1'b1;
+    end else if (state_q == Done) begin
+      premature_stop_q <= 1'b0;
+    end
+  end
 
   //----------------------------------------------------------------------------
   // Recovery Mode Enter Pulse
@@ -623,16 +559,17 @@ module recovery_receiver
   //----------------------------------------------------------------------------
   always_comb begin
     // Default values
-    state_d           = state_q;
-    capture_cmd       = 1'b0;
-    capture_len_lsb   = 1'b0;
-    capture_len_msb   = 1'b0;
-    capture_pec       = 1'b0;
-    set_cmd_is_rd     = 1'b0;
-    latch_pec_from_len= 1'b0;
-    load_csr_sel      = 1'b0;
-    inc_csr_sel       = 1'b0;
-    load_csr_length   = 1'b0;
+    state_d                = state_q;
+    capture_cmd            = 1'b0;
+    capture_len_lsb        = 1'b0;
+    capture_len_msb        = 1'b0;
+    capture_pec            = 1'b0;
+    set_cmd_is_rd          = 1'b0;
+    latch_pec_from_len     = 1'b0;
+    load_csr_sel           = 1'b0;
+    inc_csr_sel            = 1'b0;
+    load_csr_length        = 1'b0;
+    rx_data_queue_select_o = 1'b0;
     
     // Error signal defaults
     pec_err               = 1'b0;
@@ -654,8 +591,7 @@ module recovery_receiver
     //--------------------------------------------------------------------------
     if (in_hdr_mode_i && !(state_q inside {Idle, Error, Done})) begin
       state_d = Error;
-    end
-    else begin
+    end else begin
       unique case (state_q)
         //------------------------------------------------------------------------
         // Idle: Wait for new transaction
@@ -680,13 +616,14 @@ module recovery_receiver
         // RxCmd: Receive command byte
         //------------------------------------------------------------------------
         RxCmd: begin
+          rx_data_queue_select_o = 1'b1;
+          
           if (bus_stop_i || bus_rstart_i || rx_data_last_i)  begin
             // Premature Stop or Repeated Start detected
             premature_stop      = 1'b1;
             length_underrun_err = length_err_det_en_i;  // Report as length error (underrun)
             state_d             = Error;
-          end
-          else if (rx_flow) begin
+          end else if (rx_flow) begin
             capture_cmd = 1'b1;
             state_d     = RxLenL;
           end
@@ -696,13 +633,14 @@ module recovery_receiver
         // RxLenL: Receive length LSB (WRITE) or PEC byte (READ)
         //------------------------------------------------------------------------
         RxLenL: begin
+          rx_data_queue_select_o = 1'b1;
+
           if (bus_stop_i || bus_rstart_i || rx_data_last_i)  begin
             // Premature Stop or Repeated Start detected
             premature_stop      = 1'b1;
             length_underrun_err = length_err_det_en_i;  // Report as length error (underrun)
             state_d             = Error;
-          end
-          else if (rx_flow) begin
+          end else if (rx_flow) begin
             capture_len_lsb = 1'b1;
             state_d         = RxLenH;
           end
@@ -712,19 +650,19 @@ module recovery_receiver
         // RxLenH: Receive length MSB or detect restart for READ
         //------------------------------------------------------------------------
         RxLenH: begin
+          rx_data_queue_select_o = 1'b1;
+
           if (bus_stop_i)  begin
             // Premature Stop detected
             premature_stop      = 1'b1;
             length_underrun_err = length_err_det_en_i;  // Report as length error (underrun)
             state_d             = Error;
-          end
-          else if (bus_rstart_i) begin
+          end else if (bus_rstart_i) begin
             // Repeated Start (Sr) indicates READ command - controller wants to read
             set_cmd_is_rd      = 1'b1;
             latch_pec_from_len = 1'b1;
             state_d            = CmdDispatch;
-          end
-          else if (rx_flow) begin
+          end else if (rx_flow) begin
             capture_len_msb = 1'b1;
             state_d         = RxData;
           end
@@ -737,30 +675,31 @@ module recovery_receiver
           if (bus_stop_i || bus_rstart_i || rx_data_last_i)  begin
             // Premature Stop or Repeated Start detected
             premature_stop       = 1'b1;
-            length_underrun_err  = length_underrun_err_en;  // Report as length error (underrun)
-            rx_fifo_overflow_err = rx_fifo_overflow_err_en;
+            length_underrun_err  = (payload_byte_cnt < cmd_len) && length_err_det_en_i;
+            rx_fifo_overflow_err = rx_fifo_overflow_raw_i && rx_fifo_overflow_err_det_en_i;
             state_d              = Error;
+          end else if (all_data_received) begin
+            state_d = RxPec;
           end
-          else if (all_data_received) state_d = RxPec;
         end
 
         //------------------------------------------------------------------------
         // RxPec: Capture PEC byte (validation deferred to CmdDispatch)
         //------------------------------------------------------------------------
         RxPec: begin
+          rx_data_queue_select_o = 1'b1;
+
           if (rx_flow) capture_pec = 1'b1;
           
-          if (length_overrun_err_en) begin
+          if ((pec_rx_byte_cnt > 1) && length_err_det_en_i) begin
             length_overrun_err = 1'b1;
             state_d = Error;
-          end
-          else if ((pec_rx_byte_cnt == '0) && (bus_stop_i || bus_rstart_i || rx_data_last_i)) begin
+          end else if ((pec_rx_byte_cnt == '0) && (bus_stop_i || bus_rstart_i || rx_data_last_i)) begin
             // Premature Stop/Repeated Start/last before PEC byte received - length underrun
             premature_stop      = 1'b1;
-            length_underrun_err = length_underrun_err_en;
+            length_underrun_err = ((payload_byte_cnt < cmd_len) || pec_rx_byte_cnt == '0) && length_err_det_en_i;
             state_d             = Error;
-          end
-          else if (rx_data_last_i) begin
+          end else if (rx_data_last_i) begin
             state_d = CmdDispatch;
           end
         end
@@ -774,19 +713,26 @@ module recovery_receiver
           load_csr_sel    = 1'b1;
           load_csr_length = 1'b1;
           
-          // Set error signals for enabled errors detected in this state
-          pec_err             = pec_err_en;
-          readonly_err        = readonly_err_en;
-          unsupported_err     = unsupported_err_en;
-          csr_length_err      = csr_length_err_en;
+          // Set error signals for masked errors detected in this state
+          pec_err             = (pec_calc != pec_recv) && pec_err_det_en_i;
+          readonly_err        = !cmd_is_rd && (cmd_cmd inside {
+                                  CMD_PROT_CAP, CMD_DEVICE_ID, CMD_DEVICE_STATUS,
+                                  CMD_HW_STATUS, CMD_INDIRECT_STATUS, CMD_INDIRECT_FIFO_STATUS
+                                }) && readonly_err_det_en_i;
+
+          unsupported_err     = (((cmd_cmd > CMD_INDIRECT_FIFO_DATA) || (cmd_cmd < CMD_PROT_CAP)) ||
+                                 (~recovery_mode_csr_active_i && (cmd_cmd > CMD_RECOVERY_STATUS)))
+                                && unsupported_err_det_en_i;
+
+          csr_length_err      = !cmd_is_rd && (cmd_cmd != CMD_INDIRECT_FIFO_DATA) &&
+                                (cmd_len != csr_length_next) && length_err_det_en_i;
           
           if (pec_err || readonly_err || unsupported_err || csr_length_err)
             state_d = Error;
           else if (!cmd_is_rd) begin
             // WRITE command - proceed to execution immediately
             state_d = (cmd_cmd == CMD_INDIRECT_FIFO_DATA) ? ExecFifoWrite : ExecCsrWrite;
-          end
-          else begin
+          end else begin
             // READ command - go to TxDesc immediately to queue descriptor
             // This prepares the target FSM to ACK the upcoming Sr + Addr+R
             state_d = TxDesc;
@@ -809,15 +755,15 @@ module recovery_receiver
         // is complete. We are streaming buffered data from the RX queue to FIFO.
         //------------------------------------------------------------------------
         ExecFifoWrite: begin
-          // Check for FIFO overflow - transition to Error if enabled
-          if (indirect_fifo_overflow_err_en) begin
+          // Check for FIFO overflow - transition to Error if masked error active
+          if (tti_rx_rack_i && !indirect_rx_wready_i && indirect_fifo_overflow_err_det_en_i) begin
             indirect_fifo_overflow_err = 1'b1;
             state_d = Error;
-          end
-          else if ((tti_rx_rack_i && (dcnt == 1)) ||
+          end else if ((tti_rx_rack_i && (dcnt == 1)) ||
               (bypass_i3c_core_i && hwif_socmgmt_i.REC_INTF_CFG.REC_PAYLOAD_DONE.value && 
-               ~indirect_rx_empty_i))
+               ~indirect_rx_empty_i)) begin
             state_d = Done;
+          end
         end
 
         //------------------------------------------------------------------------
@@ -833,8 +779,7 @@ module recovery_receiver
             // - Sr + Addr+W (expected read but got write)
             unsupported_err = unsupported_err_det_en_i;
             state_d         = Error;
-          end
-          else if (tx_desc_ready_i) begin
+          end else if (tx_desc_ready_i) begin
             state_d = TxLenL;
           end
         end
@@ -908,25 +853,17 @@ module recovery_receiver
   // During Error, bytes are accepted but discarded via converter soft reset.
   assign rx_data_ready_o = state_q inside {RxCmd, RxLenL, RxLenH, RxData, RxPec, Error};
 
-  //----------------------------------------------------------------------------
-  // RX Queue Select Control
-  // Select=1: Receiver consumes bytes directly (header/PEC)
-  // Select=0: Bytes go to queue (payload)
-  //----------------------------------------------------------------------------
-  always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni) rx_data_queue_select_reg <= 1'b1;
-    else if (state_q == Idle) rx_data_queue_select_reg <= 1'b1;
-    else if (state_q == RxLenH && rx_flow) rx_data_queue_select_reg <= 1'b0;
-    else if (state_q == RxPec) rx_data_queue_select_reg <= 1'b1;
-
-  assign rx_data_queue_select_o = (state_q == RxPec) ? 1'b1 : rx_data_queue_select_reg;
 
   //----------------------------------------------------------------------------
   // RX Queue Flush/Clear Control
   //----------------------------------------------------------------------------
-  always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni) rx_data_queue_flush_o <= 1'b0;
-    else         rx_data_queue_flush_o <= (state_q == CmdDispatch) && |(payload_byte_cnt[1:0]);
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      rx_data_queue_flush_o <= 1'b0;
+    end else begin
+      rx_data_queue_flush_o <= (state_q == CmdDispatch) && |(payload_byte_cnt[1:0]);
+    end
+  end
 
   // Assert soft reset to width converters during Error state (combinational for immediate effect)
   assign conv_soft_reset_o = (state_q == Error);
@@ -940,30 +877,49 @@ module recovery_receiver
   //----------------------------------------------------------------------------
   // Command Byte
   //----------------------------------------------------------------------------
-  always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni)          cmd_cmd <= command_e'('0);
-    else if (capture_cmd) cmd_cmd <= command_e'(rx_data_i);
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      cmd_cmd <= command_e'('0);
+    end else if (capture_cmd) begin
+      cmd_cmd <= command_e'(rx_data_i);
+    end
+  end
 
   //----------------------------------------------------------------------------
   // Length Bytes
   //----------------------------------------------------------------------------
-  always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni)               len_lsb <= '0;
-    else if (latch_pec_from_len) len_lsb <= '0;
-    else if (capture_len_lsb)   len_lsb <= rx_data_i;
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      len_lsb <= '0;
+    end else if (latch_pec_from_len) begin
+      len_lsb <= '0;
+    end else if (capture_len_lsb) begin
+      len_lsb <= rx_data_i;
+    end
+  end
 
-  always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni)               len_msb <= '0;
-    else if (latch_pec_from_len) len_msb <= '0;
-    else if (capture_len_msb)   len_msb <= rx_data_i;
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      len_msb <= '0;
+    end else if (latch_pec_from_len) begin
+      len_msb <= '0;
+    end else if (capture_len_msb) begin
+      len_msb <= rx_data_i;
+    end
+  end
 
   //----------------------------------------------------------------------------
   // Command Type (READ/WRITE)
   //----------------------------------------------------------------------------
-  always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni)           cmd_is_rd <= 1'b0;
-    else if (state_q == Idle) cmd_is_rd <= 1'b0;
-    else if (set_cmd_is_rd)  cmd_is_rd <= 1'b1;
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      cmd_is_rd <= 1'b0;
+    end else if (state_q == Idle) begin
+      cmd_is_rd <= 1'b0;
+    end else if (set_cmd_is_rd) begin
+      cmd_is_rd <= 1'b1;
+    end
+  end
 
   //============================================================================
   //
@@ -977,21 +933,36 @@ module recovery_receiver
   always_comb begin
     dcnt_next = dcnt;
     unique case (state_q)
-      Idle:                        dcnt_next = '0;
-      CmdDispatch:                 dcnt_next = (|payload_byte_cnt[1:0]) ? 
-                                               16'(payload_byte_cnt / 4 + 1) : 
-                                               16'(payload_byte_cnt / 4);
-      ExecCsrWrite, ExecFifoWrite: dcnt_next = tti_rx_rack_i ? (dcnt - 16'h1) : dcnt;
-      TxDesc:                      dcnt_next = csr_length;
-      TxData:                      dcnt_next = (tx_data_valid_o && tx_data_ready_i) ? 
-                                               (dcnt - 16'h1) : dcnt;
-      default: ;
+      Idle: begin
+        dcnt_next = '0;
+      end
+      CmdDispatch: begin
+        dcnt_next = (|payload_byte_cnt[1:0]) ? 
+                    16'(payload_byte_cnt / 4 + 1) : 
+                    16'(payload_byte_cnt / 4);
+      end
+      ExecCsrWrite, ExecFifoWrite: begin
+        dcnt_next = tti_rx_rack_i ? (dcnt - 16'h1) : dcnt;
+      end
+      TxDesc: begin
+        dcnt_next = csr_length;
+      end
+      TxData: begin
+        dcnt_next = (tx_data_valid_o && tx_data_ready_i) ? 
+                    (dcnt - 16'h1) : dcnt;
+      end
+      default: begin
+      end
     endcase
   end
 
-  always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni) dcnt <= '0;
-    else         dcnt <= dcnt_next;
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      dcnt <= '0;
+    end else begin
+      dcnt <= dcnt_next;
+    end
+  end
 
   //----------------------------------------------------------------------------
   // Byte Counter (bcnt)
@@ -999,15 +970,24 @@ module recovery_receiver
   always_comb begin
     bcnt_next = bcnt;
     unique case (state_q)
-      Idle:   bcnt_next = '0;
-      TxData: bcnt_next = (tx_data_valid_o && tx_data_ready_i) ? (bcnt + 2'h1) : bcnt;
-      default: ;
+      Idle: begin
+        bcnt_next = '0;
+      end
+      TxData: begin
+        bcnt_next = (tx_data_valid_o && tx_data_ready_i) ? (bcnt + 2'h1) : bcnt;
+      end
+      default: begin
+      end
     endcase
   end
 
-  always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni) bcnt <= '0;
-    else         bcnt <= bcnt_next;
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      bcnt <= '0;
+    end else begin
+      bcnt <= bcnt_next;
+    end
+  end
 
   //----------------------------------------------------------------------------
   // Payload Byte Counter
@@ -1015,24 +995,38 @@ module recovery_receiver
   always_comb begin
     payload_byte_cnt_next = payload_byte_cnt;
     unique case (state_q)
-      Idle, RxCmd, RxLenL, RxLenH: payload_byte_cnt_next = '0;
-      RxData: payload_byte_cnt_next = rx_data_queue_flow_i ? 
-                                      (payload_byte_cnt + 16'h1) : payload_byte_cnt;
-      default: ;
+      Idle, RxCmd, RxLenL, RxLenH: begin
+        payload_byte_cnt_next = '0;
+      end
+      RxData: begin
+        payload_byte_cnt_next = rx_data_queue_flow_i ? 
+                                (payload_byte_cnt + 16'h1) : payload_byte_cnt;
+      end
+      default: begin
+      end
     endcase
   end
 
-  always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni) payload_byte_cnt <= '0;
-    else         payload_byte_cnt <= payload_byte_cnt_next;
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      payload_byte_cnt <= '0;
+    end else begin
+      payload_byte_cnt <= payload_byte_cnt_next;
+    end
+  end
 
   //----------------------------------------------------------------------------
   // PEC Byte Counter
   //----------------------------------------------------------------------------
-  always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni)             pec_rx_byte_cnt <= '0;
-    else if (state_q != RxPec) pec_rx_byte_cnt <= '0;
-    else if (rx_flow)         pec_rx_byte_cnt <= pec_rx_byte_cnt + 2'h1;
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      pec_rx_byte_cnt <= '0;
+    end else if (state_q != RxPec) begin
+      pec_rx_byte_cnt <= '0;
+    end else if (rx_flow) begin
+      pec_rx_byte_cnt <= pec_rx_byte_cnt + 2'h1;
+    end
+  end
 
   //============================================================================
   //
@@ -1046,53 +1040,56 @@ module recovery_receiver
   assign pec_enable_o = (state_q inside {RxCmd, RxLenL, RxLenH}) ? rx_flow :
                         (state_q == RxData) ? rx_data_queue_flow_i : 1'b0;
 
-  always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni) pec_enable_q <= 1'b0;
-    else         pec_enable_q <= pec_enable_o;
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      pec_enable_q <= 1'b0;
+    end else begin
+      pec_enable_q <= pec_enable_o;
+    end
+  end
 
   //----------------------------------------------------------------------------
   // PEC CRC Latch
   //----------------------------------------------------------------------------
-  always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni)            pec_crc_latched <= '0;
-    else if (bus_any_start_i) pec_crc_latched <= '0;
-    else if (pec_enable_q)  pec_crc_latched <= pec_crc_i;
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      pec_crc_latched <= '0;
+    end else if (bus_any_start_i) begin
+      pec_crc_latched <= '0;
+    end else if (pec_enable_q) begin
+      pec_crc_latched <= pec_crc_i;
+    end
+  end
 
   //----------------------------------------------------------------------------
   // PEC Receive Capture
   //----------------------------------------------------------------------------
-  always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni)               pec_recv <= '0;
-    else if (latch_pec_from_len) pec_recv <= len_lsb;
-    else if (capture_pec)       pec_recv <= rx_data_i;
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      pec_recv <= '0;
+    end else if (latch_pec_from_len) begin
+      pec_recv <= len_lsb;
+    end else if (capture_pec) begin
+      pec_recv <= rx_data_i;
+    end
+  end
 
   //----------------------------------------------------------------------------
   // PEC Calculated Value
   //----------------------------------------------------------------------------
-  always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni) pec_calc <= '0;
-    else if (state_q == RxLenL && rx_flow) pec_calc <= pec_crc_latched;
-    else if (state_q == RxPec && rx_flow)  pec_calc <= pec_crc_latched;
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      pec_calc <= '0;
+    end else if (state_q == RxLenL && rx_flow) begin
+      pec_calc <= pec_crc_latched;
+    end else if (state_q == RxPec && rx_flow) begin
+      pec_calc <= pec_crc_latched;
+    end
+  end
 
   //============================================================================
   //
-  // SECTION 9: RX FIFO OVERFLOW DETECTION
-  //
-  //============================================================================
-
-  //----------------------------------------------------------------------------
-  // RX FIFO Overflow Detection
-  // Overflow is detected by the handler when wvalid && !wready on RX data queue.
-  // Raw detection comes from handler; enabled detection is masked by DET_EN.
-  //----------------------------------------------------------------------------
-  assign rx_fifo_overflow_err_raw = rx_fifo_overflow_raw_i;
-  assign rx_fifo_overflow_err_en  = rx_fifo_overflow_err_raw && rx_fifo_overflow_err_det_en_i;
-
-
-
-  //============================================================================
-  //
-  // SECTION 10: TX PATH LOGIC
+  // SECTION 9: TX PATH LOGIC
   //
   //============================================================================
 
@@ -1113,19 +1110,35 @@ module recovery_receiver
   always_comb begin
     tx_data_o = '0;
     unique case (state_q)
-      TxLenL: tx_data_o = csr_length[7:0];
-      TxLenH: tx_data_o = csr_length[15:8];
-      TxPec:  tx_data_o = tx_pec_crc_i;
+      TxLenL: begin
+        tx_data_o = csr_length[7:0];
+      end
+      TxLenH: begin
+        tx_data_o = csr_length[15:8];
+      end
+      TxPec: begin
+        tx_data_o = tx_pec_crc_i;
+      end
       TxData: begin
         unique case (bcnt)
-          2'd0:    tx_data_o = csr_data[7:0];
-          2'd1:    tx_data_o = csr_data[15:8];
-          2'd2:    tx_data_o = csr_data[23:16];
-          2'd3:    tx_data_o = csr_data[31:24];
-          default: ;
+          2'd0: begin
+            tx_data_o = csr_data[7:0];
+          end
+          2'd1: begin
+            tx_data_o = csr_data[15:8];
+          end
+          2'd2: begin
+            tx_data_o = csr_data[23:16];
+          end
+          2'd3: begin
+            tx_data_o = csr_data[31:24];
+          end
+          default: begin
+          end
         endcase
       end
-      default: ;
+      default: begin
+      end
     endcase
   end
 
@@ -1144,7 +1157,7 @@ module recovery_receiver
 
   //============================================================================
   //
-  // SECTION 11: CSR SELECTOR LOGIC
+  // SECTION 10: CSR SELECTOR LOGIC
   //
   //============================================================================
 
@@ -1156,32 +1169,62 @@ module recovery_receiver
     csr_end_next = CSR_INVALID;
     
     unique case (cmd_cmd)
-      CMD_PROT_CAP:             begin csr_sel_next = CSR_PROT_CAP_0;           csr_end_next = CSR_PROT_CAP_3; end
-      CMD_DEVICE_ID:            begin csr_sel_next = CSR_DEVICE_ID_0;          csr_end_next = CSR_DEVICE_ID_5; end
-      CMD_DEVICE_STATUS:        begin csr_sel_next = CSR_DEVICE_STATUS_0;      csr_end_next = CSR_DEVICE_STATUS_1; end
-      CMD_DEVICE_RESET:         begin csr_sel_next = CSR_DEVICE_RESET;         csr_end_next = CSR_DEVICE_RESET; end
-      CMD_RECOVERY_CTRL:        begin csr_sel_next = CSR_RECOVERY_CTRL;        csr_end_next = CSR_RECOVERY_CTRL; end
-      CMD_RECOVERY_STATUS:      begin csr_sel_next = CSR_RECOVERY_STATUS;      csr_end_next = CSR_RECOVERY_STATUS; end
-      CMD_HW_STATUS:            begin csr_sel_next = CSR_HW_STATUS;            csr_end_next = CSR_HW_STATUS; end
-      CMD_INDIRECT_FIFO_CTRL:   begin csr_sel_next = CSR_INDIRECT_FIFO_CTRL_0; csr_end_next = CSR_INDIRECT_FIFO_CTRL_1; end
-      CMD_INDIRECT_FIFO_STATUS: begin csr_sel_next = CSR_INDIRECT_FIFO_STATUS_0; csr_end_next = CSR_INDIRECT_FIFO_STATUS_4; end
-      CMD_INDIRECT_FIFO_DATA:   begin csr_sel_next = CSR_INDIRECT_FIFO_DATA;   csr_end_next = CSR_INDIRECT_FIFO_DATA; end
-      default: ;
+      CMD_PROT_CAP: begin
+        csr_sel_next = CSR_PROT_CAP_0;
+        csr_end_next = CSR_PROT_CAP_3;
+      end
+      CMD_DEVICE_ID: begin
+        csr_sel_next = CSR_DEVICE_ID_0;
+        csr_end_next = CSR_DEVICE_ID_5;
+      end
+      CMD_DEVICE_STATUS: begin
+        csr_sel_next = CSR_DEVICE_STATUS_0;
+        csr_end_next = CSR_DEVICE_STATUS_1;
+      end
+      CMD_DEVICE_RESET: begin
+        csr_sel_next = CSR_DEVICE_RESET;
+        csr_end_next = CSR_DEVICE_RESET;
+      end
+      CMD_RECOVERY_CTRL: begin
+        csr_sel_next = CSR_RECOVERY_CTRL;
+        csr_end_next = CSR_RECOVERY_CTRL;
+      end
+      CMD_RECOVERY_STATUS: begin
+        csr_sel_next = CSR_RECOVERY_STATUS;
+        csr_end_next = CSR_RECOVERY_STATUS;
+      end
+      CMD_HW_STATUS: begin
+        csr_sel_next = CSR_HW_STATUS;
+        csr_end_next = CSR_HW_STATUS;
+      end
+      CMD_INDIRECT_FIFO_CTRL: begin
+        csr_sel_next = CSR_INDIRECT_FIFO_CTRL_0;
+        csr_end_next = CSR_INDIRECT_FIFO_CTRL_1;
+      end
+      CMD_INDIRECT_FIFO_STATUS: begin
+        csr_sel_next = CSR_INDIRECT_FIFO_STATUS_0;
+        csr_end_next = CSR_INDIRECT_FIFO_STATUS_4;
+      end
+      CMD_INDIRECT_FIFO_DATA: begin
+        csr_sel_next = CSR_INDIRECT_FIFO_DATA;
+        csr_end_next = CSR_INDIRECT_FIFO_DATA;
+      end
+      default: begin
+      end
     endcase
   end
 
-  always_ff @(posedge clk_i or negedge rst_ni)
+  always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
       csr_sel <= CSR_INVALID;
       csr_end <= CSR_INVALID;
-    end
-    else if (load_csr_sel) begin
+    end else if (load_csr_sel) begin
       csr_sel <= csr_sel_next;
       csr_end <= csr_end_next;
-    end
-    else if (inc_csr_sel && (csr_sel < csr_end)) begin
+    end else if (inc_csr_sel && (csr_sel < csr_end)) begin
       csr_sel <= csr_e'(csr_sel + 8'd1);
     end
+  end
 
   //----------------------------------------------------------------------------
   // CSR Length Decode
@@ -1189,38 +1232,54 @@ module recovery_receiver
   always_comb begin
     csr_length_next = 16'd4;
     unique case (cmd_cmd)
-      CMD_PROT_CAP:             csr_length_next = 16'd15;
-      CMD_DEVICE_ID:            csr_length_next = 16'd24;
-      CMD_DEVICE_STATUS:        csr_length_next = 16'd7;
-      CMD_DEVICE_RESET:         csr_length_next = 16'd3;
-      CMD_RECOVERY_CTRL:        csr_length_next = 16'd3;
-      CMD_RECOVERY_STATUS:      csr_length_next = 16'd2;
-      CMD_HW_STATUS:            csr_length_next = 16'd4;
-      CMD_INDIRECT_FIFO_CTRL:   csr_length_next = 16'd6;
-      CMD_INDIRECT_FIFO_STATUS: csr_length_next = 16'd20;
-      default: ;
+      CMD_PROT_CAP: begin
+        csr_length_next = 16'd15;
+      end
+      CMD_DEVICE_ID: begin
+        csr_length_next = 16'd24;
+      end
+      CMD_DEVICE_STATUS: begin
+        csr_length_next = 16'd7;
+      end
+      CMD_DEVICE_RESET: begin
+        csr_length_next = 16'd3;
+      end
+      CMD_RECOVERY_CTRL: begin
+        csr_length_next = 16'd3;
+      end
+      CMD_RECOVERY_STATUS: begin
+        csr_length_next = 16'd2;
+      end
+      CMD_HW_STATUS: begin
+        csr_length_next = 16'd4;
+      end
+      CMD_INDIRECT_FIFO_CTRL: begin
+        csr_length_next = 16'd6;
+      end
+      CMD_INDIRECT_FIFO_STATUS: begin
+        csr_length_next = 16'd20;
+      end
+      default: begin
+      end
     endcase
   end
 
-  always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni)           csr_length <= '0;
-    else if (load_csr_length) csr_length <= csr_length_next;
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      csr_length <= '0;
+    end else if (load_csr_length) begin
+      csr_length <= csr_length_next;
+    end
+  end
 
   //----------------------------------------------------------------------------
   // CSR Writeable Flag
   //----------------------------------------------------------------------------
-  always_comb begin
-    csr_writeable = 1'b0;
-    unique case (csr_sel)
-      CSR_DEVICE_RESET, CSR_RECOVERY_CTRL, 
-      CSR_INDIRECT_FIFO_CTRL_0, CSR_INDIRECT_FIFO_CTRL_1: csr_writeable = 1'b1;
-      default: ;
-    endcase
-  end
+  assign csr_writable = csr_sel inside {CSR_DEVICE_RESET, CSR_RECOVERY_CTRL,CSR_INDIRECT_FIFO_CTRL_0, CSR_INDIRECT_FIFO_CTRL_1};
 
   //============================================================================
   //
-  // SECTION 12: CSR READ DATA
+  // SECTION 11: CSR READ DATA
   //
   //============================================================================
 
@@ -1300,7 +1359,7 @@ module recovery_receiver
   };
 
   assign indirect_fifo_status_0 = {
-    16'd0, 5'd0,
+    '0,
     hwif_rec_i.INDIRECT_FIFO_STATUS_0.REGION_TYPE.value,
     6'd0,
     hwif_rec_i.INDIRECT_FIFO_STATUS_0.FULL.value,
@@ -1313,40 +1372,91 @@ module recovery_receiver
   always_comb begin
     csr_data_next = '0;
     unique case (csr_sel)
-      CSR_PROT_CAP_0:             csr_data_next = hwif_rec_i.PROT_CAP_0.REC_MAGIC_STRING_0.value;
-      CSR_PROT_CAP_1:             csr_data_next = hwif_rec_i.PROT_CAP_1.REC_MAGIC_STRING_1.value;
-      CSR_PROT_CAP_2:             csr_data_next = prot_cap_2;
-      CSR_PROT_CAP_3:             csr_data_next = prot_cap_3;
-      CSR_DEVICE_ID_0:            csr_data_next = device_id_0;
-      CSR_DEVICE_ID_1:            csr_data_next = hwif_rec_i.DEVICE_ID_1.DATA.value;
-      CSR_DEVICE_ID_2:            csr_data_next = hwif_rec_i.DEVICE_ID_2.DATA.value;
-      CSR_DEVICE_ID_3:            csr_data_next = hwif_rec_i.DEVICE_ID_3.DATA.value;
-      CSR_DEVICE_ID_4:            csr_data_next = hwif_rec_i.DEVICE_ID_4.DATA.value;
-      CSR_DEVICE_ID_5:            csr_data_next = hwif_rec_i.DEVICE_ID_5.DATA.value;
-      CSR_DEVICE_STATUS_0:        csr_data_next = device_status_0;
-      CSR_DEVICE_STATUS_1:        csr_data_next = device_status_1;
-      CSR_DEVICE_RESET:           csr_data_next = device_reset;
-      CSR_RECOVERY_CTRL:          csr_data_next = recovery_ctrl;
-      CSR_RECOVERY_STATUS:        csr_data_next = recovery_status;
-      CSR_HW_STATUS:              csr_data_next = hw_status;
-      CSR_INDIRECT_FIFO_CTRL_0:   csr_data_next = indirect_fifo_ctrl_0;
-      CSR_INDIRECT_FIFO_CTRL_1:   csr_data_next = indirect_fifo_ctrl_1;
-      CSR_INDIRECT_FIFO_STATUS_0: csr_data_next = indirect_fifo_status_0;
-      CSR_INDIRECT_FIFO_STATUS_1: csr_data_next = hwif_rec_i.INDIRECT_FIFO_STATUS_1.WRITE_INDEX.value;
-      CSR_INDIRECT_FIFO_STATUS_2: csr_data_next = hwif_rec_i.INDIRECT_FIFO_STATUS_2.READ_INDEX.value;
-      CSR_INDIRECT_FIFO_STATUS_3: csr_data_next = hwif_rec_i.INDIRECT_FIFO_STATUS_3.FIFO_SIZE.value;
-      CSR_INDIRECT_FIFO_STATUS_4: csr_data_next = hwif_rec_i.INDIRECT_FIFO_STATUS_4.MAX_TRANSFER_SIZE.value;
-      default: ;
+      CSR_PROT_CAP_0: begin
+        csr_data_next = hwif_rec_i.PROT_CAP_0.REC_MAGIC_STRING_0.value;
+      end
+      CSR_PROT_CAP_1: begin
+        csr_data_next = hwif_rec_i.PROT_CAP_1.REC_MAGIC_STRING_1.value;
+      end
+      CSR_PROT_CAP_2: begin
+        csr_data_next = prot_cap_2;
+      end
+      CSR_PROT_CAP_3: begin
+        csr_data_next = prot_cap_3;
+      end
+      CSR_DEVICE_ID_0: begin
+        csr_data_next = device_id_0;
+      end
+      CSR_DEVICE_ID_1: begin
+        csr_data_next = hwif_rec_i.DEVICE_ID_1.DATA.value;
+      end
+      CSR_DEVICE_ID_2: begin
+        csr_data_next = hwif_rec_i.DEVICE_ID_2.DATA.value;
+      end
+      CSR_DEVICE_ID_3: begin
+        csr_data_next = hwif_rec_i.DEVICE_ID_3.DATA.value;
+      end
+      CSR_DEVICE_ID_4: begin
+        csr_data_next = hwif_rec_i.DEVICE_ID_4.DATA.value;
+      end
+      CSR_DEVICE_ID_5: begin
+        csr_data_next = hwif_rec_i.DEVICE_ID_5.DATA.value;
+      end
+      CSR_DEVICE_STATUS_0: begin
+        csr_data_next = device_status_0;
+      end
+      CSR_DEVICE_STATUS_1: begin
+        csr_data_next = device_status_1;
+      end
+      CSR_DEVICE_RESET: begin
+        csr_data_next = device_reset;
+      end
+      CSR_RECOVERY_CTRL: begin
+        csr_data_next = recovery_ctrl;
+      end
+      CSR_RECOVERY_STATUS: begin
+        csr_data_next = recovery_status;
+      end
+      CSR_HW_STATUS: begin
+        csr_data_next = hw_status;
+      end
+      CSR_INDIRECT_FIFO_CTRL_0: begin
+        csr_data_next = indirect_fifo_ctrl_0;
+      end
+      CSR_INDIRECT_FIFO_CTRL_1: begin
+        csr_data_next = indirect_fifo_ctrl_1;
+      end
+      CSR_INDIRECT_FIFO_STATUS_0: begin
+        csr_data_next = indirect_fifo_status_0;
+      end
+      CSR_INDIRECT_FIFO_STATUS_1: begin
+        csr_data_next = hwif_rec_i.INDIRECT_FIFO_STATUS_1.WRITE_INDEX.value;
+      end
+      CSR_INDIRECT_FIFO_STATUS_2: begin
+        csr_data_next = hwif_rec_i.INDIRECT_FIFO_STATUS_2.READ_INDEX.value;
+      end
+      CSR_INDIRECT_FIFO_STATUS_3: begin
+        csr_data_next = hwif_rec_i.INDIRECT_FIFO_STATUS_3.FIFO_SIZE.value;
+      end
+      CSR_INDIRECT_FIFO_STATUS_4: begin
+        csr_data_next = hwif_rec_i.INDIRECT_FIFO_STATUS_4.MAX_TRANSFER_SIZE.value;
+      end
+      default: begin
+      end
     endcase
   end
 
-  always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni) csr_data <= '0;
-    else         csr_data <= csr_data_next;
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      csr_data <= '0;
+    end else begin
+      csr_data <= csr_data_next;
+    end
+  end
 
   //============================================================================
   //
-  // SECTION 13: CSR WRITE PATH
+  // SECTION 12: CSR WRITE PATH
   //
   //============================================================================
 
@@ -1360,9 +1470,13 @@ module recovery_receiver
   //----------------------------------------------------------------------------
   // Previous RX Data (for multi-word writes)
   //----------------------------------------------------------------------------
-  always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni)         prev_tti_rx_rdata <= '0;
-    else if (tti_rx_rack_i) prev_tti_rx_rdata <= tti_rx_rdata_i;
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      prev_tti_rx_rdata <= '0;
+    end else if (tti_rx_rack_i) begin
+      prev_tti_rx_rdata <= tti_rx_rdata_i;
+    end
+  end
 
   //----------------------------------------------------------------------------
   // CSR Write Enable Signals
@@ -1373,7 +1487,7 @@ module recovery_receiver
 
   //============================================================================
   //
-  // SECTION 14: INDIRECT FIFO LOGIC
+  // SECTION 13: INDIRECT FIFO LOGIC
   //
   //============================================================================
 
@@ -1387,18 +1501,6 @@ module recovery_receiver
   end
 
   //----------------------------------------------------------------------------
-  // INDIRECT_FIFO Overflow Detection
-  // Detect when we try to write to FIFO but it is full
-  // Raw detection is always active; enabled detection is masked by DET_EN
-  // FSM error signal is set in ExecFifoWrite and triggers transition to Error
-  //----------------------------------------------------------------------------
-  // Raw detection: trying to write but FIFO is full
-  assign indirect_fifo_overflow_err_raw = (state_q == ExecFifoWrite) && tti_rx_rack_i && !indirect_rx_wready_i;
-  // Enabled detection: masked by DET_EN CSR
-  assign indirect_fifo_overflow_err_en  = indirect_fifo_overflow_err_raw && indirect_fifo_overflow_err_det_en_i;
-
-
-  //----------------------------------------------------------------------------
   // FIFO Pointer Management
   //----------------------------------------------------------------------------
   assign fifo_size      = hwif_rec_i.INDIRECT_FIFO_STATUS_3.FIFO_SIZE.value;
@@ -1410,19 +1512,10 @@ module recovery_receiver
   assign fifo_ptr_clr   = (hwif_rec_i.INDIRECT_FIFO_CTRL_0.RESET.value == 8'd1);
   assign indirect_rx_clr_o = fifo_ptr_clr;
 
-  always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni) fifo_ptr_top <= '0;
-    else         fifo_ptr_top <= fifo_size - 32'h1;
-
   //----------------------------------------------------------------------------
   // FIFO Reset Self-Clear
   //----------------------------------------------------------------------------
-  assign hwif_rec_o.INDIRECT_FIFO_CTRL_0.RESET.hwclr = fifo_reg_reset_clear;
-
-  always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni)                                       fifo_reg_reset_clear <= 1'b0;
-    else if (|hwif_rec_i.INDIRECT_FIFO_CTRL_0.RESET.value) fifo_reg_reset_clear <= 1'b1;
-    else                                               fifo_reg_reset_clear <= 1'b0;
+  assign hwif_rec_o.INDIRECT_FIFO_CTRL_0.RESET.hwclr = |hwif_rec_i.INDIRECT_FIFO_CTRL_0.RESET.value;
 
   //----------------------------------------------------------------------------
   // FIFO Read Port - synthetic ack when empty to reject reads immediately
@@ -1442,7 +1535,7 @@ module recovery_receiver
 
   //============================================================================
   //
-  // SECTION 15: RECOVERY CSR INTERFACE
+  // SECTION 14: RECOVERY CSR INTERFACE
   //
   //============================================================================
 
@@ -1460,8 +1553,7 @@ module recovery_receiver
       sw_device_reset_ctrl_swmod            <= 1'b0;
       sw_recovery_ctrl_activate_rec_img_swmod <= 1'b0;
       sw_indirect_fifo_ctrl_reset_swmod     <= 1'b0;
-    end
-    else begin
+    end else begin
       sw_device_reset_ctrl_swmod            <= hwif_socmgmt_i.REC_INTF_REG_W1C_ACCESS.DEVICE_RESET_CTRL.swmod;
       sw_recovery_ctrl_activate_rec_img_swmod <= hwif_socmgmt_i.REC_INTF_REG_W1C_ACCESS.RECOVERY_CTRL_ACTIVATE_REC_IMG.swmod;
       sw_indirect_fifo_ctrl_reset_swmod     <= hwif_socmgmt_i.REC_INTF_REG_W1C_ACCESS.INDIRECT_FIFO_CTRL_RESET.swmod;
@@ -1595,17 +1687,17 @@ module recovery_receiver
 
   always_comb begin
     hwif_rec_o.INDIRECT_FIFO_STATUS_1.WRITE_INDEX.next = fifo_ptr_clr ? '0 :
-      ((fifo_wrptr == fifo_ptr_top) ? '0 : (fifo_wrptr + 32'h1));
+      ((fifo_wrptr == (fifo_size - 32'h1)) ? '0 : (fifo_wrptr + 32'h1));
   end
 
   always_comb begin
     hwif_rec_o.INDIRECT_FIFO_STATUS_2.READ_INDEX.next = fifo_ptr_clr ? '0 :
-      ((fifo_rdptr == fifo_ptr_top) ? '0 : (fifo_rdptr + 32'h1));
+      ((fifo_rdptr == (fifo_size - 32'h1)) ? '0 : (fifo_rdptr + 32'h1));
   end
 
   //============================================================================
   //
-  // SECTION 16: PROTOCOL STATUS
+  // SECTION 15: PROTOCOL STATUS
   //
   //============================================================================
 
@@ -1644,7 +1736,7 @@ module recovery_receiver
 
   //============================================================================
   //
-  // SECTION 17: PAYLOAD AND EXECUTION TRACKING
+  // SECTION 16: PAYLOAD AND EXECUTION TRACKING
   //
   //============================================================================
 
@@ -1661,18 +1753,23 @@ module recovery_receiver
 
   always_comb begin
     hwif_socmgmt_o.REC_INTF_CFG.REC_PAYLOAD_DONE.we   = fifo_xfer_done;
-    hwif_socmgmt_o.REC_INTF_CFG.REC_PAYLOAD_DONE.next = 1'b0;
+    hwif_socmgmt_o.REC_INTF_CFG.REC_PAYLOAD_DONE.next = 1'b1;
   end
 
-  always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni)               payload_available_q <= 1'b0;
-    else if (payload_high_en)    payload_available_q <= 1'b1;
-    else if (indirect_rx_empty_i) payload_available_q <= 1'b0;
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      payload_available_q <= 1'b0;
+    end else if (payload_high_en) begin
+      payload_available_q <= 1'b1;
+    end else if (indirect_rx_empty_i) begin
+      payload_available_q <= 1'b0;
+    end
+  end
 
 
   //============================================================================
   //
-  // SECTION 18: ERROR OUTPUTS
+  // SECTION 17: ERROR OUTPUTS
   //
   //============================================================================
 
