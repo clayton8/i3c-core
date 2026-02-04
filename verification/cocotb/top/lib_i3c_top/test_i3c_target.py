@@ -192,8 +192,6 @@ async def test_i3c_target_write(dut):
     assert test_data == recv_data
 
 
-
-
 @cocotb.test()
 async def test_i3c_target_read(dut):
 

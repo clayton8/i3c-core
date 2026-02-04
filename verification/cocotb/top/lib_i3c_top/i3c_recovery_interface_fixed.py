@@ -34,7 +34,7 @@ Additional Features:
 Usage:
     Instead of:
         from cocotbext_i3c.i3c_recovery_interface import I3cRecoveryInterface
-    
+
     Use:
         from i3c_recovery_interface_fixed import I3cRecoveryInterfaceFixed as I3cRecoveryInterface
 """
@@ -55,14 +55,14 @@ class I3cRecoveryInterfaceFixed(I3cRecoveryInterface):
         Issues a private read using low-level functions of the controller
         adapter. This is needed as the length of data to be received is
         contained in the first two bytes of the packet.
-        
+
         This continues an existing transaction (after command_read sent
         S + 0x7E + Sr + Addr+W + CMD + PEC without STOP). We just need to
         send Sr + Addr+R to switch to read mode.
-        
+
         FIXED: Removed the extra Sr + 0x7E sequence that was incorrectly
         being sent before the read address.
-        
+
         Args:
             address: I3C target address
             send_stop: If True, send STOP at end; if False, leave bus active for chaining
@@ -135,7 +135,7 @@ class I3cRecoveryInterfaceFixed(I3cRecoveryInterface):
                             stop=True, start=True):
         """
         Issues a write command to the target with optional chaining support.
-        
+
         Args:
             address: I3C target address
             command: OCP Recovery command code
@@ -192,14 +192,14 @@ class I3cRecoveryInterfaceFixed(I3cRecoveryInterface):
     async def command_read(self, address, command, force_pec_error=False, stop=True, start=True):
         """
         Issues a read command to the target with optional chaining support.
-        
+
         Args:
             address: I3C target address
             command: OCP Recovery command code
             force_pec_error: If True, send incorrect PEC in write phase
             stop: If True (default), send STOP at end; if False, leave bus active
             start: If True (default), send START + 0x7E header; if False, continue existing transaction
-        
+
         Returns:
             Tuple of (data, pec_ok) where data is list of bytes and pec_ok is boolean
         """
@@ -242,7 +242,7 @@ class I3cRecoveryInterfaceFixed(I3cRecoveryInterface):
         """
         Issues a write command but aborts (sends STOP) after a certain number of bytes.
         Used for testing target recovery from incomplete transfers.
-        
+
         Args:
             address: I3C target address
             command: OCP Recovery command code
@@ -285,7 +285,7 @@ class I3cRecoveryInterfaceFixed(I3cRecoveryInterface):
     async def command_write_tbit_error(self, address, command, data=None, error_byte_index=0):
         """
         Issues a write command with an intentional T-bit (parity) error on a specific byte.
-        
+
         Args:
             address: I3C target address
             command: OCP Recovery command code
@@ -323,7 +323,7 @@ class I3cRecoveryInterfaceFixed(I3cRecoveryInterface):
     async def command_write_truncated(self, address, command, data=None, truncate_before_pec=True):
         """
         Issues a write command but truncates it before sending PEC.
-        
+
         Args:
             address: I3C target address
             command: OCP Recovery command code
@@ -359,7 +359,7 @@ class I3cRecoveryInterfaceFixed(I3cRecoveryInterface):
     async def command_write_wrong_length(self, address, command, data=None, claimed_length=None):
         """
         Issues a write command with a mismatched length field.
-        
+
         Args:
             address: I3C target address
             command: OCP Recovery command code
@@ -368,7 +368,7 @@ class I3cRecoveryInterfaceFixed(I3cRecoveryInterface):
         """
         if not data:
             data = []
-        
+
         if claimed_length is None:
             claimed_length = len(data)
 
@@ -399,7 +399,7 @@ class I3cRecoveryInterfaceFixed(I3cRecoveryInterface):
     async def command_write_invalid_command(self, address, invalid_command, data=None):
         """
         Issues a write with an invalid/undefined command code.
-        
+
         Args:
             address: I3C target address
             invalid_command: Invalid command code to send
@@ -434,7 +434,7 @@ class I3cRecoveryInterfaceFixed(I3cRecoveryInterface):
     async def command_read_abort(self, address, command, abort_after_bytes=3):
         """
         Issues a read command but aborts (sends STOP) after reading some bytes.
-        
+
         Args:
             address: I3C target address
             command: OCP Recovery command code
@@ -478,10 +478,10 @@ class I3cRecoveryInterfaceFixed(I3cRecoveryInterface):
         """
         Sends just the I3C address header without any data (partial frame).
         Returns True if ACK received, False if NACK.
-        
+
         Args:
             address: I3C target address
-            
+
         Returns:
             True if target ACKed, False if NACKed
         """
@@ -490,21 +490,21 @@ class I3cRecoveryInterfaceFixed(I3cRecoveryInterface):
         await self.controller.write_addr_header(I3C_RSVD_BYTE)
         await self.controller.send_start()
         ack = await self.controller.write_addr_header(address)
-        
+
         # Immediately send STOP without any data
         await self.controller.send_stop()
         self.controller.give_bus_control()
-        
+
         return ack
 
     async def send_address_only_nack(self, address):
         """
         Sends an address that should be NACKed (wrong address test).
         Returns True if ACK received (unexpected), False if NACK (expected).
-        
+
         Args:
             address: I3C address that should NOT be on the bus
-            
+
         Returns:
             True if target ACKed (error), False if NACKed (expected)
         """
@@ -513,9 +513,9 @@ class I3cRecoveryInterfaceFixed(I3cRecoveryInterface):
         await self.controller.write_addr_header(I3C_RSVD_BYTE)
         await self.controller.send_start()
         ack = await self.controller.write_addr_header(address)
-        
+
         # Send STOP
         await self.controller.send_stop()
         self.controller.give_bus_control()
-        
+
         return ack
