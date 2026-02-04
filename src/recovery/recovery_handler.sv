@@ -485,7 +485,7 @@ module recovery_handler
   // Virtual Device Selection Delay
   // Shift register delays PEC init after virtual device selection
   //----------------------------------------------------------------------------
-  always @(posedge clk_i or negedge rst_ni) begin
+  always_ff @(posedge clk_i or negedge rst_ni) begin
     if (~rst_ni) begin
       virtual_device_cec_shreg <= 2'b10;
     end else if (virtual_device_sel_i) begin
@@ -1015,7 +1015,7 @@ module recovery_handler
   // Any start (S or Sr) resets address valid tracking
   assign ctl_bus_any_start = ctl_bus_start_i | ctl_bus_rstart_i;
 
-  always @(posedge clk_i or negedge rst_ni) begin
+  always_ff @(posedge clk_i or negedge rst_ni) begin
     if (~rst_ni) begin
       bus_addr_valid <= '0;
     end else if (ctl_bus_any_start) begin
