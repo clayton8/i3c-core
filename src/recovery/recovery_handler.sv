@@ -368,11 +368,6 @@ module recovery_handler
   //----------------------------------------------------------------------------
   // Recovery Receiver Interface Signals
   //----------------------------------------------------------------------------
-  // RX descriptor interface to receiver
-  logic                          recv_tti_rx_desc_valid;
-  logic                          recv_tti_rx_desc_ready;
-  logic [TtiRxDescDataWidth-1:0] recv_tti_rx_desc_data;
-
   // TX descriptor interface from receiver
   logic                          send_tti_tx_desc_valid;
   logic                          send_tti_tx_desc_ready;
@@ -728,15 +723,13 @@ module recovery_handler
   //----------------------------------------------------------------------------
   always_comb begin : R1MUX
     if (recovery_pending) begin
-      recv_tti_rx_desc_valid                  = ctl_tti_rx_desc_queue_wvalid_i;
       tti_rx_desc_queue_wvalid                = '0;
       ctl_tti_rx_desc_queue_full_o            = '0;
       ctl_tti_rx_desc_queue_depth_o           = '0;
       ctl_tti_rx_desc_queue_empty_o           = '0;
-      ctl_tti_rx_desc_queue_wready_o          = recv_tti_rx_desc_ready;
+      ctl_tti_rx_desc_queue_wready_o          = 1'b1;
       csr_tti_rx_desc_queue_ready_thld_trig_o = '0;
     end else begin
-      recv_tti_rx_desc_valid                  = '0;
       tti_rx_desc_queue_wvalid                = ctl_tti_rx_desc_queue_wvalid_i;
       ctl_tti_rx_desc_queue_full_o            = tti_rx_desc_queue_full;
       ctl_tti_rx_desc_queue_depth_o           = tti_rx_desc_queue_depth;
@@ -746,7 +739,6 @@ module recovery_handler
     end
 
     tti_rx_desc_queue_wdata                   = ctl_tti_rx_desc_queue_wdata_i; // Don't mux data, disabling valid is enough
-    recv_tti_rx_desc_data = ctl_tti_rx_desc_queue_wdata_i;
   end
 
   // Threshold
@@ -1027,9 +1019,6 @@ module recovery_handler
       .indirect_fifo_overflow_err_det_en_i,
       .recovery_mode_csr_active_i(recovery_mode_csr_active),
 
-      .desc_valid_i(recv_tti_rx_desc_valid),
-      .desc_ready_o(recv_tti_rx_desc_ready),
-      .desc_data_i (recv_tti_rx_desc_data),
 
       .rx_data_valid_i(recv_tti_rx_data_valid),
       .rx_data_ready_o(recv_tti_rx_data_ready),
