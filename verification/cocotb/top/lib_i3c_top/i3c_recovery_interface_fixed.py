@@ -132,7 +132,7 @@ class I3cRecoveryInterfaceFixed(I3cRecoveryInterface):
         return data, (pec_recv == pec_calc)
 
     async def command_write(self, address, command, data=None, force_pec_error=False,
-                            stop=True, start=True):
+                            stop=True, start=True, debug_pec=False):
         """
         Issues a write command to the target with optional chaining support.
 
@@ -143,6 +143,7 @@ class I3cRecoveryInterfaceFixed(I3cRecoveryInterface):
             force_pec_error: If True, send incorrect PEC
             stop: If True (default), send STOP at end; if False, leave bus active
             start: If True (default), send START + 0x7E header; if False, continue existing transaction
+            debug_pec: If True, print debug messages showing PEC input/output for each byte
         """
 
         if not data:
@@ -158,8 +159,30 @@ class I3cRecoveryInterfaceFixed(I3cRecoveryInterface):
         # Data
         xfer.extend(data)
 
-        # Compute PEC
-        pec = int(self.pec_calc.checksum(bytes([address << 1] + xfer)))
+        # Compute PEC with optional debug logging
+        pec_input_bytes = [address << 1] + xfer
+        if debug_pec:
+            import cocotb
+            cocotb.log.info("=== PEC DEBUG (command_write) ===")
+            cocotb.log.info(f"  Address byte: 0x{address << 1:02X} (addr={address:#x} << 1)")
+            # Show cumulative PEC after each byte
+            cumulative_pec = 0
+            for i, byte in enumerate(pec_input_bytes):
+                cumulative_pec = int(self.pec_calc.checksum(bytes(pec_input_bytes[:i+1])))
+                if i == 0:
+                    label = "ADDR"
+                elif i == 1:
+                    label = "CMD"
+                elif i == 2:
+                    label = "LEN_L"
+                elif i == 3:
+                    label = "LEN_H"
+                else:
+                    label = f"DATA[{i-4}]"
+                cocotb.log.info(f"  Byte {i}: {label}=0x{byte:02X} -> PEC=0x{cumulative_pec:02X}")
+            cocotb.log.info(f"  Final PEC: 0x{cumulative_pec:02X}")
+            cocotb.log.info("=================================")
+        pec = int(self.pec_calc.checksum(bytes(pec_input_bytes)))
 
         # Inject incorrect PEC
         if force_pec_error:
