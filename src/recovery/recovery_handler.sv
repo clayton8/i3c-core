@@ -1016,15 +1016,15 @@ module recovery_handler
       .IndirectFifoDepth (IndirectFifoDepth)
   ) xrecovery_receiver (
       .clk_i,
-      .rst_ni(rst_ni),
-      .bypass_i3c_core_i(bypass_i3c_core_i),
-      .pec_err_det_en_i(pec_err_det_en_i),
-      .length_err_det_en_i(length_err_det_en_i),
-      .readonly_err_det_en_i(readonly_err_det_en_i),
-      .unsupported_err_det_en_i(unsupported_err_det_en_i),
-      .rx_fifo_overflow_err_det_en_i(rx_fifo_overflow_err_det_en_i),
+      .rst_ni,
+      .bypass_i3c_core_i,
+      .pec_err_det_en_i,
+      .length_err_det_en_i,
+      .readonly_err_det_en_i,
+      .unsupported_err_det_en_i,
+      .rx_fifo_overflow_err_det_en_i,
       .rx_fifo_overflow_raw_i(rx_fifo_overflow_raw),
-      .indirect_fifo_overflow_err_det_en_i(indirect_fifo_overflow_err_det_en_i),
+      .indirect_fifo_overflow_err_det_en_i,
       .recovery_mode_csr_active_i(recovery_mode_csr_active),
 
       .desc_valid_i(recv_tti_rx_desc_valid),
@@ -1091,11 +1091,11 @@ module recovery_handler
       .tx_pec_init_o  (tx_pec_init),
       .tx_pec_soft_rst_n_o(tx_pec_soft_rst_n),
 
-      .payload_available_o(payload_available_o),
-      .image_activated_o  (image_activated_o),
+      .payload_available_o,
+      .image_activated_o,
 
-      .hwif_rec_i(hwif_rec_i),
-      .hwif_rec_o(hwif_rec_o),
+      .hwif_rec_i,
+      .hwif_rec_o,
 
       .hwif_socmgmt_i,
       .hwif_socmgmt_o,
@@ -1103,14 +1103,14 @@ module recovery_handler
       .virtual_target_start_i(virtual_target_start),
       .other_target_start_i(other_target_start),
 
-      .pec_err_o(pec_err_o),
-      .length_err_o(length_err_o),
-      .readonly_err_o(readonly_err_o),
-      .unsupported_err_o(unsupported_err_o),
-      .rx_fifo_overflow_err_o(rx_fifo_overflow_err_o),
-      .indirect_fifo_overflow_err_o(indirect_fifo_overflow_err_o),
+      .pec_err_o,
+      .length_err_o,
+      .readonly_err_o,
+      .unsupported_err_o,
+      .rx_fifo_overflow_err_o,
+      .indirect_fifo_overflow_err_o,
       .exec_pending_o(recovery_exec_pending),
-      .recovery_mode_enter_o(recovery_mode_enter_o)
+      .recovery_mode_enter_o
   );
 
   //----------------------------------------------------------------------------
