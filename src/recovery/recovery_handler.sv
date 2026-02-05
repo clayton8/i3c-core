@@ -249,7 +249,6 @@ module recovery_handler
   logic        recovery_xfer_pending;     // Transfer in progress to recovery device
   logic        recovery_exec_pending;     // Recovery command execution in progress
   logic        recovery_pending;          // Combined recovery active flag
-  logic [1:0]  virtual_device_cec_shreg;  // Shift register for PEC init delay
   logic        virtual_device_sel_q;      // Delayed virtual device select (race fix)
   logic        virtual_target_active;     // Virtual target currently addressed
   logic        virtual_target_active_q;   // Delayed virtual target active
@@ -329,7 +328,6 @@ module recovery_handler
   logic                               tti_tx_data_queue_rvalid;
   logic                               tti_tx_data_queue_rready;
   logic [                       31:0] tti_tx_data_queue_rdata;
-  logic                               tti_tx_data_queue_flush;
   logic                               tti_tx_data_queue_start_thld_trig;
   logic                               tti_tx_data_queue_ready_thld_trig;
   logic                               tti_tx_data_queue_req;
@@ -341,12 +339,6 @@ module recovery_handler
   logic                               tti_tx_data_queue_reg_rst;
   logic                               tti_tx_data_queue_reg_rst_we;
   logic                               tti_tx_data_queue_reg_rst_next;
-
-  //----------------------------------------------------------------------------
-  // TTI IBI Queue Signals
-  //----------------------------------------------------------------------------
-  logic                               tti_ibi_queue_req;
-  logic                               tti_ibi_queue_ack;
 
   //----------------------------------------------------------------------------
   // RX FIFO Overflow Detection
@@ -435,27 +427,21 @@ module recovery_handler
   //----------------------------------------------------------------------------
   // RX PEC
   logic        ctl_bus_any_start;
-  logic        bus_addr_valid;
-  logic        pec_init;
-  logic        rx_pec_clear;
-  logic        rx_pec_valid;
-  logic        rx_pec_init;
   logic [7:0]  rx_pec_data;
-  logic [7:0]  recv_pec_crc;
-  logic        recv_pec_enable;
+  logic [7:0]  rx_pec_crc;
+  logic        rx_pec_enable;
+  logic        rx_pec_init;
 
   // TX PEC
-  logic        tx_pec_valid;
-  logic        tx_pec_init;
   logic [7:0]  tx_pec_data;
-  logic [7:0]  xmit_pec_crc;
-  logic        xmit_pec_enable;
+  logic [7:0]  tx_pec_crc;
+  logic        tx_pec_enable;
+  logic        tx_pec_init;
   logic        tx_pec_soft_rst_n;
 
   //----------------------------------------------------------------------------
   // Unused Signals
   //----------------------------------------------------------------------------
-  logic unused_rx_desc_start_thld_trig;
   logic unused_tx_desc_start_thld_trig;
   logic unused_ibi_queue_start_thld_trig;
 
@@ -480,20 +466,6 @@ module recovery_handler
   // This is used internally for command validation (some commands only valid in recovery mode)
   //----------------------------------------------------------------------------
   assign recovery_mode_csr_active = (hwif_rec_i.DEVICE_STATUS_0.DEV_STATUS.value == RecoveryMode);
-
-  //----------------------------------------------------------------------------
-  // Virtual Device Selection Delay
-  // Shift register delays PEC init after virtual device selection
-  //----------------------------------------------------------------------------
-  always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (~rst_ni) begin
-      virtual_device_cec_shreg <= 2'b10;
-    end else if (virtual_device_sel_i) begin
-      virtual_device_cec_shreg <= {1'b0, virtual_device_cec_shreg[1]};
-    end else begin
-      virtual_device_cec_shreg <= 2'b10;
-    end
-  end
 
   //----------------------------------------------------------------------------
   // Delayed Signal Registers
@@ -1008,24 +980,8 @@ module recovery_handler
   //
   //============================================================================
 
-  //----------------------------------------------------------------------------
-  // PEC Initialization
-  // Initializes PEC on first address byte of transaction
-  //----------------------------------------------------------------------------
   // Any start (S or Sr) resets address valid tracking
   assign ctl_bus_any_start = ctl_bus_start_i | ctl_bus_rstart_i;
-
-  always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (~rst_ni) begin
-      bus_addr_valid <= '0;
-    end else if (ctl_bus_any_start) begin
-      bus_addr_valid <= '0;
-    end else if (~bus_addr_valid && ctl_bus_addr_valid_i) begin
-      bus_addr_valid <= '1;
-    end
-  end
-
-  assign pec_init = ctl_bus_addr_valid_i & ~bus_addr_valid;
 
   //----------------------------------------------------------------------------
   // RX PEC Calculator
@@ -1033,23 +989,18 @@ module recovery_handler
   recovery_pec xrecovery_rx_pec (
       .clk_i,
       .rst_ni(rst_ni),
-      .soft_reset_ni(!rx_pec_clear & virtual_device_sel_i & ~bypass_i3c_core_i),
+      .soft_reset_ni(!ctl_bus_any_start & virtual_device_sel_i & ~bypass_i3c_core_i),
 
       .dat_i  (rx_pec_data),
-      .valid_i(rx_pec_valid | virtual_device_cec_shreg[0]),
+      .valid_i(rx_pec_enable),
       .init_i (rx_pec_init),
-      .crc_o  (recv_pec_crc)
+      .crc_o  (rx_pec_crc)
   );
 
   // RX PEC mux for initializing it with I2C/I3C address byte
   always_comb begin
-    rx_pec_data  = pec_init ? ctl_bus_addr_i : tti_rx_data_queue_wdata;
-    rx_pec_valid = pec_init ? 1'b1 : recv_pec_enable;
-    rx_pec_init  = pec_init ? 1'b1 : 1'b0;
+    rx_pec_data  = rx_pec_init ? ctl_bus_addr_i : tti_rx_data_queue_wdata;
   end
-
-  // Clear PEC on bus start (S or Sr)
-  assign rx_pec_clear = ctl_bus_any_start;
 
   //============================================================================
   //
@@ -1116,8 +1067,9 @@ module recovery_handler
       .in_hdr_mode_i(ctl_in_hdr_mode_i),
       .bus_addr_i  (ctl_bus_addr_i),
 
-      .pec_crc_i   (recv_pec_crc),
-      .pec_enable_o(recv_pec_enable),
+      .pec_crc_i   (rx_pec_crc),
+      .pec_enable_o(rx_pec_enable),
+      .pec_init_o  (rx_pec_init),
 
       // TTI TX descriptor interface
       .tx_desc_valid_o(send_tti_tx_desc_valid),
@@ -1134,8 +1086,9 @@ module recovery_handler
       .tx_start_trig_o       (send_tti_tx_start_trig),
 
       // TX PEC computation interface
-      .tx_pec_crc_i   (xmit_pec_crc),
-      .tx_pec_enable_o(xmit_pec_enable),
+      .tx_pec_crc_i   (tx_pec_crc),
+      .tx_pec_enable_o(tx_pec_enable),
+      .tx_pec_init_o  (tx_pec_init),
       .tx_pec_soft_rst_n_o(tx_pec_soft_rst_n),
 
       .payload_available_o(payload_available_o),
@@ -1169,23 +1122,11 @@ module recovery_handler
       .soft_reset_ni(tx_pec_soft_rst_n & ~bypass_i3c_core_i),
 
       .dat_i  (tx_pec_data),
-      .valid_i(tx_pec_valid),
+      .valid_i(tx_pec_enable),
       .init_i (tx_pec_init),
-      .crc_o  (xmit_pec_crc)
+      .crc_o  (tx_pec_crc)
   );
-
-  // TX PEC mux for initializing it with I2C/I3C address byte
-  always_comb begin
-    if (pec_init) begin
-      tx_pec_data  = ctl_bus_addr_i;
-      tx_pec_valid = 1'b1;
-      tx_pec_init  = 1'b1;
-    end else begin
-      tx_pec_data  = ctl_tti_tx_data_queue_rdata_o;
-      tx_pec_valid = xmit_pec_enable;
-      tx_pec_init  = 1'b0;
-    end
-  end
+  assign tx_pec_data = tx_pec_init ? ctl_bus_addr_i : ctl_tti_tx_data_queue_rdata_o;
 
   //============================================================================
   //

@@ -184,6 +184,7 @@ module recovery_receiver
     //--------------------------------------------------------------------------
     input  logic [7:0] pec_crc_i,
     output logic       pec_enable_o,
+    output logic       pec_init_o,
 
     //--------------------------------------------------------------------------
     // TTI TX Descriptor Interface
@@ -210,6 +211,7 @@ module recovery_receiver
     //--------------------------------------------------------------------------
     input  logic [7:0] tx_pec_crc_i,
     output logic       tx_pec_enable_o,
+    output logic       tx_pec_init_o,
     output logic       tx_pec_soft_rst_n_o,
 
     //--------------------------------------------------------------------------
@@ -374,8 +376,6 @@ module recovery_receiver
   //----------------------------------------------------------------------------
   logic [7:0] pec_recv;           // Received PEC byte
   logic [7:0] pec_calc;           // Calculated PEC
-  logic [7:0] pec_crc_latched;    // Latched CRC value
-  logic       pec_enable_q;       // Delayed PEC enable
 
   //----------------------------------------------------------------------------
   // Counter Signals
@@ -402,7 +402,7 @@ module recovery_receiver
   csr_e        csr_sel_next, csr_end_next;
   logic [31:0] csr_data, csr_data_next;
   logic [15:0] csr_length, csr_length_next;
-  logic        csr_writeable;
+  logic        csr_writable;
   logic [TtiRxDataDataWidth-1:0] prev_tti_rx_rdata;
 
   //----------------------------------------------------------------------------
@@ -425,18 +425,12 @@ module recovery_receiver
   logic recovery_ctrl_we;
 
   //----------------------------------------------------------------------------
-  // RX Interface Signals
-  //----------------------------------------------------------------------------
-  logic rx_data_queue_select_reg;
-
-  //----------------------------------------------------------------------------
   // Indirect FIFO Signals
   //----------------------------------------------------------------------------
   logic [31:0] fifo_size;
   logic [31:0] fifo_wrptr, fifo_rdptr;
   logic        fifo_wrptr_inc, fifo_rdptr_inc;
   logic        fifo_ptr_clr;
-  logic        fifo_reg_reset_clear;
 
   //----------------------------------------------------------------------------
   // Protocol Status Signals
@@ -570,7 +564,12 @@ module recovery_receiver
     inc_csr_sel            = 1'b0;
     load_csr_length        = 1'b0;
     rx_data_queue_select_o = 1'b0;
-    
+    pec_enable_o           = 1'b0;
+    pec_init_o             = 1'b0;
+    tx_pec_enable_o        = 1'b0;
+    tx_pec_init_o          = 1'b0;
+    tx_pec_soft_rst_n_o    = 1'b0; // Reset unless in certain states
+
     // Error signal defaults
     pec_err               = 1'b0;
     length_underrun_err   = 1'b0;
@@ -607,7 +606,9 @@ module recovery_receiver
               state_d         = Error;
             end else begin
               // RnW=0 (Write) - valid start of recovery transaction
-              state_d = RxCmd;
+              state_d      = RxCmd;
+              pec_enable_o = 1'b1;
+              pec_init_o   = 1'b1;
             end
           end
         end
@@ -624,8 +625,9 @@ module recovery_receiver
             length_underrun_err = length_err_det_en_i;  // Report as length error (underrun)
             state_d             = Error;
           end else if (rx_flow) begin
-            capture_cmd = 1'b1;
-            state_d     = RxLenL;
+            capture_cmd   = 1'b1;
+            pec_enable_o  = 1'b1;
+            state_d       = RxLenL;
           end
         end
 
@@ -642,6 +644,7 @@ module recovery_receiver
             state_d             = Error;
           end else if (rx_flow) begin
             capture_len_lsb = 1'b1;
+            pec_enable_o    = 1'b1;
             state_d         = RxLenH;
           end
         end
@@ -664,6 +667,7 @@ module recovery_receiver
             state_d            = CmdDispatch;
           end else if (rx_flow) begin
             capture_len_msb = 1'b1;
+            pec_enable_o    = 1'b1;
             state_d         = RxData;
           end
         end
@@ -672,6 +676,10 @@ module recovery_receiver
         // RxData: Collect payload bytes until expected length reached
         //------------------------------------------------------------------------
         RxData: begin
+          if(rx_data_queue_flow_i) begin
+            pec_enable_o    = 1'b1;
+          end
+
           if (bus_stop_i || bus_rstart_i || rx_data_last_i)  begin
             // Premature Stop or Repeated Start detected
             premature_stop       = 1'b1;
@@ -772,6 +780,8 @@ module recovery_receiver
         // Detect protocol errors: STOP, Sr to other target, Sr + Addr+W
         //------------------------------------------------------------------------
         TxDesc: begin
+          tx_pec_soft_rst_n_o = 1'b1; 
+
           if (bus_stop_i || other_target_start_i || (virtual_target_start_i && !bus_addr_i[0])) begin
             // Protocol errors:
             // - STOP instead of Sr (incomplete read transaction)
@@ -781,6 +791,8 @@ module recovery_receiver
             state_d         = Error;
           end else if (tx_desc_ready_i) begin
             state_d = TxLenL;
+            tx_pec_enable_o     = 1'b1;
+            tx_pec_init_o       = 1'b1;
           end
         end
 
@@ -788,33 +800,62 @@ module recovery_receiver
         // TxLenL: Send response length LSB
         //------------------------------------------------------------------------
         TxLenL: begin
-          if (bus_rstart_i)         state_d = Done;  // Controller aborted read via Sr
-          else if (tx_data_ready_i) state_d = TxLenH;
+          tx_pec_soft_rst_n_o = 1'b1; 
+
+          if (bus_rstart_i) begin        
+            state_d = Done;  // Controller aborted read via Sr
+          end else if (tx_data_ready_i) begin
+            state_d = TxLenH;
+            tx_pec_enable_o = 1'b1;
+          end
         end
 
         //------------------------------------------------------------------------
         // TxLenH: Send response length MSB
         //------------------------------------------------------------------------
         TxLenH: begin
-          if (bus_rstart_i)         state_d = Done;  // Controller aborted read via Sr
-          else if (tx_data_ready_i) state_d = TxData;
+          tx_pec_soft_rst_n_o = 1'b1; 
+
+          if (bus_rstart_i) begin
+            state_d = Done;  // Controller aborted read via Sr
+          end else if (tx_data_ready_i) begin
+            state_d = TxData;
+            tx_pec_enable_o = 1'b1;
+          end
         end
 
         //------------------------------------------------------------------------
         // TxData: Send CSR data bytes
         //------------------------------------------------------------------------
         TxData: begin
-          if (tx_data_ready_i && tx_data_valid_o && (bcnt == 3)) inc_csr_sel = 1'b1;
+          tx_pec_soft_rst_n_o = 1'b1; 
 
-          if (bus_rstart_i) state_d = Done;  // Controller aborted read via Sr
-          else if (tx_data_ready_i && tx_data_valid_o && (dcnt == 1)) state_d = TxPec;
+          if (bus_rstart_i) begin
+            state_d = Done;  // Controller aborted read via Sr
+          end else if (tx_data_ready_i) begin
+            tx_pec_enable_o = 1'b1;
+
+            if (tx_data_valid_o) begin
+              if(bcnt == 3) begin
+                inc_csr_sel = 1'b1;
+              end
+
+              if(dcnt == 1) begin
+                state_d = TxPec;
+              end
+            end
+          end
         end
 
         //------------------------------------------------------------------------
         // TxPec: Send PEC byte
         //------------------------------------------------------------------------
         TxPec: begin
-          if ((tx_data_ready_i && tx_data_valid_o) || bus_rstart_i) state_d = Done;
+          tx_pec_soft_rst_n_o = 1'b1; 
+
+          if ((tx_data_ready_i && tx_data_valid_o) || bus_rstart_i) begin 
+            state_d = Done;
+          end
         end
 
         //------------------------------------------------------------------------
@@ -1035,33 +1076,6 @@ module recovery_receiver
   //============================================================================
 
   //----------------------------------------------------------------------------
-  // PEC Enable - gate CRC calculation for relevant bytes only
-  //----------------------------------------------------------------------------
-  assign pec_enable_o = (state_q inside {RxCmd, RxLenL, RxLenH}) ? rx_flow :
-                        (state_q == RxData) ? rx_data_queue_flow_i : 1'b0;
-
-  always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (!rst_ni) begin
-      pec_enable_q <= 1'b0;
-    end else begin
-      pec_enable_q <= pec_enable_o;
-    end
-  end
-
-  //----------------------------------------------------------------------------
-  // PEC CRC Latch
-  //----------------------------------------------------------------------------
-  always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (!rst_ni) begin
-      pec_crc_latched <= '0;
-    end else if (bus_any_start_i) begin
-      pec_crc_latched <= '0;
-    end else if (pec_enable_q) begin
-      pec_crc_latched <= pec_crc_i;
-    end
-  end
-
-  //----------------------------------------------------------------------------
   // PEC Receive Capture
   //----------------------------------------------------------------------------
   always_ff @(posedge clk_i or negedge rst_ni) begin
@@ -1081,9 +1095,9 @@ module recovery_receiver
     if (!rst_ni) begin
       pec_calc <= '0;
     end else if (state_q == RxLenL && rx_flow) begin
-      pec_calc <= pec_crc_latched;
+      pec_calc <= pec_crc_i;
     end else if (state_q == RxPec && rx_flow) begin
-      pec_calc <= pec_crc_latched;
+      pec_calc <= pec_crc_i;
     end
   end
 
@@ -1141,19 +1155,6 @@ module recovery_receiver
       end
     endcase
   end
-
-  //----------------------------------------------------------------------------
-  // TX PEC Enable
-  //----------------------------------------------------------------------------
-  assign tx_pec_enable_o = (state_q inside {TxLenL, TxLenH, TxData}) && 
-                           tx_data_valid_o && tx_data_ready_i;
-
-  //----------------------------------------------------------------------------
-  // TX PEC Soft Reset - keep active from RxCmd to capture address byte for CRC
-  //----------------------------------------------------------------------------
-  assign tx_pec_soft_rst_n_o = state_q inside {RxCmd, RxLenL, RxLenH, RxData, RxPec, 
-                                                CmdDispatch, TxDesc, TxLenL, TxLenH, 
-                                                TxData, TxPec};
 
   //============================================================================
   //
