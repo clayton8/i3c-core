@@ -120,13 +120,6 @@ module recovery_receiver
     input  logic recovery_mode_csr_active_i,
 
     //--------------------------------------------------------------------------
-    // TTI RX Descriptor Interface
-    //--------------------------------------------------------------------------
-    input  logic                          desc_valid_i,
-    output logic                          desc_ready_o,
-    input  logic [TtiRxDescDataWidth-1:0] desc_data_i,
-
-    //--------------------------------------------------------------------------
     // TTI RX Data Interface (byte stream from controller)
     //--------------------------------------------------------------------------
     input  logic       rx_data_valid_i,
@@ -484,7 +477,6 @@ module recovery_receiver
   // RX interface
   assign rx_flow      = rx_data_valid_i & rx_data_ready_o;
   assign cmd_len      = {len_msb, len_lsb};
-  assign desc_ready_o = 1'b1;
   assign tti_rx_sel_o = 1'b1;
 
   // TX queue control
