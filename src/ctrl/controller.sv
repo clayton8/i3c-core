@@ -247,7 +247,6 @@ module controller
 
     output logic err_o,
     input  logic recovery_mode_enter_i,
-    input  logic recovery_pec_err_i,
 
     // Individual TE error outputs for interrupt reporting
     output logic te0_err_o,
