@@ -67,6 +67,7 @@ module controller
     input  logic sda_i,
     output logic scl_o,
     output logic sda_o,
+    output logic sda_oe_o,
     output logic sel_od_pp_o,
     input logic arbitration_lost_i,
 
@@ -271,6 +272,8 @@ module controller
     output logic in_hdr_mode_o
 );
 
+  localparam int unsigned RecoveryMode = 'h3;
+
   logic phy_en;
   logic [1:0] phy_mux_select;
   logic i2c_active_en;
@@ -339,25 +342,30 @@ module controller
   bus_state_t ctrl_bus_i[4];
   logic ctrl_scl_o[4];
   logic ctrl_sda_o[4];
+  logic ctrl_sda_oe_o[4];
   logic ctrl_sel_od_pp_i[4];
 
-  localparam int unsigned RecoveryMode = 'h3;
-  always_comb begin : mux_4_to_1
-    scl_o = ctrl_scl_o[phy_mux_select];
-    sda_o = ctrl_sda_o[phy_mux_select];
-    sel_od_pp_o = ctrl_sel_od_pp_i[phy_mux_select];
+  assign ctrl_sda_oe_o[0] = 1'b0;
+  assign ctrl_sda_oe_o[1] = 1'b0;
 
+  // NOTE: For now, the I3C standby (target) device is hard-wired onto the bus for risk mitigation
+  assign scl_o = ctrl_scl_o[3];
+  assign sda_o = ctrl_sda_o[3];
+  assign sda_oe_o    = ctrl_sda_oe_o[3];
+  assign sel_od_pp_o = ctrl_sel_od_pp_i[3];
+
+  assign ctrl_bus_i[3] = bus;
+
+  // Tieoff of all other devices
+  always_comb begin : mux_tieoff
     // Default
-    for (int i=0; i<4; i++) begin
-        ctrl_bus_i[i] = '0;
-        ctrl_bus_i[i].sda.value = '1;
-        ctrl_bus_i[i].scl.value = '1;
-        ctrl_bus_i[i].sda.stable_high = '1;
-        ctrl_bus_i[i].scl.stable_high = '1;
+    for (int i=0; i<3; i++) begin
+      ctrl_bus_i[i] = '0;
+      ctrl_bus_i[i].sda.value = 1'b1;
+      ctrl_bus_i[i].scl.value = 1'b1;
+      ctrl_bus_i[i].sda.stable_high = 1'b1;
+      ctrl_bus_i[i].scl.stable_high = 1'b1;
     end
-
-    // Muxed
-    ctrl_bus_i[phy_mux_select] = bus;
   end
 
   configuration xconfiguration (
@@ -496,6 +504,7 @@ module controller
       .ctrl_bus_i(ctrl_bus_i[2:3]),
       .ctrl_scl_o(ctrl_scl_o[2:3]),
       .ctrl_sda_o(ctrl_sda_o[2:3]),
+      .ctrl_sda_oe_o(ctrl_sda_oe_o[2:3]),
       .phy_sel_od_pp_o(ctrl_sel_od_pp_i[2:3]),
       .arbitration_lost_i(arbitration_lost_i),
       .rx_desc_queue_full_i(tti_rx_desc_queue_full_i),

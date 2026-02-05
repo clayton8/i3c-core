@@ -23,6 +23,7 @@ module controller_standby_i3c
     input  bus_state_t ctrl_bus_i,
     output logic       ctrl_scl_o,
     output logic       ctrl_sda_o,
+    output logic       ctrl_sda_oe_o,
     output logic       phy_sel_od_pp_o,
     input  logic       arbitration_lost_i,
 
@@ -609,6 +610,7 @@ module controller_standby_i3c
     .tx_rsp_o(bus_tx_rsp),
 
     .sel_od_pp_o(phy_sel_od_pp_o),
+    .sda_oe_o   (ctrl_sda_oe_o),
     .sda_o      (ctrl_sda_o)
   );
 

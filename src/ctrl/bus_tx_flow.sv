@@ -34,6 +34,9 @@ module bus_tx_flow import i3c_pkg::*; (
   // Open Drain / Push Pull
   output logic sel_od_pp_o,
 
+  // Output enable for SDA pad
+  output logic sda_oe_o,
+
   // Output I3C SDA bus line
   output logic sda_o
 );
@@ -42,14 +45,16 @@ module bus_tx_flow import i3c_pkg::*; (
   logic       bit_counter_en;
   logic [3:0] bit_counter_q, bit_counter_d;
 
+  // Registers for all critical signals directly connected to the SDA pad
   i3c_byte_t  req_value_q, req_value_d;
   i3c_drive_e drive_mode_q, drive_mode_d;
+  logic       sda_oe_q, sda_oe_d;
 
   logic tx_done;     // Indicates finished bit write
   logic bus_tx_done; // Feedback to requester that transfer is done
   logic req_error;
 
-  // TODO
+  // TODO Can probably be removed
   assign req_error = 1'b0;
 
   typedef enum logic [2:0] {
@@ -62,6 +67,24 @@ module bus_tx_flow import i3c_pkg::*; (
   } tx_state_e;
 
   tx_state_e state_d, state_q;
+
+  // SDA is simply the MSB of the data shift register. No further logic or muxing.
+  // Similar for pad drive mode and output enable.
+  assign sda_o = req_value_q[7];
+  assign sel_od_pp_o = drive_mode_q;
+  assign sda_oe_o = sda_oe_q;
+
+  /*
+    Truth table for sda_oe.
+
+    sel_od_pp_o | sda_o  || sda_oe_o | IO state
+    ------------+--------++----------+-----------
+         0      |   0    ||    1     |    0
+         0      |   1    ||    0     |   hi-z
+         1      |   0    ||    1     |    0
+         1      |   1    ||    1     |    1
+  */
+  assign sda_oe_d = drive_mode_d || !req_value_d[7];
 
   // Common logic whenever a transfer gets started, including back-to-back transfers
   function automatic tx_state_e start_transfer(
@@ -122,7 +145,6 @@ module bus_tx_flow import i3c_pkg::*; (
 
   endfunction : start_transfer
 
-
   // Bit counter used for byte transfers
   always_comb begin
     bit_counter_d = bit_counter_q;
@@ -136,10 +158,7 @@ module bus_tx_flow import i3c_pkg::*; (
     end
   end
 
-  // SDA is simply the MSB of the data shift register. No further logic or muxing.
-  assign sda_o = req_value_q[7];
-  assign sel_od_pp_o = drive_mode_q;
-
+  // Main FSM which handles all low-level bus details in terms of transmitting
   always_comb begin : tx_fsm
     bit_counter_en = 1'b0;
 
@@ -289,11 +308,13 @@ module bus_tx_flow import i3c_pkg::*; (
       bit_counter_q <= '0;
       req_value_q   <= '1;
       drive_mode_q  <= OpenDrain;
+      sda_oe_q      <= 1'b0;
       state_q       <= Idle;
     end else begin
       bit_counter_q <= bit_counter_d;
       req_value_q   <= req_value_d;
       drive_mode_q  <= drive_mode_d;
+      sda_oe_q      <= sda_oe_d;
       state_q       <= state_d;
     end
   end
