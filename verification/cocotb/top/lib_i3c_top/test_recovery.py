@@ -12,7 +12,7 @@ from cocotbext_i3c.common import I3C_RSVD_BYTE
 from i3c_recovery_interface_fixed import I3cRecoveryInterfaceFixed as I3cRecoveryInterface
 from cocotbext_i3c.i3c_target import I3CTarget
 from interface import I3CTopTestInterface
-from od_pp_monitor import OdPpMonitor, create_od_pp_monitor
+from od_pp_monitor import OdPpMonitor, create_od_pp_monitor, create_protocol_monitor
 
 import cocotb
 from cocotb.triggers import ClockCycles, Combine, Event, RisingEdge, Timer
@@ -118,12 +118,18 @@ async def initialize(dut, fclk=333.0, fbus=12.5, timeout=50,
         tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_STATUS_0.base_addr, int2dword(status), 4
     )
 
-    # Start OD/PP mode monitor (runs in background, checks sel_od_pp and sda_oe)
-    od_pp_monitor = await create_od_pp_monitor(dut, auto_start=True)
-    if od_pp_monitor:
-        # Store monitor in tb for access by tests
-        tb.od_pp_monitor = od_pp_monitor
+    # Start comprehensive I3C protocol monitor (runs in background)
+    # This monitors:
+    # - OD/PP signal consistency
+    # - Write ACK OD→PP handoff protocol (I3C Spec Section 5.1.2.1)
+    # - Mode transitions
+    protocol_monitor = await create_protocol_monitor(dut, auto_start=True)
+    if protocol_monitor:
+        tb.protocol_monitor = protocol_monitor
+        # Also keep od_pp_monitor reference for backwards compatibility
+        tb.od_pp_monitor = protocol_monitor.od_pp_monitor
     else:
+        tb.protocol_monitor = None
         tb.od_pp_monitor = None
 
     return i3c_controller, i3c_target, tb, recovery
@@ -136,12 +142,25 @@ def check_od_pp_monitor(tb, fail_on_violations=True):
     Call this at the end of tests to verify OD/PP mode correctness.
     
     Args:
-        tb: Test interface (contains od_pp_monitor)
+        tb: Test interface (contains od_pp_monitor or protocol_monitor)
         fail_on_violations: If True, raises AssertionError on violations
         
     Returns:
         True if no violations, False otherwise
     """
+    # Check comprehensive protocol monitor first (preferred)
+    if hasattr(tb, 'protocol_monitor') and tb.protocol_monitor is not None:
+        monitor = tb.protocol_monitor
+        monitor.stop()
+        monitor.report()
+        
+        if fail_on_violations:
+            monitor.assert_no_violations()
+        
+        violations, total = monitor.get_all_violations()
+        return total == 0
+        
+    # Fall back to basic OD/PP monitor
     if not hasattr(tb, 'od_pp_monitor') or tb.od_pp_monitor is None:
         return True
         
@@ -5662,10 +5681,12 @@ async def test_ri_private_read_tbit_abort(dut):
 
     # =========================================================================
     # Setup: Note expected DEVICE_STATUS values
-    # DEVICE_STATUS returns 2 bytes: [status_low, status_high]
-    # We set DEVICE_STATUS_0 to 0x03 in initialize(), so expect [0x03, 0x00]
+    # DEVICE_STATUS returns 7 bytes:
+    #   DEVICE_STATUS_0 (4 bytes): DEV_STATUS[7:0], PROT_ERROR[15:8], REC_REASON_CODE[31:16]
+    #   DEVICE_STATUS_1 (3 bytes): HEARTBEAT[15:0], VENDOR_STATUS_LENGTH[24:16]
+    # We set DEVICE_STATUS_0 to 0x03 in initialize(), so DEV_STATUS=0x03, rest=0x00
     # =========================================================================
-    expected_device_status = [0x03, 0x00]
+    expected_device_status = [0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
     dut._log.info(f"  Expected DEVICE_STATUS: {[hex(b) for b in expected_device_status]}")
 
     # =========================================================================
@@ -5907,17 +5928,17 @@ async def test_ri_private_read_tbit_abort(dut):
 
     # Verify DEVICE_STATUS data content - this catches stale data bugs!
     if status_data is not None and pec_ok:
-        # DEVICE_STATUS should be 2 bytes
-        if len(status_data) == 2 and status_data == expected_device_status:
+        # DEVICE_STATUS should be 7 bytes
+        if len(status_data) == 7 and status_data == expected_device_status:
             dut._log.info(f"  PASS: DEVICE_STATUS data matches expected: {[hex(b) for b in status_data]}")
             scenario_results[2] = True
         else:
             dut._log.error(f"  FAIL: DEVICE_STATUS data mismatch (possible stale data bug!)")
-            dut._log.error(f"    Expected: {[hex(b) for b in expected_device_status]}")
-            dut._log.error(f"    Got:      {[hex(b) for b in status_data]}")
-            # Check if we got stale DEVICE_ID bytes
-            if len(status_data) >= 2 and (status_data[0] in device_id_values or status_data[1] in device_id_values):
-                dut._log.error(f"    STALE DATA DETECTED: Got DEVICE_ID bytes instead of DEVICE_STATUS!")
+            dut._log.error(f"    Expected: {[hex(b) for b in expected_device_status]} (7 bytes)")
+            dut._log.error(f"    Got:      {[hex(b) for b in status_data]} ({len(status_data)} bytes)")
+            # Check if length is wrong - indicates stale length from previous read
+            if len(status_data) != 7:
+                dut._log.error(f"    STALE LENGTH DETECTED: Expected 7 bytes, got {len(status_data)} bytes!")
             scenario_results[2] = False
     else:
         dut._log.error(f"  FAIL: DEVICE_STATUS read failed or PEC error")
