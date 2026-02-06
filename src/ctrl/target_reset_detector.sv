@@ -39,7 +39,7 @@ module target_reset_detector
   target_reset_detector_state_e state_q, state_d;
 
   always_comb begin
-    if ((state_q == AwaitPattern) & (sda_transition_count_q < 4'he)) begin
+    if ((state_q == AwaitPattern) & (sda_transition_count_q < 4'd14)) begin
       count_sda_transition_en = (bus.sda.pos_edge & (sda_transition_count_q != 0)) | bus.sda.neg_edge;
       if (bus.scl.stable_high) sda_transition_count_d = 4'h0;
       else
