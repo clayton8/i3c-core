@@ -4297,7 +4297,7 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 #### T_FREE field
 
-
+<p>Time in clock cycles from STOP detection until Bus Free Condition (tBUF/tCAS). Configure based on System Clock.</p>
 
 ### T_AVAL_REG register
 
@@ -4311,7 +4311,7 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 #### T_AVAL field
 
-
+<p>Time in clock cycles from STOP detection until Bus Available Condition (tAVAL). Configure based on System Clock. NOTE: I3C spec v1.1.1 Figure 24 shows the time from STOP, and 5.1.3.2.2 describes it as 'a period during which the Bus Free Condition is sustained continuously for a duration of at least tAVAL.' The timer starts at a bus STOP condition and FW can take into account the tBUF if needed.</p>
 
 ### T_IDLE_REG register
 
@@ -4325,7 +4325,7 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 #### T_IDLE field
 
-
+<p>Time in clock cycles from STOP detection until Bus Idle Condition (tIDLE). Configure based on System Clock</p>
 
 ## CtrlCfg register file
 

@@ -6,6 +6,7 @@ from math import ceil
 
 from boot import boot_init
 from bus2csr import dword2int, int2dword
+from ccc import CCC
 from i3c_controller_fixed import I3cControllerFixed as I3cController
 from cocotbext_i3c.i3c_target import I3CTarget
 from interface import I3CTopTestInterface
@@ -435,6 +436,9 @@ async def test_i3c_target_ibi(dut):
     # Enable IBI ACK-ing
     i3c_controller.enable_ibi(True)
 
+    # Send a broadcast CCC to initialize bus timers (need STOP to start counting)
+    await i3c_controller.i3c_ccc_write(ccc=CCC.BCAST.RSTDAA)
+
     # Write descriptor to the TTI IBI queue. No IBI data
     mdb = 0xAA
     data = []
@@ -530,6 +534,9 @@ async def test_i3c_target_ibi_retry(dut):
 
     result = True
 
+    # Send a broadcast CCC to initialize bus timers (need STOP to start counting)
+    await i3c_controller.i3c_ccc_write(ccc=CCC.BCAST.RSTDAA)
+
     # Disable IBI ACK-ing
     i3c_controller.enable_ibi(False)
 
@@ -603,6 +610,9 @@ async def test_i3c_target_ibi_data(dut):
     target.set_bcr_fields(ibi_req_capable=True, ibi_payload=True)
 
     result = True
+
+    # Send a broadcast CCC to initialize bus timers (need STOP to start counting)
+    await i3c_controller.i3c_ccc_write(ccc=CCC.BCAST.RSTDAA)
 
     # Limit IBI data count that the controller can accept
     i3c_controller.set_max_ibi_data_len(6)

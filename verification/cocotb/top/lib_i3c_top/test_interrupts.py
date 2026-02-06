@@ -5,6 +5,7 @@ import random
 
 from boot import boot_init
 from bus2csr import dword2int, int2dword
+from ccc import CCC
 from i3c_controller_fixed import I3cControllerFixed as I3cController
 from cocotbext_i3c.i3c_target import I3CTarget
 from interface import I3CTopTestInterface
@@ -28,7 +29,7 @@ async def timeout_task(timeout_us):
     raise TimeoutError("Timeout!")
 
 
-async def test_setup(dut, timeout_us=50):
+async def test_setup(dut, timeout_us=25):
     """
     Sets up controller, target models and top-level core interface
     """
@@ -178,6 +179,9 @@ async def test_ibi_done(dut):
 
     # Enable IBI ACK-ing
     i3c_controller.enable_ibi(True)
+
+    # Send a broadcast CCC to initialize bus timers (need STOP to start counting)
+    await i3c_controller.i3c_ccc_write(ccc=CCC.BCAST.RSTDAA)
 
     # Enable the interrupt
     csr = tb.reg_map.I3C_EC.TTI.INTERRUPT_ENABLE

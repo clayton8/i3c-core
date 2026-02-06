@@ -361,7 +361,7 @@ regfile SoCManagementInterfaceRegisters{
         name = "";
         field {
             name = "";
-            desc = "";
+            desc = "Time in clock cycles from STOP detection until Bus Free Condition (tBUF/tCAS). Configure based on System Clock.";
             sw = rw;
             hw = r;
             reset = 32'h0000000C;
@@ -371,7 +371,7 @@ regfile SoCManagementInterfaceRegisters{
         name = "";
         field {
             name = "";
-            desc = "";
+            desc = "Time in clock cycles from STOP detection until Bus Available Condition (tAVAL). Configure based on System Clock. NOTE: I3C spec v1.1.1 Figure 24 shows the time from STOP, and 5.1.3.2.2 describes it as 'a period during which the Bus Free Condition is sustained continuously for a duration of at least tAVAL.' The timer starts at a bus STOP condition and FW can take into account the tBUF if needed.";
             sw = rw;
             hw = r;
             reset = 32'h00000012C;
@@ -381,7 +381,7 @@ regfile SoCManagementInterfaceRegisters{
         name = "";
         field {
             name = "";
-            desc = "";
+            desc = "Time in clock cycles from STOP detection until Bus Idle Condition (tIDLE). Configure based on System Clock";
             sw = rw;
             hw = r;
             reset = 32'h0000EA60;

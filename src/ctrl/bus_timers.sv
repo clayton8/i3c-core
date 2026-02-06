@@ -25,8 +25,10 @@ module bus_timers
 (
     input  logic        clk_i,
     input  logic        rst_ni,
-    input  logic        enable_i,
-    input  logic        restart_counter_i,
+    input  logic        enable_i,           // Module enable (i3c_standby_en)
+    input  logic        bus_start_i,        // Bus START/RSTART detected
+    input  logic        bus_stop_i,         // Bus STOP detected
+    input  logic        in_hdr_mode_i,      // Currently in HDR mode
     input  logic [19:0] t_bus_free_i,       // CSR: Time to free
     input  logic [19:0] t_bus_idle_i,       // CSR: Time to idle
     input  logic [19:0] t_bus_available_i,  // CSR: Time to available
@@ -36,13 +38,24 @@ module bus_timers
     output logic        bus_available_o     // Bus is available
 );
   logic [31:0] bus_state_counter;
+  logic count_enable;
+  logic reset_counter;
 
-  logic enable;
-  always_ff @(posedge clk_i or negedge rst_ni) begin : proc_enable
+  // Reset counter when: START detected, disabled, or in HDR mode
+  assign reset_counter = bus_start_i | ~enable_i | in_hdr_mode_i;
+
+  // Track if we've seen STOP (and should be counting)
+  always_ff @(posedge clk_i or negedge rst_ni) begin : proc_count_enable
     if (!rst_ni) begin
-      enable <= '0;
+      count_enable <= '0;
     end else begin
-      enable <= enable_i & ~bus_idle_o;
+      // Stop counting when bus_idle since this is always the largest counter
+      // We need to stop to avoid counter overflow issues.
+      if (reset_counter || bus_idle_o) begin
+        count_enable <= 1'b0;
+      end else if (bus_stop_i) begin
+        count_enable <= 1'b1;
+      end
     end
   end
 
@@ -50,14 +63,10 @@ module bus_timers
     if (!rst_ni) begin
       bus_state_counter <= '0;
     end else begin
-      if (restart_counter_i) begin
+      if (reset_counter) begin
         bus_state_counter <= '0;
-      end else begin
-        if (enable) begin
-          bus_state_counter <= bus_state_counter + 1'b1;
-        end else begin
-          bus_state_counter <= bus_state_counter;
-        end
+      end else if (count_enable) begin
+        bus_state_counter <= bus_state_counter + 1'b1;
       end
     end
   end
