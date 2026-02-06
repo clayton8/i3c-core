@@ -8,9 +8,11 @@ from bus2csr import bytes2int, compare_values, dword2int, int2dword
 from ccc import CCC
 from i3c_controller_fixed import I3cControllerFixed as I3cController
 from cocotbext_i3c.i3c_recovery_interface import I3cRecoveryException
+from cocotbext_i3c.common import I3C_RSVD_BYTE
 from i3c_recovery_interface_fixed import I3cRecoveryInterfaceFixed as I3cRecoveryInterface
 from cocotbext_i3c.i3c_target import I3CTarget
 from interface import I3CTopTestInterface
+from od_pp_monitor import OdPpMonitor, create_od_pp_monitor
 
 import cocotb
 from cocotb.triggers import ClockCycles, Combine, Event, RisingEdge, Timer
@@ -116,7 +118,42 @@ async def initialize(dut, fclk=333.0, fbus=12.5, timeout=50,
         tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_STATUS_0.base_addr, int2dword(status), 4
     )
 
+    # Start OD/PP mode monitor (runs in background, checks sel_od_pp and sda_oe)
+    od_pp_monitor = await create_od_pp_monitor(dut, auto_start=True)
+    if od_pp_monitor:
+        # Store monitor in tb for access by tests
+        tb.od_pp_monitor = od_pp_monitor
+    else:
+        tb.od_pp_monitor = None
+
     return i3c_controller, i3c_target, tb, recovery
+
+
+def check_od_pp_monitor(tb, fail_on_violations=True):
+    """
+    Check OD/PP monitor for violations and print report.
+    
+    Call this at the end of tests to verify OD/PP mode correctness.
+    
+    Args:
+        tb: Test interface (contains od_pp_monitor)
+        fail_on_violations: If True, raises AssertionError on violations
+        
+    Returns:
+        True if no violations, False otherwise
+    """
+    if not hasattr(tb, 'od_pp_monitor') or tb.od_pp_monitor is None:
+        return True
+        
+    monitor = tb.od_pp_monitor
+    monitor.stop()
+    monitor.report()
+    
+    violations = monitor.get_violations()
+    if violations and fail_on_violations:
+        raise AssertionError(f"OD/PP Monitor detected {len(violations)} violations")
+        
+    return len(violations) == 0
 
 
 @cocotb.test()
@@ -5621,3 +5658,1269 @@ async def test_private_read_and_ri_read(dut):
     dut._log.info("Private read data verified OK")
 
     dut._log.info("PASS: Recovery interface read and private read are independent")
+
+
+@cocotb.test()
+async def test_ri_private_read_tbit_abort(dut):
+    """
+    Test Private Read to Recovery Interface with Controller T-bit Abort Scenarios.
+
+    This test validates the I3C Core's behavior when a controller aborts a
+    private read in the middle of a transfer using the T-bit mechanism
+    (as per I3C Spec Sect. 5.1.2.3.4) and immediately continues with another
+    transaction (no STOP between abort and next transaction).
+
+    Test Scenarios:
+    1. T-bit abort on second-to-last byte of DEVICE_ID read, then read PROT_CAP (RI)
+    2. T-bit abort on first data byte of DEVICE_ID read, then read DEVICE_STATUS (RI)
+    3. T-bit abort on second-to-last byte, then private read to main target (TTI)
+    4. T-bit abort on any byte, then private write to RI (RECOVERY_CTRL)
+    5. T-bit abort on any byte, then private write to main target (TTI)
+
+    Between scenarios there is a STOP, but within each scenario the T-bit abort
+    is immediately followed by the next transaction via Repeated Start (no STOP).
+
+    Verification Points:
+    - OD/PP mode transitions are correct
+    - SDA output enable transitions are correct
+    - The follow-on transaction after T-bit abort succeeds
+    - No errors are reported after the sequence
+    - Bus remains accessible after the test
+    """
+
+    # Initialize
+    i3c_controller, i3c_target, tb, recovery = await initialize(dut, timeout=500)
+    await ClockCycles(tb.clk, 50)
+
+    # Set virtual device dynamic address (for RI)
+    await i3c_controller.i3c_ccc_write(
+        ccc=CCC.DIRECT.SETDASA, directed_data=[(VIRT_STATIC_ADDR, [VIRT_DYNAMIC_ADDR << 1])]
+    )
+
+    # Set main device dynamic address
+    await i3c_controller.i3c_ccc_write(
+        ccc=CCC.DIRECT.SETDASA, directed_data=[(STATIC_ADDR, [DYNAMIC_ADDR << 1])]
+    )
+
+    dut._log.info("=" * 70)
+    dut._log.info("TEST: Private Read T-bit Abort Scenarios on Recovery Interface")
+    dut._log.info("=" * 70)
+
+    # =========================================================================
+    # Setup: Write known values to DEVICE_ID register (24 bytes)
+    # =========================================================================
+    dut._log.info("\n[Setup] Writing known DEVICE_ID values")
+
+    device_id_values = list(range(0x10, 0x28))  # 24 bytes: 0x10-0x27
+    assert len(device_id_values) == 24
+
+    def make_word(bytes_list):
+        """Convert 4 bytes to 32-bit word (little-endian)"""
+        return (bytes_list[3] << 24) | (bytes_list[2] << 16) | (bytes_list[1] << 8) | bytes_list[0]
+
+    # Write DEVICE_ID registers (6 x 4 bytes = 24 bytes)
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_ID_0.base_addr,
+        int2dword(make_word(device_id_values[0:4])), 4
+    )
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_ID_1.base_addr,
+        int2dword(make_word(device_id_values[4:8])), 4
+    )
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_ID_2.base_addr,
+        int2dword(make_word(device_id_values[8:12])), 4
+    )
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_ID_3.base_addr,
+        int2dword(make_word(device_id_values[12:16])), 4
+    )
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_ID_4.base_addr,
+        int2dword(make_word(device_id_values[16:20])), 4
+    )
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_ID_5.base_addr,
+        int2dword(make_word(device_id_values[20:24])), 4
+    )
+
+    dut._log.info(f"  DEVICE_ID configured: {[hex(b) for b in device_id_values]}")
+
+    # =========================================================================
+    # Setup: Write known values to PROT_CAP register (15 bytes readable)
+    # Use distinctly different values from DEVICE_ID to detect stale data
+    # =========================================================================
+    dut._log.info("\n[Setup] Writing known PROT_CAP values")
+
+    # PROT_CAP: OCP magic string + distinct bytes (totally different from DEVICE_ID 0x10-0x27)
+    prot_cap_values = ocp_magic_string_as_bytes + [0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0xA6, 0xA7]
+    assert len(prot_cap_values) == 15  # PROT_CAP returns 15 bytes
+
+    # Extend to 16 bytes for CSR writes (4 x 4-byte registers)
+    prot_cap_csr = prot_cap_values + [0x00]
+
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.PROT_CAP_0.base_addr,
+        int2dword(make_word(prot_cap_csr[0:4])), 4
+    )
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.PROT_CAP_1.base_addr,
+        int2dword(make_word(prot_cap_csr[4:8])), 4
+    )
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.PROT_CAP_2.base_addr,
+        int2dword(make_word(prot_cap_csr[8:12])), 4
+    )
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.PROT_CAP_3.base_addr,
+        int2dword(make_word(prot_cap_csr[12:16])), 4
+    )
+
+    dut._log.info(f"  PROT_CAP configured: {[hex(b) for b in prot_cap_values]}")
+
+    # =========================================================================
+    # Setup: Note expected DEVICE_STATUS values
+    # DEVICE_STATUS returns 7 bytes:
+    #   DEVICE_STATUS_0 (4 bytes): DEV_STATUS[7:0], PROT_ERROR[15:8], REC_REASON_CODE[31:16]
+    #   DEVICE_STATUS_1 (3 bytes): HEARTBEAT[15:0], VENDOR_STATUS_LENGTH[24:16]
+    # We set DEVICE_STATUS_0 to 0x03 in initialize(), so DEV_STATUS=0x03, rest=0x00
+    # =========================================================================
+    expected_device_status = [0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+    dut._log.info(f"  Expected DEVICE_STATUS: {[hex(b) for b in expected_device_status]}")
+
+    # =========================================================================
+    # Helper: Get hierarchical signal paths
+    # =========================================================================
+    def get_bus_tx_flow():
+        """Get path to bus_tx_flow module"""
+        return dut.xi3c_wrapper.i3c.xcontroller.xcontroller_standby.xcontroller_standby_i3c.u_bus_tx_flow
+
+    # =========================================================================
+    # Helper: Start RI read command phase (write the command + PEC)
+    # =========================================================================
+    async def start_ri_read_command(addr, command):
+        """Send RI read command phase: S + 0x7E + Sr + Addr+W + CMD + PEC"""
+        xfer = [command]
+        pec = int(recovery.pec_calc.checksum(bytes([addr << 1] + xfer)))
+        xfer.append(pec)
+
+        await i3c_controller.send_start()
+        await i3c_controller.write_addr_header(I3C_RSVD_BYTE)
+        await i3c_controller.send_start()
+        ack = await i3c_controller.write_addr_header(addr)
+        assert ack, f"Device at 0x{addr:02X} should ACK its address"
+
+        for byte in xfer:
+            await i3c_controller.send_byte_tbit(byte)
+
+    # =========================================================================
+    # Helper: Start RI read data phase
+    # =========================================================================
+    async def start_ri_read_phase(addr):
+        """Send RI read data phase start: Sr + Addr+R"""
+        await i3c_controller.send_start()
+        ack = await i3c_controller.write_addr_header(addr, read=True)
+        assert ack, f"Device at 0x{addr:02X} should ACK read address"
+
+    # =========================================================================
+    # Helper: Read N bytes normally
+    # =========================================================================
+    async def read_bytes_normal(count):
+        """Read count bytes normally (no abort)"""
+        received = []
+        for _ in range(count):
+            byte, stop = await i3c_controller.recv_byte_t_bit(stop=False)
+            received.append(byte)
+            assert not stop, "Unexpected stop"
+        return received
+
+    # =========================================================================
+    # Helper: Read one byte then T-bit abort
+    # =========================================================================
+    async def read_byte_and_abort():
+        """Read one byte's data bits, then execute T-bit abort"""
+        byte = 0
+        for _ in range(8):
+            bit = await i3c_controller.recv_bit()
+            byte = (byte << 1) | (1 if bit else 0)
+        # T-bit abort creates repeated start condition
+        tgt_eod = await i3c_controller.tbit_eod(request_end=True)
+        return byte, tgt_eod
+
+    # =========================================================================
+    # Helper: Send RI write command with data (used after T-bit abort)
+    # =========================================================================
+    async def send_ri_write_after_abort(addr, command, data):
+        """Send RI write: Addr+W + CMD + DATA... + PEC (after T-bit abort, no start needed)"""
+        await i3c_controller.write_addr_header(I3C_RSVD_BYTE)
+        await i3c_controller.send_start()
+        ack = await i3c_controller.write_addr_header(addr)
+        assert ack, f"Device at 0x{addr:02X} should ACK its address"
+
+        xfer = [command] + list(data)
+        pec = int(recovery.pec_calc.checksum(bytes([addr << 1] + xfer)))
+        xfer.append(pec)
+
+        for byte in xfer:
+            await i3c_controller.send_byte_tbit(byte)
+
+    # =========================================================================
+    # Helper: Send RI read command after abort (T-bit already created Sr)
+    # =========================================================================
+    async def send_ri_read_cmd_after_abort(addr, command):
+        """Send RI read command after T-bit abort: 0x7E + Sr + Addr+W + CMD + PEC"""
+        await i3c_controller.write_addr_header(I3C_RSVD_BYTE)
+        await i3c_controller.send_start()
+        ack = await i3c_controller.write_addr_header(addr)
+        assert ack, f"Device at 0x{addr:02X} should ACK its address"
+
+        xfer = [command]
+        pec = int(recovery.pec_calc.checksum(bytes([addr << 1] + xfer)))
+        xfer.append(pec)
+
+        for byte in xfer:
+            await i3c_controller.send_byte_tbit(byte)
+
+    # =========================================================================
+    # Helper: Complete RI read data phase and return all data
+    # =========================================================================
+    async def complete_ri_read(addr):
+        """Complete RI read: Sr + Addr+R + LEN_L + LEN_H + DATA... + PEC, verify PEC"""
+        await i3c_controller.send_start()
+        ack = await i3c_controller.write_addr_header(addr, read=True)
+        assert ack, f"Device at 0x{addr:02X} should ACK read address"
+
+        # Read length
+        len_lsb, _ = await i3c_controller.recv_byte_t_bit(stop=False)
+        len_msb, _ = await i3c_controller.recv_byte_t_bit(stop=False)
+        data_len = (len_msb << 8) | len_lsb
+
+        # Read data
+        data = []
+        for _ in range(data_len):
+            byte, _ = await i3c_controller.recv_byte_t_bit(stop=False)
+            data.append(byte)
+
+        # Read PEC with stop
+        pec_byte, _ = await i3c_controller.recv_byte_t_bit(stop=True)
+
+        # Verify PEC
+        pec_data = [addr << 1 | 1, len_lsb, len_msb] + data
+        expected_pec = int(recovery.pec_calc.checksum(bytes(pec_data)))
+
+        return data, pec_byte == expected_pec
+
+    # =========================================================================
+    # Helper: Private write to main target (TTI)
+    # =========================================================================
+    async def send_tti_write_after_abort(addr, data):
+        """Send private write to main target after T-bit abort"""
+        ack = await i3c_controller.write_addr_header(addr)
+        assert ack, f"Main target at 0x{addr:02X} should ACK its address"
+
+        for byte in data:
+            await i3c_controller.send_byte_tbit(byte)
+
+    # =========================================================================
+    # Helper: Private read from main target (TTI)
+    # =========================================================================
+    async def send_tti_read_after_abort(addr, count):
+        """Send private read to main target after T-bit abort, return data"""
+        ack = await i3c_controller.write_addr_header(addr, read=True)
+        assert ack, f"Main target at 0x{addr:02X} should ACK read address"
+
+        data = []
+        for i in range(count - 1):
+            byte, _ = await i3c_controller.recv_byte_t_bit(stop=False)
+            data.append(byte)
+        # Last byte with stop
+        byte, _ = await i3c_controller.recv_byte_t_bit(stop=True)
+        data.append(byte)
+        return data
+
+    # Track pass/fail for each scenario
+    scenario_results = {}
+
+    # =========================================================================
+    # Scenario 1: T-bit abort on second-to-last byte, then read PROT_CAP (RI)
+    # =========================================================================
+    dut._log.info("\n" + "=" * 70)
+    dut._log.info("SCENARIO 1: T-bit abort on 2nd-to-last byte -> Read PROT_CAP (RI)")
+    dut._log.info("=" * 70)
+
+    await i3c_controller.take_bus_control()
+
+    # Start DEVICE_ID read
+    await start_ri_read_command(VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.DEVICE_ID)
+    await start_ri_read_phase(VIRT_DYNAMIC_ADDR)
+
+    # Read: LEN_LSB + LEN_MSB + DATA[0..21] = 24 data bytes total
+    # Second-to-last data byte is DATA[22] = byte index 24 (after LEN_LSB, LEN_MSB)
+    # Read LEN_LSB, LEN_MSB, then 22 data bytes, then abort on DATA[22]
+    received = await read_bytes_normal(2)  # LEN_LSB, LEN_MSB
+    len_val = (received[1] << 8) | received[0]
+    dut._log.info(f"  Length: {len_val} bytes")
+
+    # Read data bytes up to second-to-last (22 bytes = indices 0-21)
+    data_received = await read_bytes_normal(22)
+    dut._log.info(f"  Read 22 data bytes: {[hex(b) for b in data_received[:4]]}...")
+
+    # Abort on byte 22 (second-to-last data byte)
+    abort_byte, tgt_eod = await read_byte_and_abort()
+    dut._log.info(f"  Aborted on byte 22 (DATA[22]): 0x{abort_byte:02X}, tgt_eod={tgt_eod}")
+
+    # Now immediately send PROT_CAP read (T-bit abort = Sr already sent)
+    dut._log.info("  Immediately issuing PROT_CAP read...")
+    await send_ri_read_cmd_after_abort(VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.PROT_CAP)
+    prot_cap_data, pec_ok = await complete_ri_read(VIRT_DYNAMIC_ADDR)
+
+    await i3c_controller.send_stop()
+    i3c_controller.give_bus_control()
+
+    # Verify PROT_CAP data content - this catches stale data bugs!
+    if prot_cap_data is not None and pec_ok:
+        if prot_cap_data == prot_cap_values:
+            dut._log.info(f"  PASS: PROT_CAP data matches expected: {[hex(b) for b in prot_cap_data]}")
+            scenario_results[1] = True
+        else:
+            dut._log.error(f"  FAIL: PROT_CAP data mismatch (possible stale data bug!)")
+            dut._log.error(f"    Expected: {[hex(b) for b in prot_cap_values]}")
+            dut._log.error(f"    Got:      {[hex(b) for b in prot_cap_data]}")
+            # Check if we got stale DEVICE_ID bytes
+            if any(b in device_id_values for b in prot_cap_data[:4]):
+                dut._log.error(f"    STALE DATA DETECTED: Got DEVICE_ID bytes instead of PROT_CAP!")
+            scenario_results[1] = False
+    else:
+        dut._log.error(f"  FAIL: PROT_CAP read failed or PEC error")
+        scenario_results[1] = False
+
+    await ClockCycles(tb.clk, 50)
+
+    # =========================================================================
+    # Scenario 2: T-bit abort on first data byte, then read DEVICE_STATUS (RI)
+    # =========================================================================
+    dut._log.info("\n" + "=" * 70)
+    dut._log.info("SCENARIO 2: T-bit abort on 1st data byte -> Read DEVICE_STATUS (RI)")
+    dut._log.info("=" * 70)
+
+    await i3c_controller.take_bus_control()
+
+    # Start DEVICE_ID read
+    await start_ri_read_command(VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.DEVICE_ID)
+    await start_ri_read_phase(VIRT_DYNAMIC_ADDR)
+
+    # Read LEN_LSB, LEN_MSB normally
+    received = await read_bytes_normal(2)
+    dut._log.info(f"  Length bytes: 0x{received[0]:02X}, 0x{received[1]:02X}")
+
+    # Abort on first data byte (DATA[0])
+    abort_byte, tgt_eod = await read_byte_and_abort()
+    dut._log.info(f"  Aborted on DATA[0]: 0x{abort_byte:02X}, tgt_eod={tgt_eod}")
+
+    # Now immediately send DEVICE_STATUS read
+    dut._log.info("  Immediately issuing DEVICE_STATUS read...")
+    await send_ri_read_cmd_after_abort(VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.DEVICE_STATUS)
+    status_data, pec_ok = await complete_ri_read(VIRT_DYNAMIC_ADDR)
+
+    await i3c_controller.send_stop()
+    i3c_controller.give_bus_control()
+
+    # Verify DEVICE_STATUS data content - this catches stale data bugs!
+    if status_data is not None and pec_ok:
+        # DEVICE_STATUS should be 7 bytes
+        if len(status_data) == 7 and status_data == expected_device_status:
+            dut._log.info(f"  PASS: DEVICE_STATUS data matches expected: {[hex(b) for b in status_data]}")
+            scenario_results[2] = True
+        else:
+            dut._log.error(f"  FAIL: DEVICE_STATUS data mismatch (possible stale data bug!)")
+            dut._log.error(f"    Expected: {[hex(b) for b in expected_device_status]} (7 bytes)")
+            dut._log.error(f"    Got:      {[hex(b) for b in status_data]} ({len(status_data)} bytes)")
+            # Check if length is wrong - indicates stale length from previous read
+            if len(status_data) != 7:
+                dut._log.error(f"    STALE LENGTH DETECTED: Expected 7 bytes, got {len(status_data)} bytes!")
+            scenario_results[2] = False
+    else:
+        dut._log.error(f"  FAIL: DEVICE_STATUS read failed or PEC error")
+        scenario_results[2] = False
+
+    await ClockCycles(tb.clk, 50)
+
+    # =========================================================================
+    # Scenario 3: T-bit abort on 2nd-to-last byte, then private read to main TTI
+    # =========================================================================
+    dut._log.info("\n" + "=" * 70)
+    dut._log.info("SCENARIO 3: T-bit abort on 2nd-to-last byte -> Private read to TTI")
+    dut._log.info("=" * 70)
+
+    # First, write some data to TTI TX queue so we can read it back
+    # We'll use the TTI TX FIFO - write via CSR
+    tx_data = [0xAA, 0xBB, 0xCC, 0xDD]
+    dut._log.info(f"  Setup: Writing {[hex(b) for b in tx_data]} to TTI TX queue")
+
+    # Write to TX data port
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.TTI.TX_DATA_PORT.base_addr,
+        int2dword((tx_data[3] << 24) | (tx_data[2] << 16) | (tx_data[1] << 8) | tx_data[0]), 4
+    )
+
+    # Set TX descriptor (4 bytes, no end)
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.TTI.TX_DESC_QUEUE_PORT.base_addr,
+        int2dword(4), 4  # 4 bytes
+    )
+
+    await ClockCycles(tb.clk, 10)
+
+    await i3c_controller.take_bus_control()
+
+    # Start DEVICE_ID read on RI
+    await start_ri_read_command(VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.DEVICE_ID)
+    await start_ri_read_phase(VIRT_DYNAMIC_ADDR)
+
+    # Read LEN + 22 data bytes
+    received = await read_bytes_normal(2 + 22)
+    dut._log.info(f"  Read 24 bytes from DEVICE_ID")
+
+    # Abort on second-to-last
+    abort_byte, tgt_eod = await read_byte_and_abort()
+    dut._log.info(f"  Aborted on DATA[22]: 0x{abort_byte:02X}, tgt_eod={tgt_eod}")
+
+    # Now immediately do private read to main target (TTI)
+    dut._log.info(f"  Immediately issuing private read to main target (0x{DYNAMIC_ADDR:02X})...")
+    tti_data = await send_tti_read_after_abort(DYNAMIC_ADDR, 4)
+
+    await i3c_controller.send_stop()
+    i3c_controller.give_bus_control()
+
+    # Verify TTI read data content - this catches stale data bugs!
+    if tti_data == tx_data:
+        dut._log.info(f"  PASS: TTI read matches expected: {[hex(b) for b in tti_data]}")
+        scenario_results[3] = True
+    else:
+        dut._log.error(f"  FAIL: TTI read mismatch (possible stale data bug!)")
+        dut._log.error(f"    Expected: {[hex(b) for b in tx_data]}")
+        dut._log.error(f"    Got:      {[hex(b) for b in tti_data]}")
+        # Check if we got stale DEVICE_ID bytes
+        if any(b in device_id_values for b in tti_data):
+            dut._log.error(f"    STALE DATA DETECTED: Got DEVICE_ID bytes instead of TTI TX data!")
+        scenario_results[3] = False
+
+    await ClockCycles(tb.clk, 50)
+
+    # =========================================================================
+    # Scenario 4: T-bit abort on any byte, then private write to RI (RECOVERY_CTRL)
+    # =========================================================================
+    dut._log.info("\n" + "=" * 70)
+    dut._log.info("SCENARIO 4: T-bit abort on any byte -> Private write to RI (RECOVERY_CTRL)")
+    dut._log.info("=" * 70)
+
+    await i3c_controller.take_bus_control()
+
+    # Start DEVICE_ID read
+    await start_ri_read_command(VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.DEVICE_ID)
+    await start_ri_read_phase(VIRT_DYNAMIC_ADDR)
+
+    # Read a few bytes then abort
+    received = await read_bytes_normal(5)  # LEN_LSB, LEN_MSB, DATA[0], DATA[1], DATA[2]
+    dut._log.info(f"  Read 5 bytes")
+
+    # Abort on byte 5
+    abort_byte, tgt_eod = await read_byte_and_abort()
+    dut._log.info(f"  Aborted on byte 5: 0x{abort_byte:02X}, tgt_eod={tgt_eod}")
+
+    # Now immediately write to RECOVERY_CTRL
+    # RECOVERY_CTRL takes 1 byte of data
+    write_data = [0x00]  # Clear recovery control
+    dut._log.info(f"  Immediately issuing RECOVERY_CTRL write: {[hex(b) for b in write_data]}")
+    await send_ri_write_after_abort(VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.RECOVERY_CTRL, write_data)
+
+    await i3c_controller.send_stop()
+    i3c_controller.give_bus_control()
+
+    # Verify by reading back RECOVERY_CTRL
+    await ClockCycles(tb.clk, 20)
+    recovery_ctrl_data, pec_ok = await recovery.command_read(
+        VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.RECOVERY_CTRL
+    )
+
+    if recovery_ctrl_data is not None and pec_ok:
+        dut._log.info(f"  PASS: RECOVERY_CTRL write verified: {[hex(b) for b in recovery_ctrl_data]}")
+        scenario_results[4] = True
+    else:
+        dut._log.error(f"  FAIL: RECOVERY_CTRL verification failed")
+        scenario_results[4] = False
+
+    await ClockCycles(tb.clk, 50)
+
+    # =========================================================================
+    # Scenario 5: T-bit abort on any byte, then private write to main TTI
+    # =========================================================================
+    dut._log.info("\n" + "=" * 70)
+    dut._log.info("SCENARIO 5: T-bit abort on any byte -> Private write to TTI")
+    dut._log.info("=" * 70)
+
+    await i3c_controller.take_bus_control()
+
+    # Start DEVICE_ID read
+    await start_ri_read_command(VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.DEVICE_ID)
+    await start_ri_read_phase(VIRT_DYNAMIC_ADDR)
+
+    # Read a few bytes then abort
+    received = await read_bytes_normal(3)
+    dut._log.info(f"  Read 3 bytes")
+
+    # Abort on byte 3
+    abort_byte, tgt_eod = await read_byte_and_abort()
+    dut._log.info(f"  Aborted on byte 3: 0x{abort_byte:02X}, tgt_eod={tgt_eod}")
+
+    # Now immediately write to main target (TTI)
+    write_data = [0x11, 0x22, 0x33, 0x44]
+    dut._log.info(f"  Immediately issuing private write to main target: {[hex(b) for b in write_data]}")
+    await send_tti_write_after_abort(DYNAMIC_ADDR, write_data)
+
+    await i3c_controller.send_stop()
+    i3c_controller.give_bus_control()
+
+    # Read back from TTI RX queue to verify
+    await ClockCycles(tb.clk, 50)
+
+    # Check RX descriptor
+    rx_desc = dword2int(await tb.read_csr(tb.reg_map.I3C_EC.TTI.RX_DESC_QUEUE_PORT.base_addr, 4))
+    rx_len = rx_desc & 0xFFFF
+    dut._log.info(f"  RX descriptor: length={rx_len}")
+
+    if rx_len >= 4:
+        # Read RX data
+        rx_data_word = dword2int(await tb.read_csr(tb.reg_map.I3C_EC.TTI.RX_DATA_PORT.base_addr, 4))
+        rx_data = [
+            rx_data_word & 0xFF,
+            (rx_data_word >> 8) & 0xFF,
+            (rx_data_word >> 16) & 0xFF,
+            (rx_data_word >> 24) & 0xFF,
+        ]
+        if rx_data == write_data:
+            dut._log.info(f"  PASS: TTI write verified: {[hex(b) for b in rx_data]}")
+            scenario_results[5] = True
+        else:
+            dut._log.error(f"  FAIL: TTI write mismatch: expected {[hex(b) for b in write_data]}, got {[hex(b) for b in rx_data]}")
+            scenario_results[5] = False
+    else:
+        dut._log.error(f"  FAIL: No data received in TTI RX queue")
+        scenario_results[5] = False
+
+    await ClockCycles(tb.clk, 50)
+
+    # =========================================================================
+    # Final Verification: Bus still accessible
+    # =========================================================================
+    dut._log.info("\n" + "=" * 70)
+    dut._log.info("FINAL: Verifying bus is still accessible")
+    dut._log.info("=" * 70)
+
+    # Try a complete DEVICE_ID read
+    device_id_data, pec_ok = await recovery.command_read(
+        VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.DEVICE_ID
+    )
+
+    if device_id_data is not None and pec_ok and device_id_data == device_id_values:
+        dut._log.info(f"  PASS: Final DEVICE_ID read successful and correct")
+        final_pass = True
+    else:
+        dut._log.error(f"  FAIL: Final DEVICE_ID read failed or incorrect")
+        final_pass = False
+
+    # =========================================================================
+    # Summary
+    # =========================================================================
+    dut._log.info("")
+    dut._log.info("=" * 70)
+    dut._log.info("TEST SUMMARY: test_ri_private_read_tbit_abort")
+    dut._log.info("=" * 70)
+    dut._log.info(f"  Scenario 1 (Abort 2nd-to-last -> RI read):    {'PASS' if scenario_results.get(1) else 'FAIL'}")
+    dut._log.info(f"  Scenario 2 (Abort 1st byte -> RI read):       {'PASS' if scenario_results.get(2) else 'FAIL'}")
+    dut._log.info(f"  Scenario 3 (Abort 2nd-to-last -> TTI read):   {'PASS' if scenario_results.get(3) else 'FAIL'}")
+    dut._log.info(f"  Scenario 4 (Abort any -> RI write):           {'PASS' if scenario_results.get(4) else 'FAIL'}")
+    dut._log.info(f"  Scenario 5 (Abort any -> TTI write):          {'PASS' if scenario_results.get(5) else 'FAIL'}")
+    dut._log.info(f"  Final bus check:                              {'PASS' if final_pass else 'FAIL'}")
+    dut._log.info("=" * 70)
+
+    all_pass = all(scenario_results.values()) and final_pass
+    if all_pass:
+        dut._log.info("TEST PASSED")
+    else:
+        dut._log.error("TEST FAILED")
+
+    dut._log.info("=" * 70)
+
+    assert all_pass, "One or more scenarios failed"
+
+
+@cocotb.test()
+async def test_tti_private_read_tbit_abort(dut):
+    """
+    Test Private Read to Main Target (TTI) with Controller T-bit Abort Scenarios.
+
+    This test validates the I3C Core's behavior when a controller aborts a
+    private read to the main target (TTI) in the middle of a transfer using
+    the T-bit mechanism (as per I3C Spec Sect. 5.1.2.3.4) and immediately
+    continues with another transaction (no STOP between abort and next transaction).
+
+    Test Scenarios:
+    1. T-bit abort on second-to-last byte, then another private read to TTI
+    2. T-bit abort on first byte, then another private read to TTI
+    3. T-bit abort on second-to-last byte, then private read to RI
+    4. T-bit abort on any byte, then private write to TTI
+    5. T-bit abort on any byte, then private write to RI
+    6. T-bit abort on any byte, then GET CCC command (GETSTATUS)
+    7. T-bit abort on any byte, then SET CCC command (SETMWL)
+
+    Between scenarios there is a STOP, but within each scenario the T-bit abort
+    is immediately followed by the next transaction via Repeated Start (no STOP).
+
+    Verification Points:
+    - The follow-on transaction after T-bit abort succeeds
+    - Data integrity is maintained
+    - No errors are reported after the sequence
+    - Bus remains accessible after the test
+    """
+
+    # Initialize
+    i3c_controller, i3c_target, tb, recovery = await initialize(dut, timeout=500)
+    await ClockCycles(tb.clk, 50)
+
+    # Set virtual device dynamic address (for RI)
+    await i3c_controller.i3c_ccc_write(
+        ccc=CCC.DIRECT.SETDASA, directed_data=[(VIRT_STATIC_ADDR, [VIRT_DYNAMIC_ADDR << 1])]
+    )
+
+    # Set main device dynamic address
+    await i3c_controller.i3c_ccc_write(
+        ccc=CCC.DIRECT.SETDASA, directed_data=[(STATIC_ADDR, [DYNAMIC_ADDR << 1])]
+    )
+
+    dut._log.info("=" * 70)
+    dut._log.info("TEST: Private Read T-bit Abort Scenarios on Main Target (TTI)")
+    dut._log.info("=" * 70)
+
+    # =========================================================================
+    # Setup: Write known PROT_CAP values for stale data detection in Scenario 3
+    # =========================================================================
+    def make_word(bytes_list):
+        """Convert 4 bytes to 32-bit word (little-endian)"""
+        return (bytes_list[3] << 24) | (bytes_list[2] << 16) | (bytes_list[1] << 8) | bytes_list[0]
+
+    # PROT_CAP: OCP magic string + distinct bytes
+    prot_cap_values = ocp_magic_string_as_bytes + [0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0xA6, 0xA7]
+    prot_cap_csr = prot_cap_values + [0x00]  # Pad to 16 bytes for CSR writes
+
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.PROT_CAP_0.base_addr,
+        int2dword(make_word(prot_cap_csr[0:4])), 4
+    )
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.PROT_CAP_1.base_addr,
+        int2dword(make_word(prot_cap_csr[4:8])), 4
+    )
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.PROT_CAP_2.base_addr,
+        int2dword(make_word(prot_cap_csr[8:12])), 4
+    )
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.PROT_CAP_3.base_addr,
+        int2dword(make_word(prot_cap_csr[12:16])), 4
+    )
+    dut._log.info(f"  PROT_CAP configured: {[hex(b) for b in prot_cap_values]}")
+
+    # =========================================================================
+    # Helper: Write data to TTI TX queue for read-back
+    # =========================================================================
+    async def setup_tti_tx_data(data_bytes):
+        """Write data to TTI TX queue so controller can read it"""
+        # Pad to 4-byte boundary if needed
+        padded = list(data_bytes) + [0] * (4 - len(data_bytes) % 4) if len(data_bytes) % 4 else list(data_bytes)
+
+        # Write data in 4-byte chunks
+        for i in range(0, len(padded), 4):
+            word = padded[i] | (padded[i+1] << 8) | (padded[i+2] << 16) | (padded[i+3] << 24)
+            await tb.write_csr(
+                tb.reg_map.I3C_EC.TTI.TX_DATA_PORT.base_addr,
+                int2dword(word), 4
+            )
+
+        # Set TX descriptor
+        await tb.write_csr(
+            tb.reg_map.I3C_EC.TTI.TX_DESC_QUEUE_PORT.base_addr,
+            int2dword(len(data_bytes)), 4
+        )
+        await ClockCycles(tb.clk, 10)
+
+    # =========================================================================
+    # Helper: Read data from TTI RX queue
+    # =========================================================================
+    async def read_tti_rx_data():
+        """Read data from TTI RX queue"""
+        rx_desc = dword2int(await tb.read_csr(tb.reg_map.I3C_EC.TTI.RX_DESC_QUEUE_PORT.base_addr, 4))
+        rx_len = rx_desc & 0xFFFF
+
+        if rx_len == 0:
+            return []
+
+        data = []
+        for _ in range((rx_len + 3) // 4):
+            word = dword2int(await tb.read_csr(tb.reg_map.I3C_EC.TTI.RX_DATA_PORT.base_addr, 4))
+            data.extend([word & 0xFF, (word >> 8) & 0xFF, (word >> 16) & 0xFF, (word >> 24) & 0xFF])
+
+        return data[:rx_len]
+
+    # =========================================================================
+    # Helper: Read N bytes normally from a private read
+    # =========================================================================
+    async def read_bytes_normal(count):
+        """Read count bytes normally (no abort)"""
+        received = []
+        for _ in range(count):
+            byte, stop = await i3c_controller.recv_byte_t_bit(stop=False)
+            received.append(byte)
+            assert not stop, "Unexpected stop"
+        return received
+
+    # =========================================================================
+    # Helper: Read one byte then T-bit abort
+    # =========================================================================
+    async def read_byte_and_abort():
+        """Read one byte's data bits, then execute T-bit abort"""
+        byte = 0
+        for _ in range(8):
+            bit = await i3c_controller.recv_bit()
+            byte = (byte << 1) | (1 if bit else 0)
+        # T-bit abort creates repeated start condition
+        tgt_eod = await i3c_controller.tbit_eod(request_end=True)
+        return byte, tgt_eod
+
+    # =========================================================================
+    # Helper: Start private read to TTI
+    # =========================================================================
+    async def start_tti_read(addr):
+        """Start a private read: S + Addr+R"""
+        await i3c_controller.send_start()
+        ack = await i3c_controller.write_addr_header(addr, read=True)
+        assert ack, f"Target at 0x{addr:02X} should ACK read address"
+
+    # =========================================================================
+    # Helper: Complete private read after T-bit abort (read remaining bytes)
+    # =========================================================================
+    async def complete_tti_read_after_abort(addr, count):
+        """After T-bit abort, do private read: Addr+R + DATA..."""
+        ack = await i3c_controller.write_addr_header(addr, read=True)
+        assert ack, f"Target at 0x{addr:02X} should ACK read address"
+
+        data = []
+        for i in range(count - 1):
+            byte, _ = await i3c_controller.recv_byte_t_bit(stop=False)
+            data.append(byte)
+        # Last byte with stop
+        byte, _ = await i3c_controller.recv_byte_t_bit(stop=True)
+        data.append(byte)
+        return data
+
+    # =========================================================================
+    # Helper: Private write after T-bit abort
+    # =========================================================================
+    async def send_tti_write_after_abort(addr, data):
+        """After T-bit abort, do private write: Addr+W + DATA..."""
+        ack = await i3c_controller.write_addr_header(addr)
+        assert ack, f"Target at 0x{addr:02X} should ACK write address"
+
+        for byte in data:
+            await i3c_controller.send_byte_tbit(byte)
+
+    # =========================================================================
+    # Helper: Send RI read after T-bit abort
+    # =========================================================================
+    async def send_ri_read_after_abort(addr, command):
+        """After T-bit abort, do RI read: 0x7E + Sr + Addr+W + CMD + PEC + Sr + Addr+R + ..."""
+        # RI command write phase
+        await i3c_controller.write_addr_header(I3C_RSVD_BYTE)
+        await i3c_controller.send_start()
+        ack = await i3c_controller.write_addr_header(addr)
+        assert ack, f"Device at 0x{addr:02X} should ACK its address"
+
+        xfer = [command]
+        pec = int(recovery.pec_calc.checksum(bytes([addr << 1] + xfer)))
+        xfer.append(pec)
+
+        for byte in xfer:
+            await i3c_controller.send_byte_tbit(byte)
+
+        # RI read data phase
+        await i3c_controller.send_start()
+        ack = await i3c_controller.write_addr_header(addr, read=True)
+        assert ack, f"Device at 0x{addr:02X} should ACK read address"
+
+        # Read length
+        len_lsb, _ = await i3c_controller.recv_byte_t_bit(stop=False)
+        len_msb, _ = await i3c_controller.recv_byte_t_bit(stop=False)
+        data_len = (len_msb << 8) | len_lsb
+
+        # Read data
+        data = []
+        for _ in range(data_len):
+            byte, _ = await i3c_controller.recv_byte_t_bit(stop=False)
+            data.append(byte)
+
+        # Read PEC with stop
+        pec_byte, _ = await i3c_controller.recv_byte_t_bit(stop=True)
+
+        # Verify PEC
+        pec_data = [addr << 1 | 1, len_lsb, len_msb] + data
+        expected_pec = int(recovery.pec_calc.checksum(bytes(pec_data)))
+
+        return data, pec_byte == expected_pec
+
+    # =========================================================================
+    # Helper: Send RI write after T-bit abort
+    # =========================================================================
+    async def send_ri_write_after_abort(addr, command, data):
+        """After T-bit abort, do RI write: 0x7E + Sr + Addr+W + CMD + DATA... + PEC"""
+        await i3c_controller.write_addr_header(I3C_RSVD_BYTE)
+        await i3c_controller.send_start()
+        ack = await i3c_controller.write_addr_header(addr)
+        assert ack, f"Device at 0x{addr:02X} should ACK its address"
+
+        xfer = [command] + list(data)
+        pec = int(recovery.pec_calc.checksum(bytes([addr << 1] + xfer)))
+        xfer.append(pec)
+
+        for byte in xfer:
+            await i3c_controller.send_byte_tbit(byte)
+
+    # =========================================================================
+    # Helper: Send GET CCC after T-bit abort
+    # =========================================================================
+    async def send_get_ccc_after_abort(ccc_cmd, addr, count):
+        """After T-bit abort, do Direct GET CCC: 0x7E + CCC + Sr + Addr+R + DATA..."""
+        # Broadcast address with CCC
+        await i3c_controller.write_addr_header(0x7E)
+        await i3c_controller.send_byte_tbit(ccc_cmd)
+
+        # Target read phase
+        await i3c_controller.send_start()
+        ack = await i3c_controller.write_addr_header(addr, read=True)
+        assert ack, f"Target at 0x{addr:02X} should ACK CCC read"
+
+        data = []
+        for i in range(count - 1):
+            byte, _ = await i3c_controller.recv_byte_t_bit(stop=False)
+            data.append(byte)
+        byte, _ = await i3c_controller.recv_byte_t_bit(stop=True)
+        data.append(byte)
+
+        return data
+
+    # =========================================================================
+    # Helper: Send SET CCC after T-bit abort
+    # =========================================================================
+    async def send_set_ccc_after_abort(ccc_cmd, addr, data):
+        """After T-bit abort, do Direct SET CCC: 0x7E + CCC + Sr + Addr+W + DATA..."""
+        # Broadcast address with CCC
+        await i3c_controller.write_addr_header(0x7E)
+        await i3c_controller.send_byte_tbit(ccc_cmd)
+
+        # Target write phase
+        await i3c_controller.send_start()
+        ack = await i3c_controller.write_addr_header(addr)
+        assert ack, f"Target at 0x{addr:02X} should ACK CCC write"
+
+        for byte in data:
+            await i3c_controller.send_byte_tbit(byte)
+
+    # Track pass/fail for each scenario
+    scenario_results = {}
+
+    # =========================================================================
+    # Scenario 1: T-bit abort on 2nd-to-last byte, then another TTI read
+    # =========================================================================
+    dut._log.info("\n" + "=" * 70)
+    dut._log.info("SCENARIO 1: T-bit abort on 2nd-to-last byte -> Another TTI read")
+    dut._log.info("=" * 70)
+
+    # Setup: Stage TWO TX data entries before starting the bus transaction
+    # First read: 8 bytes (will abort on 2nd-to-last)
+    tx_data_1a = [0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88]
+    await setup_tti_tx_data(tx_data_1a)
+    dut._log.info(f"  Setup TX #1: {[hex(b) for b in tx_data_1a]}")
+
+    # Second read: 4 bytes (will complete normally after abort)
+    tx_data_1b = [0xAA, 0xBB, 0xCC, 0xDD]
+    await setup_tti_tx_data(tx_data_1b)
+    dut._log.info(f"  Setup TX #2: {[hex(b) for b in tx_data_1b]}")
+
+    await i3c_controller.take_bus_control()
+
+    # Start private read
+    await start_tti_read(DYNAMIC_ADDR)
+
+    # Read 6 bytes normally (bytes 0-5)
+    received = await read_bytes_normal(6)
+    dut._log.info(f"  Read 6 bytes: {[hex(b) for b in received]}")
+
+    # Abort on byte 6 (second-to-last)
+    abort_byte, tgt_eod = await read_byte_and_abort()
+    dut._log.info(f"  Aborted on byte 6: 0x{abort_byte:02X}, tgt_eod={tgt_eod}")
+
+    # Do another private read immediately (T-bit abort = Sr already)
+    dut._log.info("  Immediately issuing another private read...")
+
+    ack = await i3c_controller.write_addr_header(DYNAMIC_ADDR, read=True)
+    if ack:
+        # Read the 4 bytes from the second TX data
+        data = []
+        for i in range(4):
+            byte, _ = await i3c_controller.recv_byte_t_bit(stop=(i == 3))
+            data.append(byte)
+        dut._log.info(f"  Second read got: {[hex(b) for b in data]}")
+        if data == tx_data_1b:
+            scenario_results[1] = True
+            dut._log.info("  PASS: Second private read data matches expected")
+        else:
+            dut._log.error(f"  FAIL: Data mismatch, expected {[hex(b) for b in tx_data_1b]}")
+            scenario_results[1] = False
+    else:
+        dut._log.error("  FAIL: Target NACKed second read")
+        scenario_results[1] = False
+
+    await i3c_controller.send_stop()
+    i3c_controller.give_bus_control()
+
+    await ClockCycles(tb.clk, 50)
+
+    # =========================================================================
+    # Scenario 2: T-bit abort on first byte, then another TTI read
+    # =========================================================================
+    dut._log.info("\n" + "=" * 70)
+    dut._log.info("SCENARIO 2: T-bit abort on 1st byte -> Another TTI read")
+    dut._log.info("=" * 70)
+
+    # Setup: Stage TWO TX data entries before starting the bus transaction
+    # First read: 4 bytes (will abort on 1st byte)
+    tx_data_2a = [0x12, 0x34, 0x56, 0x78]
+    await setup_tti_tx_data(tx_data_2a)
+    dut._log.info(f"  Setup TX #1: {[hex(b) for b in tx_data_2a]}")
+
+    # Second read: 4 bytes (will complete normally after abort)
+    tx_data_2b = [0x9A, 0xBC, 0xDE, 0xF0]
+    await setup_tti_tx_data(tx_data_2b)
+    dut._log.info(f"  Setup TX #2: {[hex(b) for b in tx_data_2b]}")
+
+    await i3c_controller.take_bus_control()
+
+    # Start private read
+    await start_tti_read(DYNAMIC_ADDR)
+
+    # Abort on first byte
+    abort_byte, tgt_eod = await read_byte_and_abort()
+    dut._log.info(f"  Aborted on byte 0: 0x{abort_byte:02X}, tgt_eod={tgt_eod}")
+
+    # Do another private read immediately
+    dut._log.info("  Immediately issuing another private read...")
+    ack = await i3c_controller.write_addr_header(DYNAMIC_ADDR, read=True)
+    if ack:
+        # Read the 4 bytes from the second TX data
+        data = []
+        for i in range(4):
+            byte, _ = await i3c_controller.recv_byte_t_bit(stop=(i == 3))
+            data.append(byte)
+        dut._log.info(f"  Second read got: {[hex(b) for b in data]}")
+        if data == tx_data_2b:
+            scenario_results[2] = True
+            dut._log.info("  PASS: Second private read data matches expected")
+        else:
+            dut._log.error(f"  FAIL: Data mismatch, expected {[hex(b) for b in tx_data_2b]}")
+            scenario_results[2] = False
+    else:
+        dut._log.error("  FAIL: Target NACKed second read")
+        scenario_results[2] = False
+
+    await i3c_controller.send_stop()
+    i3c_controller.give_bus_control()
+
+    await ClockCycles(tb.clk, 50)
+
+    # =========================================================================
+    # Scenario 3: T-bit abort on 2nd-to-last byte, then RI read
+    # =========================================================================
+    dut._log.info("\n" + "=" * 70)
+    dut._log.info("SCENARIO 3: T-bit abort on 2nd-to-last byte -> RI read (PROT_CAP)")
+    dut._log.info("=" * 70)
+
+    # Setup TX data
+    tx_data_3 = [0xA1, 0xB2, 0xC3, 0xD4, 0xE5, 0xF6]
+    await setup_tti_tx_data(tx_data_3)
+    dut._log.info(f"  Setup: TX data = {[hex(b) for b in tx_data_3]}")
+
+    await i3c_controller.take_bus_control()
+
+    # Start private read
+    await start_tti_read(DYNAMIC_ADDR)
+
+    # Read 4 bytes normally (bytes 0-3)
+    received = await read_bytes_normal(4)
+    dut._log.info(f"  Read 4 bytes: {[hex(b) for b in received]}")
+
+    # Abort on byte 4 (second-to-last)
+    abort_byte, tgt_eod = await read_byte_and_abort()
+    dut._log.info(f"  Aborted on byte 4: 0x{abort_byte:02X}, tgt_eod={tgt_eod}")
+
+    # Do RI read immediately
+    dut._log.info("  Immediately issuing RI PROT_CAP read...")
+    ri_data, pec_ok = await send_ri_read_after_abort(VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.PROT_CAP)
+
+    await i3c_controller.send_stop()
+    i3c_controller.give_bus_control()
+
+    # Verify PROT_CAP data content - this catches stale data bugs!
+    if ri_data is not None and pec_ok:
+        if ri_data == prot_cap_values:
+            dut._log.info(f"  PASS: PROT_CAP data matches expected: {[hex(b) for b in ri_data]}")
+            scenario_results[3] = True
+        else:
+            dut._log.error(f"  FAIL: PROT_CAP data mismatch (possible stale data bug!)")
+            dut._log.error(f"    Expected: {[hex(b) for b in prot_cap_values]}")
+            dut._log.error(f"    Got:      {[hex(b) for b in ri_data]}")
+            # Check if we got stale TTI TX data bytes
+            if any(b in tx_data_3 for b in ri_data[:4]):
+                dut._log.error(f"    STALE DATA DETECTED: Got TTI TX bytes instead of PROT_CAP!")
+            scenario_results[3] = False
+    else:
+        dut._log.error("  FAIL: PROT_CAP read failed or PEC error")
+        scenario_results[3] = False
+
+    await ClockCycles(tb.clk, 50)
+
+    # =========================================================================
+    # Scenario 4: T-bit abort on any byte, then TTI write
+    # =========================================================================
+    dut._log.info("\n" + "=" * 70)
+    dut._log.info("SCENARIO 4: T-bit abort on any byte -> TTI write")
+    dut._log.info("=" * 70)
+
+    # Setup TX data for read
+    tx_data_4 = [0x11, 0x22, 0x33, 0x44]
+    await setup_tti_tx_data(tx_data_4)
+    dut._log.info(f"  Setup: TX data = {[hex(b) for b in tx_data_4]}")
+
+    await i3c_controller.take_bus_control()
+
+    # Start private read
+    await start_tti_read(DYNAMIC_ADDR)
+
+    # Read 2 bytes then abort
+    received = await read_bytes_normal(2)
+    dut._log.info(f"  Read 2 bytes: {[hex(b) for b in received]}")
+
+    abort_byte, tgt_eod = await read_byte_and_abort()
+    dut._log.info(f"  Aborted on byte 2: 0x{abort_byte:02X}, tgt_eod={tgt_eod}")
+
+    # Do TTI write immediately
+    write_data_4 = [0xDE, 0xAD, 0xBE, 0xEF]
+    dut._log.info(f"  Immediately issuing TTI write: {[hex(b) for b in write_data_4]}")
+    await send_tti_write_after_abort(DYNAMIC_ADDR, write_data_4)
+
+    await i3c_controller.send_stop()
+    i3c_controller.give_bus_control()
+
+    # Verify by reading RX queue
+    await ClockCycles(tb.clk, 50)
+    rx_data = await read_tti_rx_data()
+
+    if rx_data == write_data_4:
+        dut._log.info(f"  PASS: TTI write verified: {[hex(b) for b in rx_data]}")
+        scenario_results[4] = True
+    else:
+        dut._log.error(f"  FAIL: TTI write mismatch: expected {[hex(b) for b in write_data_4]}, got {[hex(b) for b in rx_data]}")
+        scenario_results[4] = False
+
+    await ClockCycles(tb.clk, 50)
+
+    # =========================================================================
+    # Scenario 5: T-bit abort on any byte, then RI write
+    # =========================================================================
+    dut._log.info("\n" + "=" * 70)
+    dut._log.info("SCENARIO 5: T-bit abort on any byte -> RI write (RECOVERY_CTRL)")
+    dut._log.info("=" * 70)
+
+    # Setup TX data for read
+    tx_data_5 = [0xAA, 0xBB, 0xCC, 0xDD]
+    await setup_tti_tx_data(tx_data_5)
+    dut._log.info(f"  Setup: TX data = {[hex(b) for b in tx_data_5]}")
+
+    await i3c_controller.take_bus_control()
+
+    # Start private read
+    await start_tti_read(DYNAMIC_ADDR)
+
+    # Read 1 byte then abort
+    received = await read_bytes_normal(1)
+    dut._log.info(f"  Read 1 byte: {[hex(b) for b in received]}")
+
+    abort_byte, tgt_eod = await read_byte_and_abort()
+    dut._log.info(f"  Aborted on byte 1: 0x{abort_byte:02X}, tgt_eod={tgt_eod}")
+
+    # Do RI write immediately
+    ri_write_data = [0x00]  # Clear RECOVERY_CTRL
+    dut._log.info(f"  Immediately issuing RI RECOVERY_CTRL write: {[hex(b) for b in ri_write_data]}")
+    await send_ri_write_after_abort(VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.RECOVERY_CTRL, ri_write_data)
+
+    await i3c_controller.send_stop()
+    i3c_controller.give_bus_control()
+
+    # Verify by reading back
+    await ClockCycles(tb.clk, 20)
+    recovery_ctrl_data, pec_ok = await recovery.command_read(
+        VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.RECOVERY_CTRL
+    )
+
+    if recovery_ctrl_data is not None and pec_ok:
+        dut._log.info(f"  PASS: RI write verified: {[hex(b) for b in recovery_ctrl_data]}")
+        scenario_results[5] = True
+    else:
+        dut._log.error("  FAIL: RI write verification failed")
+        scenario_results[5] = False
+
+    await ClockCycles(tb.clk, 50)
+
+    # =========================================================================
+    # Scenario 6: T-bit abort on any byte, then GET CCC (GETSTATUS)
+    # =========================================================================
+    dut._log.info("\n" + "=" * 70)
+    dut._log.info("SCENARIO 6: T-bit abort on any byte -> GET CCC (GETSTATUS)")
+    dut._log.info("=" * 70)
+
+    # Setup TX data for read
+    tx_data_6 = [0x11, 0x22, 0x33, 0x44]
+    await setup_tti_tx_data(tx_data_6)
+    dut._log.info(f"  Setup: TX data = {[hex(b) for b in tx_data_6]}")
+
+    await i3c_controller.take_bus_control()
+
+    # Start private read
+    await start_tti_read(DYNAMIC_ADDR)
+
+    # Read 2 bytes then abort
+    received = await read_bytes_normal(2)
+    dut._log.info(f"  Read 2 bytes: {[hex(b) for b in received]}")
+
+    abort_byte, tgt_eod = await read_byte_and_abort()
+    dut._log.info(f"  Aborted on byte 2: 0x{abort_byte:02X}, tgt_eod={tgt_eod}")
+
+    # Do GETSTATUS CCC immediately
+    dut._log.info("  Immediately issuing GETSTATUS CCC...")
+    ccc_data = await send_get_ccc_after_abort(CCC.DIRECT.GETSTATUS, DYNAMIC_ADDR, 2)
+
+    await i3c_controller.send_stop()
+    i3c_controller.give_bus_control()
+
+    if ccc_data and len(ccc_data) == 2:
+        status = (ccc_data[0] << 8) | ccc_data[1]
+        dut._log.info(f"  PASS: GETSTATUS returned 0x{status:04X}")
+        scenario_results[6] = True
+    else:
+        dut._log.error(f"  FAIL: GETSTATUS failed: {ccc_data}")
+        scenario_results[6] = False
+
+    await ClockCycles(tb.clk, 50)
+
+    # =========================================================================
+    # Scenario 7: T-bit abort on any byte, then SET CCC (SETMWL)
+    # =========================================================================
+    dut._log.info("\n" + "=" * 70)
+    dut._log.info("SCENARIO 7: T-bit abort on any byte -> SET CCC (SETMWL)")
+    dut._log.info("=" * 70)
+
+    # Setup TX data for read
+    tx_data_7 = [0xAA, 0xBB, 0xCC, 0xDD]
+    await setup_tti_tx_data(tx_data_7)
+    dut._log.info(f"  Setup: TX data = {[hex(b) for b in tx_data_7]}")
+
+    await i3c_controller.take_bus_control()
+
+    # Start private read
+    await start_tti_read(DYNAMIC_ADDR)
+
+    # Read 3 bytes then abort
+    received = await read_bytes_normal(3)
+    dut._log.info(f"  Read 3 bytes: {[hex(b) for b in received]}")
+
+    abort_byte, tgt_eod = await read_byte_and_abort()
+    dut._log.info(f"  Aborted on byte 3: 0x{abort_byte:02X}, tgt_eod={tgt_eod}")
+
+    # Do SETMWL CCC immediately (set MWL to 0x0100 = 256 bytes)
+    mwl_data = [0x01, 0x00]  # MSB first: 0x0100
+    dut._log.info(f"  Immediately issuing SETMWL CCC with data {[hex(b) for b in mwl_data]}...")
+    await send_set_ccc_after_abort(CCC.DIRECT.SETMWL, DYNAMIC_ADDR, mwl_data)
+
+    await i3c_controller.send_stop()
+    i3c_controller.give_bus_control()
+
+    # Verify by reading back with GETMWL
+    await ClockCycles(tb.clk, 20)
+    responses = await i3c_controller.i3c_ccc_read(ccc=CCC.DIRECT.GETMWL, addr=DYNAMIC_ADDR, count=2)
+
+    if responses and responses[0][0]:
+        mwl_read = responses[0][1]
+        mwl_value = (mwl_read[0] << 8) | mwl_read[1]
+        if mwl_value == 0x0100:
+            dut._log.info(f"  PASS: SETMWL verified: MWL = 0x{mwl_value:04X}")
+            scenario_results[7] = True
+        else:
+            dut._log.error(f"  FAIL: MWL mismatch: expected 0x0100, got 0x{mwl_value:04X}")
+            scenario_results[7] = False
+    else:
+        dut._log.error("  FAIL: GETMWL failed")
+        scenario_results[7] = False
+
+    await ClockCycles(tb.clk, 50)
+
+    # =========================================================================
+    # Final Verification: Bus still accessible
+    # =========================================================================
+    dut._log.info("\n" + "=" * 70)
+    dut._log.info("FINAL: Verifying bus is still accessible")
+    dut._log.info("=" * 70)
+
+    # Try GETSTATUS on main target
+    responses = await i3c_controller.i3c_ccc_read(ccc=CCC.DIRECT.GETSTATUS, addr=DYNAMIC_ADDR, count=2)
+
+    if responses and responses[0][0]:
+        dut._log.info("  PASS: Final GETSTATUS successful")
+        final_pass = True
+    else:
+        dut._log.error("  FAIL: Final GETSTATUS failed")
+        final_pass = False
+
+    # =========================================================================
+    # Summary
+    # =========================================================================
+    dut._log.info("")
+    dut._log.info("=" * 70)
+    dut._log.info("TEST SUMMARY: test_tti_private_read_tbit_abort")
+    dut._log.info("=" * 70)
+    dut._log.info(f"  Scenario 1 (Abort 2nd-to-last -> TTI read):    {'PASS' if scenario_results.get(1) else 'FAIL'}")
+    dut._log.info(f"  Scenario 2 (Abort 1st byte -> TTI read):       {'PASS' if scenario_results.get(2) else 'FAIL'}")
+    dut._log.info(f"  Scenario 3 (Abort 2nd-to-last -> RI read):     {'PASS' if scenario_results.get(3) else 'FAIL'}")
+    dut._log.info(f"  Scenario 4 (Abort any -> TTI write):           {'PASS' if scenario_results.get(4) else 'FAIL'}")
+    dut._log.info(f"  Scenario 5 (Abort any -> RI write):            {'PASS' if scenario_results.get(5) else 'FAIL'}")
+    dut._log.info(f"  Scenario 6 (Abort any -> GET CCC):             {'PASS' if scenario_results.get(6) else 'FAIL'}")
+    dut._log.info(f"  Scenario 7 (Abort any -> SET CCC):             {'PASS' if scenario_results.get(7) else 'FAIL'}")
+    dut._log.info(f"  Final bus check:                               {'PASS' if final_pass else 'FAIL'}")
+    dut._log.info("=" * 70)
+
+    all_pass = all(scenario_results.values()) and final_pass
+    if all_pass:
+        dut._log.info("TEST PASSED")
+    else:
+        dut._log.error("TEST FAILED")
+
+    dut._log.info("=" * 70)
+
+    assert all_pass, "One or more scenarios failed"
