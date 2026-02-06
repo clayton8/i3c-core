@@ -25,6 +25,7 @@ module controller_standby_i3c
     input  bus_state_t hdr_exit_bus_i,
     output logic       ctrl_scl_o,
     output logic       ctrl_sda_o,
+    output logic       ctrl_sda_oe_o,
     output logic       phy_sel_od_pp_o,
     input  logic       arbitration_lost_i,
 
@@ -318,7 +319,7 @@ module controller_standby_i3c
   end
 
   always_comb begin
-    bus_tx_req = '{drive_type: OpenDrain, default: '0};
+    bus_tx_req = '{drive_type: OpenDrain, req_type: RawBit, default: '0};
     bus_rx_req = '{default: '0};
 
     bus_tx_rsp_fsm = '{default: '0};
@@ -605,14 +606,13 @@ module controller_standby_i3c
     .clk_i,
     .rst_ni,
 
+    .bus_i(ctrl_bus_i),
+
     .tx_req_i(bus_tx_req),
     .tx_rsp_o(bus_tx_rsp),
 
-    .scl_negedge_i   (ctrl_bus_i.scl.neg_edge),
-    .scl_posedge_i   (ctrl_bus_i.scl.pos_edge),
-    .scl_stable_low_i(ctrl_bus_i.scl.stable_low),
-
     .sel_od_pp_o(phy_sel_od_pp_o),
+    .sda_oe_o   (ctrl_sda_oe_o),
     .sda_o      (ctrl_sda_o)
   );
 

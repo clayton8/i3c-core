@@ -415,7 +415,6 @@ module ccc
   bus_tx_req_t tx_req_entdaa;
   bus_rx_req_t rx_req_ccc;
   bus_rx_req_t rx_req_entdaa;
-  i3c_byte_t   bus_tx_data;
 
   // ---------------------------------------------------------------------------
   // ENTDAA Handling (Special CCC with its own sub-FSM)
@@ -820,19 +819,9 @@ module ccc
   end
 
   // ===========================================================================
-  // BUS TX/RX REQUEST GENERATION
+  // BUS RX REQUEST GENERATION
   // ===========================================================================
-
-  // TX Request: Bit/byte requests and drive type derived from state
-  assign tx_req_ccc = '{
-    drive_type: (state_q inside {TxData, TxDataTbit}) ? PushPull : OpenDrain,
-    req_byte:   (state_q == TxData),
-    req_bit:    (state_q inside {TxTargetAddrAck, TxDataTbit}),
-    req_ibi:    1'b0,
-    data:       bus_tx_data
-  };
-
-  // RX Request: Request bytes or bits based on current state
+  // Request bytes or bits based on current state
   assign rx_req_ccc = '{
     req_byte: (state_q inside {RxDefByte, RxTargetAddr}) ||
               (state_q inside {RxDefByteOrBusCond, WaitDirectRstart, RxData} && !bus_rstart_det_i),
@@ -846,8 +835,14 @@ module ccc
     done_fsm_o = 1'b0;
     next_ccc_o = 1'b0;
 
-    bus_tx_data = '0;
-    
+    // Default, safe tx request values
+    tx_req_ccc = '{
+      req_valid:  1'b0,
+      req_type:   RawBit,
+      drive_type: OpenDrain,
+      data:       '1
+    };
+
     // Defining byte capture/clear control
     capture_defining_byte = 1'b0;
     clear_defining_byte   = 1'b0;
@@ -1043,7 +1038,9 @@ module ccc
       //   - ACKed: Proceed to appropriate data phase (GET → TxData, SET → RxData)
       //   - NACKed: Wait for bus condition (not addressed, unsupported cmd)
       TxTargetAddrAck: begin
-        bus_tx_data[7] = ~addr_ack;  // Send ACK (0) or NACK (1)
+        tx_req_ccc.req_valid = 1'b1;
+        tx_req_ccc.req_type  = RawBit;
+        tx_req_ccc.data[7]   = ~addr_ack;  // Send ACK (0) or NACK (1)
 
         if (bus_tx_rsp_i.done) begin
           target_addr_ack_done = 1'b1;
@@ -1121,22 +1118,29 @@ module ccc
       end
       
       TxData: begin
-        bus_tx_data = tx_data;
+        tx_req_ccc.drive_type = PushPull;
+        tx_req_ccc.req_valid  = 1'b1;
+        tx_req_ccc.req_type   = RawByte;
+        tx_req_ccc.data       = tx_data;
 
-        if (bus_tx_rsp_i.done) state_d = TxDataTbit;
+        if (bus_tx_rsp_i.done) begin
+          // Increment byte counter as we need the next data byte for the Tbit request
+          inc_tx_byte_num = 1'b1;
+          state_d = TxDataTbit;
+        end
       end
       
       TxDataTbit: begin
-        // T-bit value: 0 = end of data, 1 = more data available
-        bus_tx_data[7] = ~tx_data_last_byte;
+        // TBit: 0 = end of data, 1 = more data available
+        tx_req_ccc.req_valid  = 1'b1;
+        tx_req_ccc.req_type   = tx_data_last_byte ? TReadEnd : TReadCont;
+        tx_req_ccc.data       = tx_data;
 
         if (bus_rstart_det_i) begin
           // Controller abort: Target sent T=1 but Controller issued Sr
           state_d = RxTargetAddr;
           set_tx_data_complete = 1'b1;
         end else if (bus_tx_rsp_i.done) begin
-          inc_tx_byte_num = 1'b1;
-
           if (tx_data_last_byte) begin
             // Target complete: Target sent T=0, wait for Sr or STOP
             set_tx_data_complete = 1'b1;
@@ -1218,8 +1222,8 @@ module ccc
     end
   end
 
-  // Last byte when we've reached (tx_byte_total - 1)
-  assign tx_data_last_byte = (tx_byte_num == tx_byte_total - 1);
+  // Last byte when we've reached tx_byte_total
+  assign tx_data_last_byte = (tx_byte_num == tx_byte_total);
 
   // TX complete tracking: set by FSM when last T-bit completes normally
   always_ff @(posedge clk_i or negedge rst_ni) begin : proc_tx_data_complete

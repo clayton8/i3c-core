@@ -54,19 +54,19 @@ def get_rx_req_byte(dut):
         return int(dut.bus_rx_req_o.req_byte.value)
 
 
-# bus_tx_req_t = {drive_type[11], req_ibi[10], req_byte[9], req_bit[8], data[7:0]}
-def get_tx_req_bit(dut):
+# bus_tx_req_t = {req_valid[12], req_type[11:9], drive_type[8], data[7:0]}
+def get_tx_req_valid(dut):
     if is_verilator():
-        return (int(dut.bus_tx_req_o.value) >> 8) & 0x1
+        return (int(dut.bus_tx_req_o.value) >> 12) & 0x1
     else:
-        return int(dut.bus_tx_req_o.req_bit.value)
+        return int(dut.bus_tx_req_o.req_valid.value)
 
 
-def get_tx_req_byte(dut):
+def get_tx_req_type(dut):
     if is_verilator():
-        return (int(dut.bus_tx_req_o.value) >> 9) & 0x1
+        return (int(dut.bus_tx_req_o.value) >> 9) & 0x7
     else:
-        return int(dut.bus_tx_req_o.req_byte.value)
+        return int(dut.bus_tx_req_o.req_type.value)
 
 
 def get_tx_req_data(dut):
@@ -166,8 +166,8 @@ async def tx_bit(dut):
     bus_tx_rsp_t = {error, idle, done}
     bus_tx_req_t = {drive_type, req_byte, req_bit, data[7:0]}
     """
-    # Wait for req_bit to go high
-    while not get_tx_req_bit(dut):
+    # Wait for a RawBit request to be sent
+    while not (get_tx_req_valid(dut) and (get_tx_req_type(dut) == 1)):
         await RisingEdge(dut.clk_i)
     val = get_tx_req_data(dut)  # Get the data from the request
     await ClockCycles(dut.clk_i, 3)
@@ -182,8 +182,8 @@ async def tx_byte(dut):
     bus_tx_rsp_t = {error, idle, done}
     bus_tx_req_t = {drive_type, req_byte, req_bit, data[7:0]}
     """
-    # Wait for req_byte to go high
-    while not get_tx_req_byte(dut):
+    # Wait for RawByte request to be sent
+    while not (get_tx_req_valid(dut) and (get_tx_req_type(dut) == 0)):
         await RisingEdge(dut.clk_i)
     val = get_tx_req_data(dut)  # Get the data from the request
     await ClockCycles(dut.clk_i, 10)
@@ -192,6 +192,33 @@ async def tx_byte(dut):
     set_bus_tx_rsp(dut, done=0)
     return val & 0xFF
 
+async def tx_tread_end(dut):
+    """
+    bus_tx_rsp_t = {error, idle, done}
+    bus_tx_req_t = {drive_type, req_byte, req_bit, data[7:0]}
+    """
+    # Wait for a RawBit request to be sent
+    while not (get_tx_req_valid(dut) and (get_tx_req_type(dut) == 7)):
+        await RisingEdge(dut.clk_i)
+    await ClockCycles(dut.clk_i, 3)
+    set_bus_tx_rsp(dut, done=1)
+    await ClockCycles(dut.clk_i, 1)
+    set_bus_tx_rsp(dut, done=0)
+
+async def tx_tread_cont(dut):
+    """
+    bus_tx_rsp_t = {error, idle, done}
+    bus_tx_req_t = {drive_type, req_byte, req_bit, data[7:0]}
+    """
+    # Wait for a RawBit request to be sent
+    while not (get_tx_req_valid(dut) and (get_tx_req_type(dut) == 6)):
+        await RisingEdge(dut.clk_i)
+    val = get_tx_req_data(dut)  # Get the data from the request
+    await ClockCycles(dut.clk_i, 3)
+    set_bus_tx_rsp(dut, done=1)
+    await ClockCycles(dut.clk_i, 1)
+    set_bus_tx_rsp(dut, done=0)
+    return val & 0xFF
 
 async def get_status(dut):
     # CCC - set command code and valid
@@ -216,11 +243,15 @@ async def get_status(dut):
 
     # TX Bytes (GETSTATUS returns 2 bytes)
     status = []
-    for i in range(2):
+    r = range(2)
+    for i in r:
         byte_val = await tx_byte(dut)
         status.append(byte_val)
         # T-bit
-        await tx_bit(dut)
+        if i == r[-1]:
+            await tx_tread_end(dut)
+        else:
+            await tx_tread_cont(dut)
 
     # Stop the frame
     await cycle(dut.clk_i, dut.bus_stop_det_i)

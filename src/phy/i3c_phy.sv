@@ -20,6 +20,10 @@ module i3c_phy (
     output logic ctrl_scl_o,
     output logic ctrl_sda_o,
 
+    // Pad output enable
+    input  logic ctrl_sda_oe_i,
+    output logic ctrl_sda_oe_o,
+
     // Open-Drain / Push-Pull control
     input  logic sel_od_pp_i,
     output logic sel_od_pp_o
@@ -59,5 +63,6 @@ module i3c_phy (
   assign sda_o = ctrl_sda_i;
   assign scl_o = ctrl_scl_i;
   assign sel_od_pp_o = sel_od_pp_i;
+  assign ctrl_sda_oe_o = ctrl_sda_oe_i;
 
 endmodule

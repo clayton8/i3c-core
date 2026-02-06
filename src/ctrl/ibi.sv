@@ -65,8 +65,6 @@ module ibi import i3c_pkg::*; (
   logic [2:0] ibi_retry_cnt_q, ibi_retry_cnt_d;
   logic       ibi_can_retry;
 
-  i3c_byte_t bus_tx_req_value;
-
   logic bus_rx_req_nack;
 
   // FSM
@@ -75,10 +73,8 @@ module ibi import i3c_pkg::*; (
     Idle,
     // Request to drive SDA low and transmit target address
     DriveIbiAddr,
-    // Receive ACK/NACK
+    // Receive ACK/NACK, handle SDA handoff
     ReadAck,
-    // Wait for falling SCL (do not change sel_od_pp_o when SCL is high)
-    WaitForSclNegedgeAfterAck,
     // Transmit data byte
     SendData,
     // Transmit T bit
@@ -110,13 +106,6 @@ module ibi import i3c_pkg::*; (
   // Retry allowed if count not yet met or indefinite attempts allowed
   assign ibi_can_retry = (ibi_retry_num_i == 3'd7) || (ibi_retry_num_i != ibi_retry_cnt_q);
 
-  assign bus_tx_req_o = '{
-    drive_type: (state_q inside {SendData, SendTbit}) ? PushPull : OpenDrain,
-    req_byte:   (state_q inside {SendData}),
-    req_bit:    (state_q == SendTbit),
-    req_ibi:    (state_q == DriveIbiAddr),
-    data:       bus_tx_req_value
-  };
 
   assign bus_rx_req_o = '{
     req_bit:  (state_q == ReadAck),
@@ -124,10 +113,16 @@ module ibi import i3c_pkg::*; (
   };
 
   always_comb begin : fsm_ibi
-    bus_tx_req_value = '0;
     ibi_byte_ready_o = 1'b0;
     ibi_status_we_o  = 1'b0;
     done_o = 1'b0;
+
+    bus_tx_req_o = '{
+      req_valid:  1'b0,
+      req_type:   RawBit,
+      drive_type: OpenDrain,
+      data:       '1
+    };
 
     state_d      = state_q;
     ibi_status_d = ibi_status_q;
@@ -142,7 +137,9 @@ module ibi import i3c_pkg::*; (
       DriveIbiAddr: begin
         // In this state, we send an IBI request to bus_tx_flow, which then first pulls SDA low and
         // subsequently transmits our IBI address, starting at the following negedge of SCL.
-        bus_tx_req_value = {target_ibi_addr_i, 1'b1};
+        bus_tx_req_o.req_valid = 1'b1;
+        bus_tx_req_o.req_type  = InitIbi;
+        bus_tx_req_o.data      = {target_ibi_addr_i, 1'b1};
 
         if (bus_stop_i) begin
           state_d = Done;
@@ -156,20 +153,28 @@ module ibi import i3c_pkg::*; (
       ReadAck: begin
         if (bus_stop_i) begin
           state_d = Done;
-        end else if (bus_rx_rsp_i.done) begin
-          if (bus_rx_req_nack) begin
-            ibi_status_d = (ibi_status_q == IbiSuccess) ? IbiFailureNack : IbiFailureRetry;
-            state_d = WaitStopOrRstart;
-          end else begin
-            state_d = WaitForSclNegedgeAfterAck;
+        end else begin
+          // TODO only do the special ACK in case we have an MDB
+          bus_tx_req_o.req_valid = 1'b1;
+          bus_tx_req_o.req_type  = AckIbi;
+
+          // Note: Tx and Rx simultaneously! This relies on the 'done' being asserted for both at
+          // the rising edge of SCL!
+          if (bus_rx_rsp_i.done) begin
+            if (bus_rx_req_nack) begin
+              ibi_status_d = (ibi_status_q == IbiSuccess) ? IbiFailureNack : IbiFailureRetry;
+              state_d = WaitStopOrRstart;
+            end else begin
+              state_d = SendData;
+            end
           end
         end
       end
-      WaitForSclNegedgeAfterAck: begin
-        if (scl_negedge_i) state_d = SendData;
-      end
       SendData: begin
-        bus_tx_req_value = ibi_byte_i;
+        bus_tx_req_o.drive_type = PushPull;
+        bus_tx_req_o.req_valid  = 1'b1;
+        bus_tx_req_o.req_type   = RawByte;
+        bus_tx_req_o.data       = ibi_byte_i;
 
         if (bus_stop_i) begin
           ibi_status_d = (ibi_status_q == IbiSuccess) ? IbiFailurePartialData : IbiFailureRetry;
@@ -182,8 +187,12 @@ module ibi import i3c_pkg::*; (
         end
       end
       SendTbit: begin
-        bus_tx_req_value[7] = ~ibi_byte_last_i;
-        ibi_byte_ready_o    = bus_tx_rsp_i.done;
+        bus_tx_req_o.drive_type = PushPull;
+        bus_tx_req_o.req_valid  = 1'b1;
+        bus_tx_req_o.req_type   = RawBit;
+        bus_tx_req_o.data[7]    = ~ibi_byte_last_i;
+
+        ibi_byte_ready_o = bus_tx_rsp_i.done;
 
         if (bus_stop_i) begin
           ibi_status_d = (ibi_status_q == IbiSuccess) ? IbiFailurePartialData : IbiFailureRetry;

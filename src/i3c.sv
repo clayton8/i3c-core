@@ -190,6 +190,7 @@ module i3c
     input  logic i3c_sda_i,  // serial data input from i3c bus
     output logic i3c_sda_o,  // serial data output to i3c bus
 
+    output logic i3c_sda_oe_o, // Pad output enable
     output logic sel_od_pp_o,  // 0 - Open Drain, 1 - Push Pull
 
     // DAT memory export interface
@@ -478,6 +479,7 @@ module i3c
   logic ctrl2phy_scl;
   logic ctrl2phy_sda;
   logic ctrl_sel_od_pp;
+  logic ctrl_sda_oe;
 
   // Configuration
   logic phy_en;
@@ -590,6 +592,7 @@ module i3c
       .sda_i(phy2ctrl_sda),
       .scl_o(ctrl2phy_scl),
       .sda_o(ctrl2phy_sda),
+      .sda_oe_o(ctrl_sda_oe),
       .sel_od_pp_o(ctrl_sel_od_pp),
       .arbitration_lost_i(arbitration_lost_q),
 
@@ -1288,6 +1291,8 @@ module i3c
       .ctrl_sda_i(ctrl2phy_sda),
       .ctrl_scl_o(phy2ctrl_scl),
       .ctrl_sda_o(phy2ctrl_sda),
+      .ctrl_sda_oe_i(ctrl_sda_oe),
+      .ctrl_sda_oe_o(i3c_sda_oe_o),
       .sel_od_pp_i(ctrl_sel_od_pp),
       .sel_od_pp_o(sel_od_pp_o)
   );

@@ -4,7 +4,7 @@ import logging
 
 from boot import boot_init
 from ccc import CCC
-from i3c_controller_fixed import I3cControllerFixed
+from i3c_controller_fixed import I3cControllerFixed as I3cController
 from interface import I3CTopTestInterface
 
 import cocotb
@@ -43,7 +43,7 @@ async def test_setup(
     """
     cocotb.log.setLevel(logging.DEBUG)
 
-    i3c_controller = I3cControllerFixed(
+    i3c_controller = I3cController(
         sda_i=dut.bus_sda,
         sda_o=dut.sda_sim_ctrl_i,
         scl_i=dut.bus_scl,

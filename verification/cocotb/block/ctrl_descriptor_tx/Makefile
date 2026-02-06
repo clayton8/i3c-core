@@ -13,6 +13,7 @@ MODULE      ?= $(subst $(space),$(comma),$(subst .py,,$(TEST_FILES)))
 TOPLEVEL     = descriptor_tx
 
 VERILOG_SOURCES  = \
+    $(SRC_DIR)/i3c_pkg.sv \
     $(SRC_DIR)/ctrl/descriptor_tx.sv
 
 include $(TEST_DIR)/../block_common.mk
