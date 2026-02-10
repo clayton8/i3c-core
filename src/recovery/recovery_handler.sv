@@ -465,12 +465,12 @@ module recovery_handler
   //----------------------------------------------------------------------------
   // Delayed Signal Registers
   // Single process for all 1-cycle delayed versions of control signals:
-  // - virtual_device_sel_q: Extends recovery_pending by 1 cycle (see TODO below)
+  // - virtual_device_sel_q: Extends recovery_pending by 1 cycle (see FUTUREFIX below)
   // - virtual_target_active_q: For edge detection on virtual target addressing
   // - ctl_bus_addr_valid_q: For posedge detection of address valid
   // - ctl_bus_addr_valid_posedge_q: Delayed posedge aligned with virtual_device_sel_i
   //
-  // TODO: The descriptor_rx module sends tti_rx_queue_flush 1 cycle after the
+  // FUTUREFIX: The descriptor_rx module sends tti_rx_queue_flush 1 cycle after the
   // transfer ends (transfer_ended_q). However, virtual_device_sel_i goes low on
   // the same cycle that transfer_ended fires, causing recovery_pending to
   // deassert before the flush arrives. This creates a race where the mux
