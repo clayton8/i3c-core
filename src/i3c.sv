@@ -355,11 +355,12 @@ module i3c
   logic                               tti_ibi_rready;
   logic [        TtiIbiDataWidth-1:0] tti_ibi_rdata;
 
-  // TODO: Fix these signals
-  // Originally only used in active, should be removed and replaced with signal from CSR
+  // FUTUREFIX: Not needed for v1p5: i3c_fsm_en_i and i3c_fsm_idle_o are used exclusively by the
+  // active controller path (flow_active.sv). They were moved from top-level I/O to internal
+  // wires and hardcoded to inactive. To enable active controller support in the future,
+  // replace i3c_fsm_en_i with a CSR-driven enable and route i3c_fsm_idle_o to a status register.
   logic                               i3c_fsm_en_i;
   assign i3c_fsm_en_i = 1'b0;
-  // This signal should only be used on level of fsm/flow modules. Expose it via CSR, if needed.
   logic i3c_fsm_idle_o;
 
 `ifdef I3C_USE_AHB
