@@ -181,7 +181,7 @@ module controller_standby_i2c
       .acq_fifo_wready_o(acq_fifo_ready_int),
       .acq_fifo_rdata_i('1),  // This is only used for assertions by OpenTitan
       // Timing setup
-      // TODO: Use calculated timing values
+      // FUTUREFIX: Use calculated timing values
       .t_r_i(16'd1),
       .tsu_dat_i(16'd1),
       .thd_dat_i(16'd1),
@@ -189,7 +189,7 @@ module controller_standby_i2c
       .nack_timeout_i('0),
       .nack_timeout_en_i('0),
       // Addressing setup
-      // TODO: Make it configurable
+      // FUTUREFIX: Make it configurable
       .target_address0_i(7'h0c),
       .target_mask0_i(7'h7f),
       .target_address1_i('0),
@@ -206,20 +206,20 @@ module controller_standby_i2c
       .event_host_timeout_o(unused_event_host_timeout_o)
   );
 
-  // TODO: Temporarily set here to always use OD. Verify this connection
+  // FUTUREFIX: Temporarily set here to always use OD. Verify this connection
   assign phy_sel_od_pp_o = 1'b0;
 
-  // TODO: Make the I2C FSM report start/stop condition detection
+  // FUTUREFIX: Make the I2C FSM report start/stop condition detection
   assign bus_start_o = '0;
   assign bus_rstart_o = '0;
   assign bus_stop_o = '0;
 
-  // TODO: Make the I2C FSM output its received address + RnW bit and connect
+  // FUTUREFIX: Make the I2C FSM output its received address + RnW bit and connect
   // them here.
   assign bus_addr_o = '0;
   assign bus_addr_valid_o = '0;
 
-  // TODO: Detect host NACKs and expose them here
+  // FUTUREFIX: Detect host NACKs and expose them here
   assign tx_host_nack_o = '0;
 
 endmodule
