@@ -668,11 +668,10 @@ module i3c_target_fsm import i3c_pkg::*; #(
     endcase
   end
 
-  // TODO: Count which transaction and transfers were addressed to us
-  // TODO: Expose xfer,xact counters
+  // FUTUREFIX: v1p5 deferral — xfer/xact counters and cmd completion tracking
   assign event_cmd_complete_o = '0;
 
-  // TODO: Handle events
+  // FUTUREFIX: v1p5 deferral — event detection (unexpected stop, arb lost, timeout, read cmd)
   assign event_unexp_stop_o = '0;
   assign event_tx_arbitration_lost_o = '0;
   assign event_tx_bus_timeout_o = '0;
