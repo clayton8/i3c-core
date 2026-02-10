@@ -491,7 +491,6 @@ module i3c_target_fsm import i3c_pkg::*; #(
 
       // Private Write data loop
       RxPWriteData: begin
-        // TODO: Handle FIFO handshake properly
         bus_rx_req_byte = !bus_start_det;
 
         if (bus_start_det) begin
