@@ -36,8 +36,6 @@ addrmap I3CCSR #(
         .DMA_support(false),
         .Ring_offset(16'h0),
         .Ext_offset(16'h0100),
-        // TODO: verify that Little-endian is used
-        // Change if Big-endian is preferred
         .Data_endianness(1'b0),
         // TODO: Update to correct values after implementation is done
         .AUTOCMD_separated_reporting_dynamic(false),
