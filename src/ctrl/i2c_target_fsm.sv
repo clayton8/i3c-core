@@ -600,7 +600,7 @@ module i2c_target_fsm
   // timeout in which case it must now send a NACK to the host.
   assign nack_timeout = nack_timeout_en_i && stretch_active_cnt >= nack_timeout_i;
 
-  // TODO: Reenable stretching
+  // FUTUREFIX: Reenable stretching
   // Stretch Tx phase when:
   // 1. When there is no data to return to host
   // 2. When the acq_fifo contains any entry other than a singular start condition
