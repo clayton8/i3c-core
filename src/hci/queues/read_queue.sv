@@ -4,8 +4,8 @@
   Read queue provides read access from software and write access from hardware. The queue provides
   start and ready threshold triggers with configurale activation levels.
 
-  TODO: Ensure that configurations with both `ThldIsPow` and `LimitReadyThld` parameters
-        enabled or disabled work correctly.
+  FUTUREFIX: The {ThldIsPow=1, LimitReadyThld=1} configuration is not instantiated
+  in the design and has not been verified.
 */
 
 module read_queue #(
