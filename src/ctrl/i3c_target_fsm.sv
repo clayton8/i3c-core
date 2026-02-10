@@ -130,7 +130,7 @@ module i3c_target_fsm import i3c_pkg::*; #(
 
   // Target specific variables
   logic nack_transaction_q, nack_transaction_d;
-  logic rx_overflow_err_q, rx_overflow_err_r; // TODO figure out what 'r' refers to
+  logic rx_overflow_err_q, rx_overflow_err_r;
 
   i3c_byte_t last_byte;
 
