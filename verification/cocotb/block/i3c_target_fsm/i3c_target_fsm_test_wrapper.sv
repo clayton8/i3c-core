@@ -24,7 +24,6 @@ module i3c_target_fsm_test_wrapper
     input logic bus_timeout_i,  // The bus timed out, with SCL held low for too long.
 
     output logic target_idle_o,  // indicates the target is idle
-    output logic target_transmitting_o,  // Target is transmitting SDA (disambiguates high sda_o)
 
     // Bus TX interface
     input logic bus_tx_req_err_i,

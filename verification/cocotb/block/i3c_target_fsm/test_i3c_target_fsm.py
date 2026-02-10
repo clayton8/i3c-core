@@ -88,7 +88,6 @@ async def setup_test(dut):
     await ClockCycles(dut.clk_i, 10)
 
     assert dut.target_idle_o.value == 1
-    assert dut.target_transmitting_o.value == 0
     assert dut.bus_tx_req_byte_o.value == 0
     assert dut.bus_tx_req_bit_o.value == 0
     assert dut.bus_tx_req_value_o.value == 1  # Pullup by default

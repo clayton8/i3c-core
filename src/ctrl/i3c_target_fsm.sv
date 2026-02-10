@@ -47,7 +47,6 @@ module i3c_target_fsm import i3c_pkg::*; #(
   input  logic bus_available_i,
 
   output logic target_idle_o,  // indicates the target is idle
-  output logic target_transmitting_o,  // Target is transmitting SDA (disambiguates high sda_o)
 
   // Bus Tx interface
   output bus_tx_req_t bus_tx_req_o,
@@ -668,11 +667,6 @@ module i3c_target_fsm import i3c_pkg::*; #(
       default:    xfer_in_progress_o <= xfer_in_progress_o;
     endcase
   end
-
-  // TODO: Also sub FSM should contribute
-  // TODO: Maybe we can do it based on write module rather than states
-  assign target_transmitting_o =
-  (state_q inside {TxAckFByte, TxAckSByte, TxPReadData, TxPReadTbitCont, TxPReadTbitEnd});
 
   // TODO: Count which transaction and transfers were addressed to us
   // TODO: Expose xfer,xact counters

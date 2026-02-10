@@ -377,7 +377,6 @@ module controller_standby_i3c
     .bus_timeout_i        (bus_timeout),
 
     .target_idle_o        (/* unused */),
-    .target_transmitting_o(/* unused */),
 
     .bus_tx_req_o(bus_tx_req_fsm),
     .bus_tx_rsp_i(bus_tx_rsp_fsm),
