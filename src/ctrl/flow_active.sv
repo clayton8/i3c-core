@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// TODO: Add support for data byte ordering modes (HC_CONTROL.DATA_BYTE_ORDER_MODE)
+// FUTUREFIX: Add support for data byte ordering modes (HC_CONTROL.DATA_BYTE_ORDER_MODE)
 
 module flow_active
   import controller_pkg::*;
@@ -130,7 +130,7 @@ module flow_active
     WriteResp = 4'd12
   } flow_fsm_state_e;
 
-  // TODO: Set BytesBeforeImmData from the HC_CONTROL.IBA_INCLUDE
+  // FUTUREFIX: Set BytesBeforeImmData from the HC_CONTROL.IBA_INCLUDE
   localparam int unsigned BytesBeforeImmData = 1;  // 1 if IBA is disabled, otherwise 2
 
   flow_fsm_state_e state, state_next;
@@ -162,7 +162,7 @@ module flow_active
   logic dat_captured, dat_read_valid_d;
 
   // DCT table
-  // TODO: Use DCT typedef struct
+  // FUTUREFIX: Use DCT typedef struct
   logic [127:0] dct_rdata;
   logic dct_captured, dct_read_valid_d;
 
@@ -178,7 +178,7 @@ module flow_active
   i3c_resp_err_status_e resp_err_status_q, resp_err_status_d;
   logic [15:0] resp_data_length_q, resp_data_length_d;
 
-  // TODO: Set appropriately
+  // FUTUREFIX: Set appropriately
   always_comb begin
     resp_err_status_q = Success;
     fmt_flag_read_bytes_o = 1'b0;
@@ -207,7 +207,7 @@ module flow_active
   assign i2c_cmd = dat_rdata.device;
 
   // Assign constants
-  // TODO: Add control logic to constant signals
+  // FUTUREFIX: Add control logic to constant signals
   assign host_enable_o = 1'b1;
   assign fmt_fifo_depth_o = 8'd1;
 
@@ -267,7 +267,7 @@ module flow_active
         data_length = imm_use_def_byte ? 16'(immediate_cmd_desc.dtt - 5) : 16'(immediate_cmd_desc.dtt);
       end
       AddressAssignment: begin
-        // TODO
+        // FUTUREFIX
         imm_use_def_byte = '0;
         data_length = '0;
       end
@@ -276,7 +276,7 @@ module flow_active
         data_length = combo_cmd_desc.data_length;
       end
       InternalControl: begin
-        // TODO
+        // FUTUREFIX
         imm_use_def_byte = '0;
         data_length = '0;
       end
@@ -292,7 +292,7 @@ module flow_active
   end
 
   // Control internal transfer counter
-  // TODO: Consider using decremental counter with different load values
+  // FUTUREFIX: Consider using decremental counter with different load values
   // See i2c_controller_fsm.sv for reference
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (~rst_ni) begin
@@ -339,7 +339,7 @@ module flow_active
     if (~rst_ni) begin
       resp_err_status_d <= Success;
     end else begin
-      // TODO: Add proper error catching
+      // FUTUREFIX: Add proper error catching
       if (i3c_fsm_idle_o) begin
         resp_err_status_d <= Success;
       end else begin
@@ -399,13 +399,13 @@ module flow_active
       end
       // FetchDAT: Fetch DAT entry
       FetchDAT: begin
-        // TODO: Optimize DAT read so it takes just 1 cycle
+        // FUTUREFIX: Optimize DAT read so it takes just 1 cycle
         dat_read_valid_hw_o = 1'b1;
         dat_index_hw_o = $clog2(`DAT_DEPTH)'(dev_index);
       end
       // I2CWriteImmediate: Execute Immediate Transfer to Legacy I2C Device via I2C Controller
       I2CWriteImmediate: begin
-        // TODO: Figure out if the transfer should proceed if its DTT is set to `Defining Byte + 0`
+        // FUTUREFIX: Figure out if the transfer should proceed if its DTT is set to `Defining Byte + 0`
         // since in such scenario it sends only a target device address. It might be better to just
         // report an error.
         transfer_cnt_rst = 1'b0;
@@ -415,7 +415,7 @@ module flow_active
         fmt_flag_stop_after_o = 1'b0;
         resp_data_length_q = '0;
         unique case (transfer_cnt)
-          // TODO: Add support for broadcast address control before private transfers. This can
+          // FUTUREFIX: Add support for broadcast address control before private transfers. This can
           // be realized via HC_CONTROL.I2C_DEV_PRESENT and HC_CONTROL.IBA_INCLUDE register fields.
           // 32'd0: fmt_byte_o = {7'h7e, 1'b0};
           // Target address
@@ -450,28 +450,28 @@ module flow_active
       end
       // I2CWriteImmediate: Execute Immediate Transfer to I3C Device
       I3CWriteImmediate: begin
-        // TODO
+        // FUTUREFIX
       end
       FetchTxData: begin
-        // TODO
+        // FUTUREFIX
       end
       FetchRxData: begin
-        // TODO
+        // FUTUREFIX
       end
       InitI2CWrite: begin
-        // TODO
+        // FUTUREFIX
       end
       InitI2CRead: begin
-        // TODO
+        // FUTUREFIX
       end
       StallWrite: begin
-        // TODO
+        // FUTUREFIX
       end
       StallRead: begin
-        // TODO
+        // FUTUREFIX
       end
       IssueCmd: begin
-        // TODO
+        // FUTUREFIX
       end
       // WriteResp: Generate Response Descriptor and load it to Response Queue
       WriteResp: begin
@@ -513,7 +513,7 @@ module flow_active
       FetchDAT: begin
         if (dat_captured) begin
           if (cmd_attr == ImmediateDataTransfer) begin
-            // TODO: Report an error if a command is immediate with RNW set to Read
+            // FUTUREFIX: Report an error if a command is immediate with RNW set to Read
             state_next = i2c_cmd ? I2CWriteImmediate : I3CWriteImmediate;
           end else begin
             if (cmd_dir == Write) begin
@@ -527,34 +527,34 @@ module flow_active
       // I2CWriteImmediate: Execute Immediate Transfer to Legacy I2C Device via I2C Controller
       I2CWriteImmediate: begin
         if (transfer_cnt == data_length + BytesBeforeImmData) begin
-          // TODO: Do not generate Response Descriptor if WROC field of the Command Descriptor is set to 0
+          // FUTUREFIX: Do not generate Response Descriptor if WROC field of the Command Descriptor is set to 0
           state_next = WriteResp;
         end
       end
       // I2CWriteImmediate: Execute Immediate Transfer to I3C Device
       I3CWriteImmediate: begin
-        // TODO
+        // FUTUREFIX
       end
       FetchTxData: begin
-        // TODO
+        // FUTUREFIX
       end
       FetchRxData: begin
-        // TODO
+        // FUTUREFIX
       end
       InitI2CWrite: begin
-        // TODO
+        // FUTUREFIX
       end
       InitI2CRead: begin
-        // TODO
+        // FUTUREFIX
       end
       StallWrite: begin
-        // TODO
+        // FUTUREFIX
       end
       StallRead: begin
-        // TODO
+        // FUTUREFIX
       end
       IssueCmd: begin
-        // TODO
+        // FUTUREFIX
       end
       // WriteResp: Generate Response Descriptor and load it to Response Queue
       WriteResp: begin
