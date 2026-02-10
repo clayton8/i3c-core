@@ -52,10 +52,6 @@ module bus_tx_flow import i3c_pkg::*; (
 
   logic tx_done;     // Indicates finished bit write
   logic bus_tx_done; // Feedback to requester that transfer is done
-  logic req_error;
-
-  // TODO Can probably be removed
-  assign req_error = 1'b0;
 
   typedef enum logic [2:0] {
     Idle,
@@ -289,15 +285,11 @@ module bus_tx_flow import i3c_pkg::*; (
       end
       default: begin end
     endcase
-
-    // Allow to abort and go back to Idle if needed
-    if (req_error) begin
-      state_d = Idle;
-    end
   end
 
   assign tx_rsp_o = '{
-    error: req_error,
+    // FUTUREFIX: error is unused; available for future bus error reporting
+    error: 1'b0,
     idle:  (state_q == Idle),
     done:  bus_tx_done
   };
