@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// TODO: Consider arbitration difference from i2c:
+// FUTUREFIX: Consider arbitration difference from i2c:
 // Section 5.1.4
 // 48b provisioned id and bcr, dcr are used.
 // This is to enable dynamic addressing.
