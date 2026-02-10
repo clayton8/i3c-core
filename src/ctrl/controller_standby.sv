@@ -260,9 +260,9 @@ module controller_standby
     bus_addr_valid_o = sel_i2c_i3c ? i3c_bus_addr_valid_o : i2c_bus_addr_valid_o;
 
     // Connect IBI only in I3C mode
-    i3c_ibi_queue_full_i = sel_i2c_i3c ? ibi_queue_full_i : '0; // TODO unused
-    i3c_ibi_queue_empty_i = sel_i2c_i3c ? ibi_queue_empty_i : '0; // TODO unused
-    i3c_ibi_queue_rvalid_i = sel_i2c_i3c ? ibi_queue_rvalid_i : '0; // TODO unused
+    i3c_ibi_queue_full_i = sel_i2c_i3c ? ibi_queue_full_i : '0;
+    i3c_ibi_queue_empty_i = sel_i2c_i3c ? ibi_queue_empty_i : '0;
+    i3c_ibi_queue_rvalid_i = sel_i2c_i3c ? ibi_queue_rvalid_i : '0;
     ibi_queue_rready_o = sel_i2c_i3c ? i3c_ibi_queue_rready_o : '0;
 
     tx_host_nack_o = sel_i2c_i3c ? i3c_tx_host_nack_o : i2c_tx_host_nack_o;
@@ -442,9 +442,9 @@ module controller_standby
       .tx_queue_rdata_i(tx_queue_rdata_i),
       .tx_queue_empty_i(tx_queue_empty_i),
       .tx_queue_flush_o(i3c_tx_queue_flush_o),
-      .ibi_queue_full_i(ibi_queue_full_i),
-      .ibi_queue_empty_i(ibi_queue_empty_i),
-      .ibi_queue_rvalid_i(ibi_queue_rvalid_i),
+      .ibi_queue_full_i(i3c_ibi_queue_full_i),
+      .ibi_queue_empty_i(i3c_ibi_queue_empty_i),
+      .ibi_queue_rvalid_i(i3c_ibi_queue_rvalid_i),
       .ibi_queue_depth_i(ibi_queue_depth_i),
       .ibi_queue_rready_o(i3c_ibi_queue_rready_o),
       .ibi_queue_rdata_i(ibi_queue_rdata_i),
