@@ -1738,7 +1738,7 @@ module ccc
   // ===========================================================================
   // UNSUPPORTED/OPTIONAL CCC OUTPUTS (tied to defaults)
   // ===========================================================================
-  // TODO: Implement these when the following optional CCCs are added:
+  // FUTUREFIX: Implement these when the following optional CCCs are added:
   // * ENTTM - Enter Test Mode
   // * SETBRGTGT - Set Bridge Targets
   // * ENTAS[0-3] - Enter Activity State
