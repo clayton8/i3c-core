@@ -736,7 +736,7 @@ module i3c
       .i3c_fsm_en_i  (i3c_fsm_en_i),
       .i3c_fsm_idle_o(i3c_fsm_idle_o),
 
-      .err(),  // TODO: Handle errors
+      .err(),  // FUTUREFIX: err is hardcoded to '0 in flow_active.sv; connect if active controller errors are implemented
       .irq(ctl_irq),
       .hwif_out_i(hwif_out),
       .hwif_rec_i(hwif_rec_out),
