@@ -101,7 +101,7 @@ module controller_active
     output logic [                 127:0] dct_wdata_hw_o,
     input  logic [                 127:0] dct_rdata_hw_i,
 
-    // TODO: rename
+    // FUTUREFIX: rename
     input  logic i3c_fsm_en_i,
     output logic i3c_fsm_idle_o,
 
@@ -138,7 +138,7 @@ module controller_active
   logic rx_fifo_wvalid;
   logic [RxFifoWidth-1:0] rx_fifo_wdata;
 
-  // TODO: Connect I2C Controller SDA/SCL to I3C Flow FSM
+  // FUTUREFIX: Connect I2C Controller SDA/SCL to I3C Flow FSM
 
   flow_active flow_fsm (
       .clk_i,
@@ -228,7 +228,7 @@ module controller_active
       .sda_o (ctrl_sda_o[0]),
 
       // These should be controlled by the flow FSM
-      // TODO: reconnect to flow fsm once configuration.sv is connected properly to CSRs
+      // FUTUREFIX: reconnect to flow fsm once configuration.sv is connected properly to CSRs
       .host_enable_i('0),
       .fmt_fifo_rvalid_i(fmt_fifo_rvalid),
       .fmt_fifo_depth_i(fmt_fifo_depth),
@@ -245,8 +245,8 @@ module controller_active
       .rx_fifo_wdata_o(rx_fifo_wdata),
       .host_idle_o(unused_host_idle_o),
 
-      // TODO: Use calculated timing values
-      // TODO: Expose as programmable feature
+      // FUTUREFIX: Use calculated timing values
+      // FUTUREFIX: Expose as programmable feature
       .thigh_i(16'd10),
       .tlow_i(16'd10),
       .t_r_i(16'd1),
@@ -262,11 +262,11 @@ module controller_active
       .stretch_timeout_i('0),
       .timeout_enable_i ('0),
 
-      // TODO: Handle NACK on bus
+      // FUTUREFIX: Handle NACK on bus
       .host_nack_handler_timeout_i('0),
       .host_nack_handler_timeout_en_i('0),
 
-      // TODO: Handle bus events
+      // FUTUREFIX: Handle bus events
       .event_nak_o(unused_event_nak_o),
       .event_unhandled_nak_timeout_o(unused_event_unhandled_nak_timeout_o),
       .event_scl_interference_o(unused_event_scl_interference_o),
@@ -276,7 +276,7 @@ module controller_active
       .event_cmd_complete_o(unused_event_cmd_complete_o)
   );
 
-  // TODO: Handle i3c waveform
+  // FUTUREFIX: Handle i3c waveform
   i3c_controller_fsm xi3c_controller_fsm (
       .clk_i(clk_i),
       .rst_ni(rst_ni),
@@ -286,7 +286,7 @@ module controller_active
       .ctrl_sda_o(ctrl_sda_o[1])
   );
 
-  // TODO: Handle driver switching in the active controller mode
+  // FUTUREFIX: Handle driver switching in the active controller mode
   assign phy_sel_od_pp_o[0] = '0;
   assign phy_sel_od_pp_o[1] = '0;
 endmodule
