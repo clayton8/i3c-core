@@ -733,7 +733,6 @@ module i3c
       .dct_wdata_hw_o(dct_wdata_hw),
       .dct_rdata_hw_i(dct_rdata_hw),
 
-      //TODO: Rename
       .i3c_fsm_en_i  (i3c_fsm_en_i),
       .i3c_fsm_idle_o(i3c_fsm_idle_o),
 
