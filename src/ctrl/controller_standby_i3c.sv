@@ -727,7 +727,7 @@ module controller_standby_i3c
 
     .tx_queue_flush_o          (tx_queue_flush_o),
     .tx_start_i                (tx_pr_start_o),
-    .tx_abort_i                (tx_pr_abort | tx_host_nack),
+    .tx_abort_i                (tx_pr_abort),
     .tx_desc_avail_o           (tx_desc_avail),
 
     .tx_byte_o                 (tx_fifo_rdata),

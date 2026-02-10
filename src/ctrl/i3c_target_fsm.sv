@@ -216,7 +216,7 @@ module i3c_target_fsm import i3c_pkg::*; #(
   // Either Start or RStart condition
   assign bus_start_det = bus_start_det_i | bus_rstart_det_i;
 
-  // TODO
+  // FUTUREFIX: tx_host_nack_o is irrelevant for v1p5 release
   assign tx_host_nack_o = 1'b0;
 
   // Shorthand helper signal
