@@ -154,10 +154,6 @@ module controller_standby_i3c
     output logic enec_hj_o,   // Hot Join requests
     output logic disec_hj_o,
 
-    // TODO Unused, figure out what this is about
-    input  i3c_addr_t   target_hot_join_addr_i,
-    input  logic [63:0] daa_unique_response_i,
-
     //
     output logic tx_host_nack_o,
     output logic tx_pr_end_o,

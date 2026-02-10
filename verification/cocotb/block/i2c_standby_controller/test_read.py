@@ -71,8 +71,6 @@ async def reset(dut):
     dut.target_dyn_addr_valid_i.value = 0
     dut.target_ibi_addr_i.value = 0
     dut.target_ibi_addr_valid_i.value = 0
-    dut.target_hot_join_addr_i.value = 0
-    dut.daa_unique_response_i.value = 0
 
 async def read(master: I2cMaster, addr: int, count: int) -> bytearray:
     data = await master.read(addr, count)

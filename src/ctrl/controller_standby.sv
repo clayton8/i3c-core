@@ -141,8 +141,6 @@ module controller_standby
     input logic virtual_target_dyn_addr_valid_i,
     input logic [6:0] target_ibi_addr_i,
     input logic target_ibi_addr_valid_i,
-    input logic [6:0] target_hot_join_addr_i,
-    input logic [63:0] daa_unique_response_i,
     input logic ibi_enable_i,
     input logic [2:0] ibi_retry_num_i,
 
@@ -406,8 +404,6 @@ module controller_standby
       .target_dyn_addr_valid_i(target_dyn_addr_valid_i),
       .target_ibi_addr_i(target_ibi_addr_i),
       .target_ibi_addr_valid_i(target_ibi_addr_valid_i),
-      .target_hot_join_addr_i(target_hot_join_addr_i),
-      .daa_unique_response_i(daa_unique_response_i),
       .tx_host_nack_o(i2c_tx_host_nack_o)
   );
 
@@ -482,10 +478,8 @@ module controller_standby
       .virtual_target_dyn_addr_valid_i(virtual_target_dyn_addr_valid_i),
       .target_ibi_addr_i(target_ibi_addr_i),
       .target_ibi_addr_valid_i(target_ibi_addr_valid_i),
-      .target_hot_join_addr_i(target_hot_join_addr_i),
       .ibi_enable_i(ibi_enable_i),
       .ibi_retry_num_i(ibi_retry_num_i),
-      .daa_unique_response_i(daa_unique_response_i),
       .tx_host_nack_o(i3c_tx_host_nack_o),
       .tx_pr_end_o(tx_pr_end_o),
       .tx_pr_start_o(tx_pr_start_o),

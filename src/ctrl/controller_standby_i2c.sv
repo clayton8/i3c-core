@@ -97,8 +97,6 @@ module controller_standby_i2c
     input logic target_dyn_addr_valid_i,
     input logic [6:0] target_ibi_addr_i,
     input logic target_ibi_addr_valid_i,
-    input logic [6:0] target_hot_join_addr_i,
-    input logic [63:0] daa_unique_response_i,
 
     output logic tx_host_nack_o
 );

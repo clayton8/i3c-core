@@ -307,8 +307,6 @@ module controller
   logic virtual_target_dyn_addr_valid;
   logic [6:0] target_ibi_addr;
   logic target_ibi_addr_valid;
-  logic [6:0] target_hot_join_addr;
-  logic [63:0] daa_unique_response;
   logic set_mwl, set_mrl, set_ibil;
   logic [15:0] mwl, mrl;
   logic [7:0] ibil;
@@ -411,8 +409,6 @@ module controller
       .virtual_target_dyn_addr_valid_o (virtual_target_dyn_addr_valid),
       .target_ibi_addr_o               (target_ibi_addr),
       .target_ibi_addr_valid_o         (target_ibi_addr_valid),
-      .target_hot_join_addr_o          (target_hot_join_addr),
-      .daa_unique_response_o           (daa_unique_response),
       .ibi_enable_o                    (ibi_enable),
       .ibi_retry_num_o                 (ibi_retry_num),
       .set_mwl_i                       (set_mwl),
@@ -598,10 +594,8 @@ module controller
       .virtual_target_dyn_addr_valid_i(virtual_target_dyn_addr_valid),
       .target_ibi_addr_i(target_ibi_addr),
       .target_ibi_addr_valid_i(target_ibi_addr_valid),
-      .target_hot_join_addr_i(target_hot_join_addr),
       .ibi_enable_i(ibi_enable),
       .ibi_retry_num_i(ibi_retry_num),
-      .daa_unique_response_i(daa_unique_response),
       .tx_host_nack_o(tti_tx_host_nack_o),
       .tx_pr_end_o(tti_tx_pr_end_o),
       .tx_pr_start_o(tti_tx_pr_start_o),
