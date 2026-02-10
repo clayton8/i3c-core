@@ -200,7 +200,7 @@ module flow_standby_i2c
       response_fifo_wdata_o.tid <= '0;
     end else begin
       response_fifo_wdata_o.__rsvd23_16 <= '0;
-      // TODO: Implement, controller functionality skipped for now
+      // FUTUREFIX: Implement, controller functionality skipped for now
       response_fifo_wdata_o.err_status <= i3c_resp_err_status_e'(0);
       response_fifo_wdata_o.tid <= '0;
     end
@@ -289,7 +289,7 @@ module flow_standby_i2c
       AwaitStart:
       if (start_detected) begin
         state_d = is_start_read ? PopCommandFromTTIQueue : ReceiveByte;
-      end else  // TODO: Assert that acq_fifo_wdata_byte_id != i2c_pkg::AcqNackStart
+      end else  // FUTUREFIX: Assert that acq_fifo_wdata_byte_id != i2c_pkg::AcqNackStart
         state_d = AwaitStart;
       ReceiveByte: begin
         state_d = ReceiveByte;
@@ -302,7 +302,7 @@ module flow_standby_i2c
       if (rx_fifo_wready_i) state_d = transfer_active ? ReceiveByte : PushResponseToTTIQueue;
       else
       // We can't wait any longer if there's a new byte, because we might be full
-      // TODO: We need to handle stop/restart that was received in `ReceiveByte`,
+      // FUTUREFIX: We need to handle stop/restart that was received in `ReceiveByte`,
       // but invalidated one cycle later.
       if (stop_detected | restart_detected)
         state_d = PushDWordToTTIQueue;
