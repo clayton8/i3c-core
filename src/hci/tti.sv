@@ -137,16 +137,15 @@ module tti
     output logic irq_o
 );
 
-  // TODO: undriven logic
   always_comb begin : undriven_logic
-    hwif_tti_o.INTERRUPT_STATUS.IBI_THLD_STAT.we = '0;
-    hwif_tti_o.INTERRUPT_STATUS.TRANSFER_ERR_STAT.we = '0;
-    hwif_tti_o.INTERRUPT_STATUS.TRANSFER_ABORT_STAT.we = '0;
-    hwif_tti_o.INTERRUPT_STATUS.TX_DESC_THLD_STAT.we = '0;
-    hwif_tti_o.INTERRUPT_STATUS.TX_DATA_THLD_STAT.we = '0;
-    hwif_tti_o.INTERRUPT_STATUS.TX_DESC_TIMEOUT.we = '0;
-    hwif_tti_o.INTERRUPT_STATUS.RX_DESC_TIMEOUT.we = '0;
-    hwif_tti_o.QUEUE_THLD_CTRL.IBI_THLD.next = '0;
+    hwif_tti_o.INTERRUPT_STATUS.IBI_THLD_STAT.we = '0; // FUTUREFIX: Not important since FW owns this queue
+    hwif_tti_o.INTERRUPT_STATUS.TRANSFER_ERR_STAT.we = '0; // FUTUREFIX: Implement at the end if easy to add
+    hwif_tti_o.INTERRUPT_STATUS.TRANSFER_ABORT_STAT.we = '0; // FUTUREFIX: Implement at the end if easy to add
+    hwif_tti_o.INTERRUPT_STATUS.TX_DESC_THLD_STAT.we = '0; // FUTUREFIX: Not important since FW owns this queue
+    hwif_tti_o.INTERRUPT_STATUS.TX_DATA_THLD_STAT.we = '0; // FUTUREFIX: Not important since FW owns this queue
+    hwif_tti_o.INTERRUPT_STATUS.TX_DESC_TIMEOUT.we = '0; // FUTUREFIX: Nice to have in the future
+    hwif_tti_o.INTERRUPT_STATUS.RX_DESC_TIMEOUT.we = '0; // FUTUREFIX: Nice to have in the future
+    hwif_tti_o.QUEUE_THLD_CTRL.IBI_THLD.next = '0; // FIUTUREFIX: Not important since FW owns this queue
   end
 
   logic tx_desc_ready_thld_swmod_q, tx_desc_ready_thld_we;

@@ -310,7 +310,7 @@ regfile TargetTransactionInterfaceRegisters #(
         desc = "Interrupt Status";
         field {
             name = "TRANSFER_ERR_STAT";
-            desc = "Bus error occurred";
+            desc = "NOT IMPLEMENTED. Bus error occurred";
             sw = rw;
             hw = rw;
             woclr = true;
@@ -328,7 +328,7 @@ regfile TargetTransactionInterfaceRegisters #(
         } TX_DESC_COMPLETE[26:26];
         field {
             name = "TRANSFER_ABORT_STAT";
-            desc = "Bus aborted transaction";
+            desc = "NOT IMPLEMENTED. Bus aborted transaction";
             sw = rw;
             hw = rw;
             woclr = true;
@@ -354,7 +354,7 @@ regfile TargetTransactionInterfaceRegisters #(
         } IBI_DONE[13:13];
         field {
             name = "IBI_THLD_STAT";
-            desc = "TTI IBI Buffer Threshold Status, the Target Controller shall set this bit to 1 when the number of available entries in the TTI IBI Queue is >= the value defined in `TTI_IBI_THLD`";
+            desc = "NOT IMPLEMENTED. TTI IBI Buffer Threshold Status, the Target Controller shall set this bit to 1 when the number of available entries in the TTI IBI Queue is >= the value defined in `TTI_IBI_THLD`";
             sw = rw;
             hw = rw;
             woclr = true;
@@ -372,7 +372,7 @@ regfile TargetTransactionInterfaceRegisters #(
         } RX_DESC_THLD_STAT[11:11];
         field {
             name = "TX_DESC_THLD_STAT";
-            desc = "TTI TX Descriptor Buffer Threshold Status, the Target Controller shall set this bit to 1 when the number of available entries in the TTI TX Descriptor Queue is >= the value defined in `TTI_TX_DESC_THLD`";
+            desc = "NOT IMPLEMENTED. TTI TX Descriptor Buffer Threshold Status, the Target Controller shall set this bit to 1 when the number of available entries in the TTI TX Descriptor Queue is >= the value defined in `TTI_TX_DESC_THLD`";
             sw = rw;
             hw = rw;
             woclr = true;
@@ -390,7 +390,7 @@ regfile TargetTransactionInterfaceRegisters #(
         } RX_DATA_THLD_STAT[9:9];
         field {
             name = "TX_DATA_THLD_STAT";
-            desc = "TTI TX Data Buffer Threshold Status, the Target Controller shall set this bit to 1 when the number of available entries in the TTI TX Data Queue is >= the value defined in `TTI_TX_DATA_THLD`";
+            desc = "NOT IMPLEMENTED. TTI TX Data Buffer Threshold Status, the Target Controller shall set this bit to 1 when the number of available entries in the TTI TX Data Queue is >= the value defined in `TTI_TX_DATA_THLD`";
             sw = rw;
             hw = rw;
             woclr = true;
@@ -399,7 +399,7 @@ regfile TargetTransactionInterfaceRegisters #(
         } TX_DATA_THLD_STAT[8:8];
         field {
             name = "TX_DESC_TIMEOUT";
-            desc = "Pending Read was NACK’ed, because the `TX_DESC_STAT` event was not handled in time";
+            desc = "NOT IMPLEMENTED. Pending Read was NACK’ed, because the `TX_DESC_STAT` event was not handled in time";
             sw = rw;
             hw = rw;
             woclr = true;
@@ -408,7 +408,7 @@ regfile TargetTransactionInterfaceRegisters #(
         } TX_DESC_TIMEOUT[3:3];
         field {
             name = "RX_DESC_TIMEOUT";
-            desc = "Pending Write was NACK’ed, because the `RX_DESC_STAT` event was not handled in time";
+            desc = "NOT IMPLEMENTED. Pending Write was NACK’ed, because the `RX_DESC_STAT` event was not handled in time";
             sw = rw;
             hw = rw;
             woclr = true;

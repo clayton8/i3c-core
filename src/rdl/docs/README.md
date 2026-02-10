@@ -2982,15 +2982,15 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 #### RX_DESC_TIMEOUT field
 
-<p>Pending Write was NACK’ed, because the <code>RX_DESC_STAT</code> event was not handled in time</p>
+<p>NOT IMPLEMENTED. Pending Write was NACK’ed, because the <code>RX_DESC_STAT</code> event was not handled in time</p>
 
 #### TX_DESC_TIMEOUT field
 
-<p>Pending Read was NACK’ed, because the <code>TX_DESC_STAT</code> event was not handled in time</p>
+<p>NOT IMPLEMENTED. Pending Read was NACK’ed, because the <code>TX_DESC_STAT</code> event was not handled in time</p>
 
 #### TX_DATA_THLD_STAT field
 
-<p>TTI TX Data Buffer Threshold Status, the Target Controller shall set this bit to 1 when the number of available entries in the TTI TX Data Queue is &gt;= the value defined in <code>TTI_TX_DATA_THLD</code></p>
+<p>NOT IMPLEMENTED. TTI TX Data Buffer Threshold Status, the Target Controller shall set this bit to 1 when the number of available entries in the TTI TX Data Queue is &gt;= the value defined in <code>TTI_TX_DATA_THLD</code></p>
 
 #### RX_DATA_THLD_STAT field
 
@@ -2998,7 +2998,7 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 #### TX_DESC_THLD_STAT field
 
-<p>TTI TX Descriptor Buffer Threshold Status, the Target Controller shall set this bit to 1 when the number of available entries in the TTI TX Descriptor Queue is &gt;= the value defined in <code>TTI_TX_DESC_THLD</code></p>
+<p>NOT IMPLEMENTED. TTI TX Descriptor Buffer Threshold Status, the Target Controller shall set this bit to 1 when the number of available entries in the TTI TX Descriptor Queue is &gt;= the value defined in <code>TTI_TX_DESC_THLD</code></p>
 
 #### RX_DESC_THLD_STAT field
 
@@ -3006,7 +3006,7 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 #### IBI_THLD_STAT field
 
-<p>TTI IBI Buffer Threshold Status, the Target Controller shall set this bit to 1 when the number of available entries in the TTI IBI Queue is &gt;= the value defined in <code>TTI_IBI_THLD</code></p>
+<p>NOT IMPLEMENTED. TTI IBI Buffer Threshold Status, the Target Controller shall set this bit to 1 when the number of available entries in the TTI IBI Queue is &gt;= the value defined in <code>TTI_IBI_THLD</code></p>
 
 #### IBI_DONE field
 
@@ -3018,7 +3018,7 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 #### TRANSFER_ABORT_STAT field
 
-<p>Bus aborted transaction</p>
+<p>NOT IMPLEMENTED. Bus aborted transaction</p>
 
 #### TX_DESC_COMPLETE field
 
@@ -3026,7 +3026,7 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 #### TRANSFER_ERR_STAT field
 
-<p>Bus error occurred</p>
+<p>NOT IMPLEMENTED. Bus error occurred</p>
 
 ### INTERRUPT_ENABLE register
 
