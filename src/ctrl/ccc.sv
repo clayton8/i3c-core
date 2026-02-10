@@ -215,8 +215,8 @@ module ccc
     // -------------------------------------------------------------------------
     // SETDASA/SETAASA: Set Dynamic Address from Static Address
     // -------------------------------------------------------------------------
-    output logic [6:0] dasa_o,
-    output logic set_dasa_o,
+    output logic [6:0] set_dasa_o,
+    output logic set_dasa_valid_o,
     output logic set_dasa_virtual_device_o,
     output logic set_aasa_o,
     output logic set_aasa_virt_o,
@@ -1400,8 +1400,8 @@ module ccc
   // ===========================================================================
   // SETDASA/SETAASA OUTPUT ASSIGNMENTS
   // ===========================================================================
-  assign dasa_o = set_dasa_addr;
-  assign set_dasa_o = set_dasa_valid;
+  assign set_dasa_o = set_dasa_addr;
+  assign set_dasa_valid_o = set_dasa_valid;
   assign set_dasa_virtual_device_o = target_addr_matches_virt ? set_dasa_valid : 1'b0;
   assign set_aasa_o = set_aasa_valid;
   assign set_aasa_virt_o = set_aasa_virt_valid;

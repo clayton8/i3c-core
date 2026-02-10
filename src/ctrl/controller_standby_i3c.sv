@@ -129,9 +129,9 @@ module controller_standby_i3c
     output logic [7:0] rst_action_o,
 
     // Set dynamic address from static address
-    output logic      set_dasa_o,
+    output logic      set_dasa_valid_o,
     output logic      set_dasa_virtual_device_o,
-    output i3c_addr_t dasa_o,
+    output i3c_addr_t set_dasa_o,
     // Set all addresses to static address
     output logic set_aasa_o,
     output logic set_aasa_virt_o,
@@ -528,8 +528,8 @@ module controller_standby_i3c
     .exit_hdr_i    (hdr_exit_detect),
     .in_hdr_mode_o (in_hdr_mode_o),
 
-    .dasa_o,
     .set_dasa_o,
+    .set_dasa_valid_o,
     .set_dasa_virtual_device_o,
     .set_aasa_o,
     .set_aasa_virt_o,

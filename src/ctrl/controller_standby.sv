@@ -369,7 +369,7 @@ module controller_standby
       .rx_queue_wvalid_o(i2c_rx_queue_wvalid_int),
       .rx_queue_wready_i(rx_queue_wready_int),
       .rx_queue_wdata_o(i2c_rx_queue_wdata_int),
-      //      .rx_queue_flush_o(i2c_rx_queue_flush_o), // TODO: Add flush support for I2C
+      //      .rx_queue_flush_o(i2c_rx_queue_flush_o), // FUTUREFIX: Add flush support for I2C
       .tx_queue_full_i(tx_queue_full_i),
       .tx_queue_start_thld_i(tx_queue_start_thld_i),
       .tx_queue_start_thld_trig_i(tx_queue_start_thld_trig_i),
@@ -483,8 +483,8 @@ module controller_standby
       .tx_host_nack_o(i3c_tx_host_nack_o),
       .tx_pr_end_o(tx_pr_end_o),
       .tx_pr_start_o(tx_pr_start_o),
-      .dasa_o(set_dasa_o), // TODO propagate name change further up
-      .set_dasa_o(set_dasa_valid_o), // TODO propagate name change further up
+      .set_dasa_o(set_dasa_o),
+      .set_dasa_valid_o(set_dasa_valid_o),
       .set_dasa_virtual_device_o(set_dasa_virtual_device_o),
       .set_aasa_o(set_aasa_o),
       .set_aasa_virt_o(set_aasa_virt_o),
