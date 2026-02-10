@@ -177,8 +177,6 @@ module hci
 
   // Recovery CSR interface
   assign hwif_rec_o = hwif_out_o.I3C_EC.SecFwRecoveryIf;
-
-  // TODO: Use this if
   assign hwif_in.I3C_EC.SecFwRecoveryIf = hwif_rec_i;
 
   // Reset control
