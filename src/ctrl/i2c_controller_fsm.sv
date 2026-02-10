@@ -942,7 +942,7 @@ module i2c_controller_fsm
   // Make sure we never attempt to send a single cycle glitch
   `I3C_ASSERT(SclOutputGlitch_A, $rose(scl_o) |-> ##1 scl_o)
 
-  // TODO: Handle the assertion below
+  // FUTUREFIX: Handle the assertion below
   //  // I2C bus outputs
   //  always_ff @(posedge clk_i or negedge rst_ni) begin
   //    if (!rst_ni) begin
