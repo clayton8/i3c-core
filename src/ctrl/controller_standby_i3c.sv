@@ -751,12 +751,10 @@ module controller_standby_i3c
     .clk_i,
     .rst_ni,
 
-    .ibi_queue_full_i  (ibi_queue_full_i),
-    .ibi_queue_empty_i (ibi_queue_empty_i),
-    .ibi_queue_rvalid_i(ibi_queue_rvalid_i),
-    .ibi_queue_depth_i (ibi_queue_depth_i),
-    .ibi_queue_rready_o(ibi_queue_rready_o),
-    .ibi_queue_rdata_i (ibi_queue_rdata_i),
+    .ibi_queue_rvalid_i,
+    .ibi_queue_depth_i,
+    .ibi_queue_rready_o,
+    .ibi_queue_rdata_i,
 
     .ibi_byte_valid_o(ibi_fifo_rvalid),
     .ibi_byte_ready_i(ibi_fifo_rready),
