@@ -136,9 +136,10 @@ module descriptor_tx import i3c_pkg::*; #(
                                  (flush && tti_tx_queue_rvalid_i);
 
   assign tx_end = (byte_counter == 16'h1 && (tx_byte_ready_i || flush));
-  // TODO check these conditions. This probably checks if any of the four bytes per tx_queue word
-  // hasn't been read, in which case a word-flush is required?
-  assign tx_queue_flush_o = (|data_len[1:0] && tx_end) || (|byte_counter[1:0] && tx_end);
+  // Flush the Nto8 width converter when:
+  // - Normal completion of a non-DWORD-aligned transfer (partial last word), OR
+  // - Abort/recovery draining completes
+  assign tx_queue_flush_o = (|data_len[1:0] && tx_end) || (flush && tx_end);
 
   assign tx_end_o = tx_end;
 endmodule

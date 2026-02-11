@@ -902,3 +902,108 @@ async def test_i3c_target_pwrite_overflow_detection(dut):
         await ClockCycles(tb.clk, 100)
 
     await ClockCycles(tb.clk, 100)
+
+
+@cocotb.test()
+async def test_i3c_target_private_read_sizes_and_abort(dut):
+    """
+    Test private read transfers with specific sizes and controller-initiated aborts.
+
+    1. Private read of exactly 256 bytes
+    2. Private read of exactly 8 bytes
+    3. Private read of exactly 11 bytes (non-word-aligned)
+    4. Private read: target has 64 bytes, controller aborts after 4 bytes
+    5. Private read: target has 64 bytes, controller aborts after 5 bytes
+    """
+
+    # Setup
+    i3c_controller, i3c_target, tb = await test_setup(dut)
+
+    async def enqueue_tx_data(data):
+        """Write data to TTI TX FIFO and TX descriptor."""
+        length = len(data)
+
+        # Write data to TTI TX FIFO
+        for i in range((length + 3) // 4):
+            word = data[4 * i]
+            if 4 * i + 1 < length:
+                word |= data[4 * i + 1] << 8
+            if 4 * i + 2 < length:
+                word |= data[4 * i + 2] << 16
+            if 4 * i + 3 < length:
+                word |= data[4 * i + 3] << 24
+
+            await tb.write_csr(tb.reg_map.I3C_EC.TTI.TX_DATA_PORT.base_addr, int2dword(word), 4)
+
+        # Write the TX descriptor
+        await tb.write_csr(tb.reg_map.I3C_EC.TTI.TX_DESC_QUEUE_PORT.base_addr, int2dword(length), 4)
+
+    def compare(expected, received):
+        dut._log.info("Expected: [" + " ".join([f"{d:02X}" for d in expected]) + "]")
+        dut._log.info("Received: [" + " ".join([f"{d:02X}" for d in received]) + "]")
+        assert expected == received
+
+    # ---- Test 1: Private read of exactly 256 bytes ----
+    dut._log.info("Test 1: Private read of 256 bytes")
+    tx_data_256 = [random.randint(0, 255) for _ in range(256)]
+    await enqueue_tx_data(tx_data_256)
+    rx_resp = await i3c_controller.i3c_read(TARGET_ADDRESS, 256)
+    assert not rx_resp.nack, "Unexpected NACK on 256-byte read"
+    compare(tx_data_256, list(rx_resp.data))
+    await ClockCycles(tb.clk, 10)
+
+    # ---- Test 2: Private read of exactly 8 bytes ----
+    dut._log.info("Test 2: Private read of 8 bytes")
+    tx_data_8 = [random.randint(0, 255) for _ in range(8)]
+    await enqueue_tx_data(tx_data_8)
+    rx_resp = await i3c_controller.i3c_read(TARGET_ADDRESS, 8)
+    assert not rx_resp.nack, "Unexpected NACK on 8-byte read"
+    compare(tx_data_8, list(rx_resp.data))
+    await ClockCycles(tb.clk, 10)
+
+    # ---- Test 3: Private read of exactly 11 bytes (non-word-aligned) ----
+    dut._log.info("Test 3: Private read of 11 bytes")
+    tx_data_11 = [random.randint(0, 255) for _ in range(11)]
+    await enqueue_tx_data(tx_data_11)
+    rx_resp = await i3c_controller.i3c_read(TARGET_ADDRESS, 11)
+    assert not rx_resp.nack, "Unexpected NACK on 11-byte read"
+    compare(tx_data_11, list(rx_resp.data))
+    await ClockCycles(tb.clk, 10)
+
+    # ---- Test 4: Controller aborts after 4 bytes (target has 64) ----
+    dut._log.info("Test 4: Controller abort after 4 bytes (word-aligned)")
+    tx_data_64a = [random.randint(0, 255) for _ in range(64)]
+    await enqueue_tx_data(tx_data_64a)
+    rx_resp = await i3c_controller.i3c_read(TARGET_ADDRESS, 4)
+    assert not rx_resp.nack, "Unexpected NACK on abort read"
+    compare(tx_data_64a[:4], list(rx_resp.data))
+    await ClockCycles(tb.clk, 10)
+
+    # After abort, do a normal transfer to verify the target recovered
+    dut._log.info("Test 4 recovery: Normal 8-byte read after abort")
+    tx_data_recover = [random.randint(0, 255) for _ in range(8)]
+    await enqueue_tx_data(tx_data_recover)
+    rx_resp = await i3c_controller.i3c_read(TARGET_ADDRESS, 8)
+    assert not rx_resp.nack, "Unexpected NACK on recovery read"
+    compare(tx_data_recover, list(rx_resp.data))
+    await ClockCycles(tb.clk, 10)
+
+    # ---- Test 5: Controller aborts after 5 bytes (non-word-aligned) ----
+    dut._log.info("Test 5: Controller abort after 5 bytes (non-word-aligned)")
+    tx_data_64b = [random.randint(0, 255) for _ in range(64)]
+    await enqueue_tx_data(tx_data_64b)
+    rx_resp = await i3c_controller.i3c_read(TARGET_ADDRESS, 5)
+    assert not rx_resp.nack, "Unexpected NACK on abort read"
+    compare(tx_data_64b[:5], list(rx_resp.data))
+    await ClockCycles(tb.clk, 10)
+
+    # After abort, do a normal transfer to verify the target recovered
+    dut._log.info("Test 5 recovery: Normal 8-byte read after abort")
+    tx_data_recover2 = [random.randint(0, 255) for _ in range(8)]
+    await enqueue_tx_data(tx_data_recover2)
+    rx_resp = await i3c_controller.i3c_read(TARGET_ADDRESS, 8)
+    assert not rx_resp.nack, "Unexpected NACK on recovery read"
+    compare(tx_data_recover2, list(rx_resp.data))
+    await ClockCycles(tb.clk, 10)
+
+    await ClockCycles(tb.clk, 100)
