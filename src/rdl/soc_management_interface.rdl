@@ -10,7 +10,7 @@ regfile SoCManagementInterfaceRegisters{
             desc = "Capability Structure Length in DWORDs";
             sw = r;
             hw = r;
-            reset = 16'h0018;
+            reset = 16'h001A;
         } CAP_LENGTH[23:8];
         field {
             name = "CAP_ID";
@@ -387,4 +387,24 @@ regfile SoCManagementInterfaceRegisters{
             reset = 32'h0000EA60;
         } T_IDLE[31:0];
     } T_IDLE_REG;
+    reg {
+        name = "";
+        field {
+            name = "";
+            desc = "Enable bit for the optional 60us HDR error recovery timer (I3C spec 5.1.10.1.9). When enabled, the Target can recover from TE0/TE1 errors if both SCL and SDA stay High for a period exceeding the configured threshold. Disabled on reset.";
+            sw = rw;
+            hw = r;
+            reset = 1'b0;
+        } HDR_TIMEOUT_EN[0:0];
+    } HDR_TIMEOUT_EN_REG;
+    reg {
+        name = "";
+        field {
+            name = "";
+            desc = "Timer threshold in clock cycles for the optional HDR error recovery (I3C spec 5.1.10.1.9). If both SCL and SDA stay High for this many clock cycles during a TE0/TE1 error-induced HDR mode, the Target exits HDR mode and returns to Idle. Configure based on System Clock to achieve 60us.";
+            sw = rw;
+            hw = r;
+            reset = 20'hEA60;
+        } T_HDR_TIMEOUT[19:0];
+    } T_HDR_TIMEOUT_REG;
 };

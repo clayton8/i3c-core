@@ -14,6 +14,9 @@ module i3c_bus_monitor_wrapper
     input logic [19:0] t_f_i,       // Fall time
 
     input logic is_in_hdr_mode_i,  // Module is in HDR mode
+    input logic is_in_hdr_err_mode_i,  // In HDR mode due to TE0/TE1 error
+    input logic        hdr_timeout_en_i,  // CSR enable for 60µs recovery timer
+    input logic [19:0] t_hdr_timeout_i,   // CSR threshold in clock cycles
     output logic hdr_exit_detect_o,     // Detected HDR exit condition (see: 5.2.1.1.1 of the base spec)
     output logic target_reset_detect_o  // Detected Target Reset condtition
 );

@@ -70,7 +70,7 @@ async def test_setup(
     tb = I3CTopTestInterface(dut)
     await tb.setup(fclk=system_clock_mhz)
     await ClockCycles(tb.clk, 50)
-    await boot_init(tb)
+    await boot_init(tb, fclk=system_clock_mhz)
 
     return i3c_controller, tb
 

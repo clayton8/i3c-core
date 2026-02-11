@@ -287,6 +287,8 @@ module controller
   logic [19:0] t_bus_free;
   logic [19:0] t_bus_idle;
   logic [19:0] t_bus_available;
+  logic        hdr_timeout_en;
+  logic [19:0] t_hdr_timeout;
   logic [15:0] get_mwl;
   logic [15:0] get_mrl;
   logic [7:0] get_ibil;
@@ -389,6 +391,8 @@ module controller
       .t_bus_free_o                    (t_bus_free),
       .t_bus_idle_o                    (t_bus_idle),
       .t_bus_available_o               (t_bus_available),
+      .hdr_timeout_en_o                (hdr_timeout_en),
+      .t_hdr_timeout_o                 (t_hdr_timeout),
       .get_mwl_o                       (get_mwl),
       .get_mrl_o                       (get_mrl),
       .get_ibil_o                      (get_ibil),
@@ -574,6 +578,8 @@ module controller
       .t_bus_free_i(t_bus_free),
       .t_bus_idle_i(t_bus_idle),
       .t_bus_available_i(t_bus_available),
+      .hdr_timeout_en_i(hdr_timeout_en),
+      .t_hdr_timeout_i(t_hdr_timeout),
       .get_mwl_i(get_mwl),
       .get_mrl_i(get_mrl),
       .get_ibil_i(get_ibil),

@@ -95,7 +95,7 @@ async def initialize(dut, fclk=333.0, fbus=12.5, timeout=50,
         dut._log.info(f"{k} = {v}")
 
     # Configure the top level
-    await boot_init(tb, timings,
+    await boot_init(tb, timings, fclk=fclk,
                     static_addr=static_addr, virtual_static_addr=virtual_static_addr,
                     dynamic_addr=dynamic_addr, virtual_dynamic_addr=virtual_dynamic_addr)
 
@@ -5502,3 +5502,128 @@ async def test_ri_read_interrupted_by_ccc(dut):
     dut._log.info("  Part 4: Sr + Write to Virtual Target - PASS")
     dut._log.info("  Part 5: Sr + TE0 Error + HDR Exit - PASS")
     dut._log.info("=" * 70)
+
+
+@cocotb.test()
+async def test_private_read_and_ri_read(dut):
+    """
+    Verifies that a recovery interface PROT_CAP read and a standard private
+    read from the TTI TX FIFO work correctly and do not interfere with each
+    other.
+
+    Steps:
+      1. Queue random data into the TTI TX FIFO for a future private read.
+      2. Read the PROT_CAP register via the recovery interface (virtual target).
+         Verify the data and PEC are correct.
+      3. Issue a standard private read on the main target address.
+         Verify the received data matches what was queued in step 1.
+    """
+
+    # Initialize
+    i3c_controller, i3c_target, tb, recovery = await initialize(dut, timeout=100)
+
+    # Assign dynamic addresses
+    await i3c_controller.i3c_ccc_write(
+        ccc=CCC.DIRECT.SETDASA, directed_data=[(STATIC_ADDR, [DYNAMIC_ADDR << 1])]
+    )
+    await i3c_controller.i3c_ccc_write(
+        ccc=CCC.DIRECT.SETDASA, directed_data=[(VIRT_STATIC_ADDR, [VIRT_DYNAMIC_ADDR << 1])]
+    )
+
+    # ── Step 1: Setup PROT_CAP CSR with known values ──
+
+    def make_word(bs):
+        return (bs[3] << 24) | (bs[2] << 16) | (bs[1] << 8) | bs[0]
+
+    prot_cap = ocp_magic_string_as_bytes + [
+        random.randint(0, 255) for _ in range(8)
+    ]
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.PROT_CAP_2.base_addr,
+        int2dword(make_word(prot_cap[8:12])), 4,
+    )
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.PROT_CAP_3.base_addr,
+        int2dword(make_word(prot_cap[12:16])), 4,
+    )
+
+    # ── Step 2: Queue TX FIFO data for private read ──
+
+    # Temporarily disable recovery mode so TTI is active for writes
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_STATUS_0.base_addr, int2dword(0x2), 4
+    )
+
+    data_len = random.randint(8, 16)
+    tx_data = [random.randint(0, 255) for _ in range(data_len)]
+    dut._log.info(
+        "TX FIFO data ({}B): [{}]".format(
+            data_len, " ".join(f"0x{d:02X}" for d in tx_data)
+        )
+    )
+
+    # Pack bytes into 32-bit words and write to TX DATA port
+    for i in range((data_len + 3) // 4):
+        word = tx_data[4 * i]
+        if 4 * i + 1 < data_len:
+            word |= tx_data[4 * i + 1] << 8
+        if 4 * i + 2 < data_len:
+            word |= tx_data[4 * i + 2] << 16
+        if 4 * i + 3 < data_len:
+            word |= tx_data[4 * i + 3] << 24
+        await tb.write_csr(tb.reg_map.I3C_EC.TTI.TX_DATA_PORT.base_addr, int2dword(word), 4)
+
+    # Write TX descriptor
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.TTI.TX_DESC_QUEUE_PORT.base_addr, int2dword(data_len), 4
+    )
+
+    # Re-enable recovery mode
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_STATUS_0.base_addr, int2dword(0x3), 4
+    )
+
+    # ── Step 3: Read PROT_CAP via recovery interface ──
+
+    dut._log.info("Reading PROT_CAP via recovery interface (virtual target)")
+    recovery_data, pec_ok = await recovery.command_read(
+        VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.PROT_CAP
+    )
+
+    assert pec_ok, "PEC check failed for PROT_CAP read"
+    assert len(recovery_data) == 15, (
+        f"PROT_CAP length mismatch: expected 15 bytes, got {len(recovery_data)}"
+    )
+    assert recovery_data == prot_cap[:15], (
+        f"PROT_CAP data mismatch:\n"
+        f"  Expected: {[hex(b) for b in prot_cap[:15]]}\n"
+        f"  Got:      {[hex(b) for b in recovery_data]}"
+    )
+    dut._log.info("PROT_CAP read verified OK")
+
+    # ── Step 4: Private read from TX FIFO on main target ──
+
+    # Disable recovery mode so private reads go to the main target's TTI
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_STATUS_0.base_addr, int2dword(0x2), 4
+    )
+    await ClockCycles(tb.clk, 50)
+
+    dut._log.info("Issuing private read on main target")
+    rx_resp = await i3c_controller.i3c_read(DYNAMIC_ADDR, data_len)
+
+    assert not rx_resp.nack, "Private read was NACKed"
+    rx_data = list(rx_resp.data)
+    dut._log.info(
+        "RX data ({}B): [{}]".format(
+            len(rx_data), " ".join(f"0x{d:02X}" for d in rx_data)
+        )
+    )
+    assert tx_data == rx_data, (
+        f"Private read data mismatch:\n"
+        f"  Expected: {[hex(b) for b in tx_data]}\n"
+        f"  Got:      {[hex(b) for b in rx_data]}"
+    )
+    dut._log.info("Private read data verified OK")
+
+    dut._log.info("PASS: Recovery interface read and private read are independent")

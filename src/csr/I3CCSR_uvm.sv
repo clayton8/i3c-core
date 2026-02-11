@@ -5719,7 +5719,7 @@ package I3CCSR_uvm;
             this.CAP_ID = new("CAP_ID");
             this.CAP_ID.configure(this, 8, 0, "RO", 0, 'hc1, 1, 1, 0);
             this.CAP_LENGTH = new("CAP_LENGTH");
-            this.CAP_LENGTH.configure(this, 16, 8, "RO", 0, 'h18, 1, 1, 0);
+            this.CAP_LENGTH.configure(this, 16, 8, "RO", 0, 'h1a, 1, 1, 0);
             if (has_coverage(UVM_CVR_REG_BITS)) begin
                 foreach(CAP_ID_bit_cg[bt]) CAP_ID_bit_cg[bt] = new();
                 foreach(CAP_LENGTH_bit_cg[bt]) CAP_LENGTH_bit_cg[bt] = new();
@@ -6449,6 +6449,66 @@ package I3CCSR_uvm;
         endfunction : build
     endclass : I3CCSR__I3C_EC__SoCMgmtIf__T_IDLE_REG
 
+    // Reg - I3CCSR.I3C_EC.SoCMgmtIf.HDR_TIMEOUT_EN_REG
+    class I3CCSR__I3C_EC__SoCMgmtIf__HDR_TIMEOUT_EN_REG extends uvm_reg;
+        protected uvm_reg_data_t m_current;
+        protected uvm_reg_data_t m_data;
+        protected bit            m_is_read;
+
+        I3CCSR__I3C_EC__SoCMgmtIf__HDR_TIMEOUT_EN_REG_bit_cg HDR_TIMEOUT_EN_bit_cg[1];
+        I3CCSR__I3C_EC__SoCMgmtIf__HDR_TIMEOUT_EN_REG_fld_cg fld_cg;
+        rand uvm_reg_field HDR_TIMEOUT_EN;
+
+        function new(string name = "I3CCSR__I3C_EC__SoCMgmtIf__HDR_TIMEOUT_EN_REG");
+            super.new(name, 32, build_coverage(UVM_CVR_ALL));
+        endfunction : new
+        extern virtual function void sample_values();
+        extern protected virtual function void sample(uvm_reg_data_t  data,
+                                                      uvm_reg_data_t  byte_en,
+                                                      bit             is_read,
+                                                      uvm_reg_map     map);
+
+        virtual function void build();
+            this.HDR_TIMEOUT_EN = new("HDR_TIMEOUT_EN");
+            this.HDR_TIMEOUT_EN.configure(this, 1, 0, "RW", 0, 'h0, 1, 1, 0);
+            if (has_coverage(UVM_CVR_REG_BITS)) begin
+                foreach(HDR_TIMEOUT_EN_bit_cg[bt]) HDR_TIMEOUT_EN_bit_cg[bt] = new();
+            end
+            if (has_coverage(UVM_CVR_FIELD_VALS))
+                fld_cg = new();
+        endfunction : build
+    endclass : I3CCSR__I3C_EC__SoCMgmtIf__HDR_TIMEOUT_EN_REG
+
+    // Reg - I3CCSR.I3C_EC.SoCMgmtIf.T_HDR_TIMEOUT_REG
+    class I3CCSR__I3C_EC__SoCMgmtIf__T_HDR_TIMEOUT_REG extends uvm_reg;
+        protected uvm_reg_data_t m_current;
+        protected uvm_reg_data_t m_data;
+        protected bit            m_is_read;
+
+        I3CCSR__I3C_EC__SoCMgmtIf__T_HDR_TIMEOUT_REG_bit_cg T_HDR_TIMEOUT_bit_cg[20];
+        I3CCSR__I3C_EC__SoCMgmtIf__T_HDR_TIMEOUT_REG_fld_cg fld_cg;
+        rand uvm_reg_field T_HDR_TIMEOUT;
+
+        function new(string name = "I3CCSR__I3C_EC__SoCMgmtIf__T_HDR_TIMEOUT_REG");
+            super.new(name, 32, build_coverage(UVM_CVR_ALL));
+        endfunction : new
+        extern virtual function void sample_values();
+        extern protected virtual function void sample(uvm_reg_data_t  data,
+                                                      uvm_reg_data_t  byte_en,
+                                                      bit             is_read,
+                                                      uvm_reg_map     map);
+
+        virtual function void build();
+            this.T_HDR_TIMEOUT = new("T_HDR_TIMEOUT");
+            this.T_HDR_TIMEOUT.configure(this, 20, 0, "RW", 0, 'hea60, 1, 1, 0);
+            if (has_coverage(UVM_CVR_REG_BITS)) begin
+                foreach(T_HDR_TIMEOUT_bit_cg[bt]) T_HDR_TIMEOUT_bit_cg[bt] = new();
+            end
+            if (has_coverage(UVM_CVR_FIELD_VALS))
+                fld_cg = new();
+        endfunction : build
+    endclass : I3CCSR__I3C_EC__SoCMgmtIf__T_HDR_TIMEOUT_REG
+
     // Regfile - I3CCSR.I3C_EC.SoCMgmtIf
     class I3CCSR__I3C_EC__SoCMgmtIf extends uvm_reg_block;
         rand I3CCSR__I3C_EC__SoCMgmtIf__EXTCAP_HEADER EXTCAP_HEADER;
@@ -6474,6 +6534,8 @@ package I3CCSR_uvm;
         rand I3CCSR__I3C_EC__SoCMgmtIf__T_FREE_REG T_FREE_REG;
         rand I3CCSR__I3C_EC__SoCMgmtIf__T_AVAL_REG T_AVAL_REG;
         rand I3CCSR__I3C_EC__SoCMgmtIf__T_IDLE_REG T_IDLE_REG;
+        rand I3CCSR__I3C_EC__SoCMgmtIf__HDR_TIMEOUT_EN_REG HDR_TIMEOUT_EN_REG;
+        rand I3CCSR__I3C_EC__SoCMgmtIf__T_HDR_TIMEOUT_REG T_HDR_TIMEOUT_REG;
 
         function new(string name = "I3CCSR__I3C_EC__SoCMgmtIf");
             super.new(name);
@@ -6596,6 +6658,16 @@ package I3CCSR_uvm;
 
             this.T_IDLE_REG.build();
             this.default_map.add_reg(this.T_IDLE_REG, 'h58);
+            this.HDR_TIMEOUT_EN_REG = new("HDR_TIMEOUT_EN_REG");
+            this.HDR_TIMEOUT_EN_REG.configure(this);
+
+            this.HDR_TIMEOUT_EN_REG.build();
+            this.default_map.add_reg(this.HDR_TIMEOUT_EN_REG, 'h5c);
+            this.T_HDR_TIMEOUT_REG = new("T_HDR_TIMEOUT_REG");
+            this.T_HDR_TIMEOUT_REG.configure(this);
+
+            this.T_HDR_TIMEOUT_REG.build();
+            this.default_map.add_reg(this.T_HDR_TIMEOUT_REG, 'h60);
         endfunction : build
     endclass : I3CCSR__I3C_EC__SoCMgmtIf
 
@@ -6757,12 +6829,12 @@ package I3CCSR_uvm;
             this.CtrlCfg = new("CtrlCfg");
             this.CtrlCfg.configure(this);
             this.CtrlCfg.build();
-            this.default_map.add_submap(this.CtrlCfg.default_map, 'h260);
+            this.default_map.add_submap(this.CtrlCfg.default_map, 'h268);
             this.TERMINATION_EXTCAP_HEADER = new("TERMINATION_EXTCAP_HEADER");
             this.TERMINATION_EXTCAP_HEADER.configure(this);
 
             this.TERMINATION_EXTCAP_HEADER.build();
-            this.default_map.add_reg(this.TERMINATION_EXTCAP_HEADER, 'h268);
+            this.default_map.add_reg(this.TERMINATION_EXTCAP_HEADER, 'h270);
         endfunction : build
     endclass : I3CCSR__I3C_EC
 

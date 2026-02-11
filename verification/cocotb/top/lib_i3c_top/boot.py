@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from dataclasses import dataclass
+from math import ceil
 
 from bus2csr import bytes2int, int2bytes
 from interface import I3CTopTestInterface
@@ -55,6 +56,9 @@ async def common_procedure(tb: I3CTopTestInterface):
 async def boot_init(
     tb: I3CTopTestInterface,
     timings=None,
+    fclk=333.0,
+    hdr_timeout_en=False,
+    hdr_timeout_cycles=None,
     static_addr=0x5A,
     virtual_static_addr=0x5B,
     dynamic_addr=None,
@@ -82,6 +86,25 @@ async def boot_init(
     await _write_csr(tb, tb.reg_map.I3C_EC.SOCMGMTIF.T_F_REG.base_addr, timings["T_F"])
     await _write_csr(tb, tb.reg_map.I3C_EC.SOCMGMTIF.T_HD_DAT_REG.base_addr, timings["T_HD_DAT"])
     await _write_csr(tb, tb.reg_map.I3C_EC.SOCMGMTIF.T_SU_DAT_REG.base_addr, timings["T_SU_DAT"])
+
+    # Bus available condition timings (computed from clock frequency)
+    # tBUF  (T_FREE) = 38.4 ns for pure I3C bus
+    # tAVAL (T_AVAL) = 1 µs
+    # tIDLE (T_IDLE) = 200 µs
+    await _write_csr(tb, tb.reg_map.I3C_EC.SOCMGMTIF.T_FREE_REG.base_addr,
+                     ceil(fclk * 38.4 / 1000))
+    await _write_csr(tb, tb.reg_map.I3C_EC.SOCMGMTIF.T_AVAL_REG.base_addr,
+                     int(fclk))
+    await _write_csr(tb, tb.reg_map.I3C_EC.SOCMGMTIF.T_IDLE_REG.base_addr,
+                     int(fclk * 200))
+
+    # HDR error recovery timer (I3C spec §5.1.10.1.9)
+    # Default threshold = 60 µs worth of clock cycles; overridable for tests
+    timeout_cycles = hdr_timeout_cycles if hdr_timeout_cycles is not None else int(fclk * 60)
+    await _write_csr(tb, tb.reg_map.I3C_EC.SOCMGMTIF.T_HDR_TIMEOUT_REG.base_addr,
+                     timeout_cycles)
+    await _write_csr(tb, tb.reg_map.I3C_EC.SOCMGMTIF.HDR_TIMEOUT_EN_REG.base_addr,
+                     1 if hdr_timeout_en else 0)
 
     await setup_hci_thresholds(tb)
 
@@ -287,6 +310,25 @@ async def umbrella_stby_init(
         tb.reg_map.I3CBASE.HC_CONTROL.BUS_ENABLE,
         1,
     )
+
+
+async def enable_hdr_timeout(tb, threshold=None):
+    """Enable the HDR error recovery timer.
+
+    Args:
+        tb: Test bench interface.
+        threshold: Timer threshold in clock cycles.  If provided, overrides
+                   the value written during boot_init().
+    """
+    if threshold is not None:
+        await _write_csr(tb, tb.reg_map.I3C_EC.SOCMGMTIF.T_HDR_TIMEOUT_REG.base_addr,
+                         threshold)
+    await _write_csr(tb, tb.reg_map.I3C_EC.SOCMGMTIF.HDR_TIMEOUT_EN_REG.base_addr, 1)
+
+
+async def disable_hdr_timeout(tb):
+    """Disable the HDR error recovery timer."""
+    await _write_csr(tb, tb.reg_map.I3C_EC.SOCMGMTIF.HDR_TIMEOUT_EN_REG.base_addr, 0)
 
 
 async def tti_init(tb):

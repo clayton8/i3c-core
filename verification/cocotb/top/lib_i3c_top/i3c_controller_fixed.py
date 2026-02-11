@@ -430,6 +430,51 @@ class I3cControllerFixed(I3cController):
 
         self.give_bus_control()
 
+    # =========================================================================
+    # TE0/TE1 ERROR INJECTION METHODS
+    # =========================================================================
+
+    async def send_te0_error(self) -> None:
+        """
+        Trigger a TE0 error by sending START followed by 0x7E/R.
+
+        Per I3C spec §5.1.10.1.1, receipt of 7'h7E/R (broadcast address with
+        read bit) after a dynamic address has been assigned is an Error Type
+        TE0. The target enters HDR error mode (deaf) until it detects the HDR
+        Exit Pattern or the optional 60µs timeout (§5.1.10.1.9).
+
+        After calling this method the controller still holds bus control.
+        The caller must release the bus (e.g., send_hdr_exit + give_bus_control,
+        or send_stop + give_bus_control) when done.
+        """
+        await self.take_bus_control()
+        await self.send_start()
+        await self.write_addr_header(I3C_RSVD_BYTE, read=True)
+
+    async def send_te1_error(self, ccc: int = 0x20) -> None:
+        """
+        Trigger a TE1 error by sending a CCC with bad T-bit parity.
+
+        Per I3C spec §5.1.10.1.2, if the target detects a parity error during
+        a CCC code it cannot know whether the bus has changed to HDR mode.
+        The target enters HDR error mode (deaf) until it detects the HDR Exit
+        Pattern or the optional 60µs timeout (§5.1.10.1.9).
+
+        Args:
+            ccc: CCC command code to send with bad parity (default: ENTHDR0 0x20).
+
+        After calling this method the controller still holds bus control.
+        The caller must release the bus when done.
+        """
+        await self.take_bus_control()
+        await self.send_start()
+        await self.write_addr_header(I3C_RSVD_BYTE)
+        await self.send_byte_tbit(ccc, inject_tbit_err=True)
+
+    # =========================================================================
+    # BUS STATE CONTROL METHODS
+    # =========================================================================
+
     async def set_bus_idle(self) -> None:
         """
         Set bus to idle state (both SDA and SCL high).

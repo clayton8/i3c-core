@@ -211,6 +211,7 @@ module ccc
     // -------------------------------------------------------------------------
     input  logic exit_hdr_i,       // Asserted when exit HDR pattern detected
     output logic in_hdr_mode_o,    // Asserted while in HDR mode
+    output logic in_hdr_err_mode_o, // Asserted while in HDR mode due to TE0/TE1 error
 
     // -------------------------------------------------------------------------
     // SETDASA/SETAASA: Set Dynamic Address from Static Address
@@ -448,6 +449,7 @@ module ccc
   // HDR Mode Handling
   // ---------------------------------------------------------------------------
   logic       in_hdr_mode;           // Currently in HDR mode
+  logic       in_hdr_err_mode;       // In HDR mode due to TE0/TE1 error (not CCC-commanded)
   logic       enter_hdr_mode;        // Trigger to enter HDR mode (set when valid ENTHDR received)
 
   // ---------------------------------------------------------------------------
@@ -1771,6 +1773,22 @@ module ccc
   end
 
   assign in_hdr_mode_o = in_hdr_mode;
+
+  // Track whether HDR mode was entered due to TE0/TE1 error (not CCC command).
+  // Used to gate the optional 60µs recovery timer (I3C spec §5.1.10.1.9).
+  always_ff @(posedge clk_i or negedge rst_ni) begin : proc_hdr_err_mode
+    if (~rst_ni) begin
+      in_hdr_err_mode <= 1'b0;
+    end else begin
+      if (te0_err || te1_err) begin
+        in_hdr_err_mode <= 1'b1;
+      end else if (exit_hdr_i) begin
+        in_hdr_err_mode <= 1'b0;
+      end
+    end
+  end
+
+  assign in_hdr_err_mode_o = in_hdr_err_mode;
 
   // ===========================================================================
   // ENTDAA SUB-MODULE INSTANTIATION

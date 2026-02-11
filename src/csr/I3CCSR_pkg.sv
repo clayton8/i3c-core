@@ -3917,6 +3917,22 @@ package I3CCSR_pkg;
     } I3CCSR__I3C_EC__SoCMgmtIf__T_IDLE_REG__out_t;
 
     typedef struct packed{
+        logic value;
+    } I3CCSR__I3C_EC__SoCMgmtIf__HDR_TIMEOUT_EN_REG__HDR_TIMEOUT_EN__out_t;
+
+    typedef struct packed{
+        I3CCSR__I3C_EC__SoCMgmtIf__HDR_TIMEOUT_EN_REG__HDR_TIMEOUT_EN__out_t HDR_TIMEOUT_EN;
+    } I3CCSR__I3C_EC__SoCMgmtIf__HDR_TIMEOUT_EN_REG__out_t;
+
+    typedef struct packed{
+        logic [19:0] value;
+    } I3CCSR__I3C_EC__SoCMgmtIf__T_HDR_TIMEOUT_REG__T_HDR_TIMEOUT__out_t;
+
+    typedef struct packed{
+        I3CCSR__I3C_EC__SoCMgmtIf__T_HDR_TIMEOUT_REG__T_HDR_TIMEOUT__out_t T_HDR_TIMEOUT;
+    } I3CCSR__I3C_EC__SoCMgmtIf__T_HDR_TIMEOUT_REG__out_t;
+
+    typedef struct packed{
         I3CCSR__I3C_EC__SoCMgmtIf__EXTCAP_HEADER__out_t EXTCAP_HEADER;
         I3CCSR__I3C_EC__SoCMgmtIf__SOC_MGMT_CONTROL__out_t SOC_MGMT_CONTROL;
         I3CCSR__I3C_EC__SoCMgmtIf__SOC_MGMT_STATUS__out_t SOC_MGMT_STATUS;
@@ -3940,6 +3956,8 @@ package I3CCSR_pkg;
         I3CCSR__I3C_EC__SoCMgmtIf__T_FREE_REG__out_t T_FREE_REG;
         I3CCSR__I3C_EC__SoCMgmtIf__T_AVAL_REG__out_t T_AVAL_REG;
         I3CCSR__I3C_EC__SoCMgmtIf__T_IDLE_REG__out_t T_IDLE_REG;
+        I3CCSR__I3C_EC__SoCMgmtIf__HDR_TIMEOUT_EN_REG__out_t HDR_TIMEOUT_EN_REG;
+        I3CCSR__I3C_EC__SoCMgmtIf__T_HDR_TIMEOUT_REG__out_t T_HDR_TIMEOUT_REG;
     } I3CCSR__I3C_EC__SoCMgmtIf__out_t;
 
     typedef struct packed{

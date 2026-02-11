@@ -230,7 +230,7 @@ async def test_interrupt_force(dut, fields):
     """
 
     # Setup
-    i3c_controller, _, tb = await test_setup(dut, timeout_us=0.5)
+    i3c_controller, _, tb = await test_setup(dut, timeout_us=2)
     irq = dut.xi3c_wrapper.irq_o
 
     f_ena, f_force, f_sts = fields

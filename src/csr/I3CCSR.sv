@@ -237,6 +237,8 @@ module I3CCSR (
                 logic T_FREE_REG;
                 logic T_AVAL_REG;
                 logic T_IDLE_REG;
+                logic HDR_TIMEOUT_EN_REG;
+                logic T_HDR_TIMEOUT_REG;
             } SoCMgmtIf;
             struct packed{
                 logic EXTCAP_HEADER;
@@ -409,9 +411,11 @@ module I3CCSR (
         decoded_reg_strb.I3C_EC.SoCMgmtIf.T_FREE_REG = cpuif_req_masked & (cpuif_addr == 12'h350);
         decoded_reg_strb.I3C_EC.SoCMgmtIf.T_AVAL_REG = cpuif_req_masked & (cpuif_addr == 12'h354);
         decoded_reg_strb.I3C_EC.SoCMgmtIf.T_IDLE_REG = cpuif_req_masked & (cpuif_addr == 12'h358);
-        decoded_reg_strb.I3C_EC.CtrlCfg.EXTCAP_HEADER = cpuif_req_masked & (cpuif_addr == 12'h360);
-        decoded_reg_strb.I3C_EC.CtrlCfg.CONTROLLER_CONFIG = cpuif_req_masked & (cpuif_addr == 12'h364);
-        decoded_reg_strb.I3C_EC.TERMINATION_EXTCAP_HEADER = cpuif_req_masked & (cpuif_addr == 12'h368);
+        decoded_reg_strb.I3C_EC.SoCMgmtIf.HDR_TIMEOUT_EN_REG = cpuif_req_masked & (cpuif_addr == 12'h35c);
+        decoded_reg_strb.I3C_EC.SoCMgmtIf.T_HDR_TIMEOUT_REG = cpuif_req_masked & (cpuif_addr == 12'h360);
+        decoded_reg_strb.I3C_EC.CtrlCfg.EXTCAP_HEADER = cpuif_req_masked & (cpuif_addr == 12'h368);
+        decoded_reg_strb.I3C_EC.CtrlCfg.CONTROLLER_CONFIG = cpuif_req_masked & (cpuif_addr == 12'h36c);
+        decoded_reg_strb.I3C_EC.TERMINATION_EXTCAP_HEADER = cpuif_req_masked & (cpuif_addr == 12'h370);
         decoded_reg_strb.DAT = cpuif_req_masked & (cpuif_addr >= 12'h400) & (cpuif_addr <= 12'h400 + 12'h3ff);
         is_external |= cpuif_req_masked & (cpuif_addr >= 12'h400) & (cpuif_addr <= 12'h400 + 12'h3ff);
         decoded_reg_strb.DCT = cpuif_req_masked & (cpuif_addr >= 12'h800) & (cpuif_addr <= 12'h800 + 12'h7ff);
@@ -2098,6 +2102,18 @@ module I3CCSR (
                         logic load_next;
                     } T_IDLE;
                 } T_IDLE_REG;
+                struct packed{
+                    struct packed{
+                        logic next;
+                        logic load_next;
+                    } HDR_TIMEOUT_EN;
+                } HDR_TIMEOUT_EN_REG;
+                struct packed{
+                    struct packed{
+                        logic [19:0] next;
+                        logic load_next;
+                    } T_HDR_TIMEOUT;
+                } T_HDR_TIMEOUT_REG;
             } SoCMgmtIf;
             struct packed{
                 struct packed{
@@ -3415,6 +3431,16 @@ module I3CCSR (
                         logic [31:0] value;
                     } T_IDLE;
                 } T_IDLE_REG;
+                struct packed{
+                    struct packed{
+                        logic value;
+                    } HDR_TIMEOUT_EN;
+                } HDR_TIMEOUT_EN_REG;
+                struct packed{
+                    struct packed{
+                        logic [19:0] value;
+                    } T_HDR_TIMEOUT;
+                } T_HDR_TIMEOUT_REG;
             } SoCMgmtIf;
             struct packed{
                 struct packed{
@@ -11580,7 +11606,7 @@ module I3CCSR (
     end
     assign hwif_out.I3C_EC.TTI.DATA_BUFFER_THLD_CTRL.RX_START_THLD.value = field_storage.I3C_EC.TTI.DATA_BUFFER_THLD_CTRL.RX_START_THLD.value;
     assign hwif_out.I3C_EC.SoCMgmtIf.EXTCAP_HEADER.CAP_ID.value = 8'hc1;
-    assign hwif_out.I3C_EC.SoCMgmtIf.EXTCAP_HEADER.CAP_LENGTH.value = 16'h18;
+    assign hwif_out.I3C_EC.SoCMgmtIf.EXTCAP_HEADER.CAP_LENGTH.value = 16'h1a;
     // Field: I3CCSR.I3C_EC.SoCMgmtIf.SOC_MGMT_CONTROL.PLACEHOLDER
     always_comb begin
         automatic logic [31:0] next_c;
@@ -12378,6 +12404,52 @@ module I3CCSR (
         end
     end
     assign hwif_out.I3C_EC.SoCMgmtIf.T_IDLE_REG.T_IDLE.value = field_storage.I3C_EC.SoCMgmtIf.T_IDLE_REG.T_IDLE.value;
+    // Field: I3CCSR.I3C_EC.SoCMgmtIf.HDR_TIMEOUT_EN_REG.HDR_TIMEOUT_EN
+    always_comb begin
+        automatic logic [0:0] next_c;
+        automatic logic load_next_c;
+        next_c = field_storage.I3C_EC.SoCMgmtIf.HDR_TIMEOUT_EN_REG.HDR_TIMEOUT_EN.value;
+        load_next_c = '0;
+        if(decoded_reg_strb.I3C_EC.SoCMgmtIf.HDR_TIMEOUT_EN_REG && decoded_req_is_wr) begin // SW write
+            next_c = (field_storage.I3C_EC.SoCMgmtIf.HDR_TIMEOUT_EN_REG.HDR_TIMEOUT_EN.value & ~decoded_wr_biten[0:0]) | (decoded_wr_data[0:0] & decoded_wr_biten[0:0]);
+            load_next_c = '1;
+        end
+        field_combo.I3C_EC.SoCMgmtIf.HDR_TIMEOUT_EN_REG.HDR_TIMEOUT_EN.next = next_c;
+        field_combo.I3C_EC.SoCMgmtIf.HDR_TIMEOUT_EN_REG.HDR_TIMEOUT_EN.load_next = load_next_c;
+    end
+    always_ff @(posedge clk or negedge hwif_in.rst_ni) begin
+        if(~hwif_in.rst_ni) begin
+            field_storage.I3C_EC.SoCMgmtIf.HDR_TIMEOUT_EN_REG.HDR_TIMEOUT_EN.value <= 1'h0;
+        end else begin
+            if(field_combo.I3C_EC.SoCMgmtIf.HDR_TIMEOUT_EN_REG.HDR_TIMEOUT_EN.load_next) begin
+                field_storage.I3C_EC.SoCMgmtIf.HDR_TIMEOUT_EN_REG.HDR_TIMEOUT_EN.value <= field_combo.I3C_EC.SoCMgmtIf.HDR_TIMEOUT_EN_REG.HDR_TIMEOUT_EN.next;
+            end
+        end
+    end
+    assign hwif_out.I3C_EC.SoCMgmtIf.HDR_TIMEOUT_EN_REG.HDR_TIMEOUT_EN.value = field_storage.I3C_EC.SoCMgmtIf.HDR_TIMEOUT_EN_REG.HDR_TIMEOUT_EN.value;
+    // Field: I3CCSR.I3C_EC.SoCMgmtIf.T_HDR_TIMEOUT_REG.T_HDR_TIMEOUT
+    always_comb begin
+        automatic logic [19:0] next_c;
+        automatic logic load_next_c;
+        next_c = field_storage.I3C_EC.SoCMgmtIf.T_HDR_TIMEOUT_REG.T_HDR_TIMEOUT.value;
+        load_next_c = '0;
+        if(decoded_reg_strb.I3C_EC.SoCMgmtIf.T_HDR_TIMEOUT_REG && decoded_req_is_wr) begin // SW write
+            next_c = (field_storage.I3C_EC.SoCMgmtIf.T_HDR_TIMEOUT_REG.T_HDR_TIMEOUT.value & ~decoded_wr_biten[19:0]) | (decoded_wr_data[19:0] & decoded_wr_biten[19:0]);
+            load_next_c = '1;
+        end
+        field_combo.I3C_EC.SoCMgmtIf.T_HDR_TIMEOUT_REG.T_HDR_TIMEOUT.next = next_c;
+        field_combo.I3C_EC.SoCMgmtIf.T_HDR_TIMEOUT_REG.T_HDR_TIMEOUT.load_next = load_next_c;
+    end
+    always_ff @(posedge clk or negedge hwif_in.rst_ni) begin
+        if(~hwif_in.rst_ni) begin
+            field_storage.I3C_EC.SoCMgmtIf.T_HDR_TIMEOUT_REG.T_HDR_TIMEOUT.value <= 20'hea60;
+        end else begin
+            if(field_combo.I3C_EC.SoCMgmtIf.T_HDR_TIMEOUT_REG.T_HDR_TIMEOUT.load_next) begin
+                field_storage.I3C_EC.SoCMgmtIf.T_HDR_TIMEOUT_REG.T_HDR_TIMEOUT.value <= field_combo.I3C_EC.SoCMgmtIf.T_HDR_TIMEOUT_REG.T_HDR_TIMEOUT.next;
+            end
+        end
+    end
+    assign hwif_out.I3C_EC.SoCMgmtIf.T_HDR_TIMEOUT_REG.T_HDR_TIMEOUT.value = field_storage.I3C_EC.SoCMgmtIf.T_HDR_TIMEOUT_REG.T_HDR_TIMEOUT.value;
     assign hwif_out.I3C_EC.CtrlCfg.EXTCAP_HEADER.CAP_ID.value = 8'h2;
     assign hwif_out.I3C_EC.CtrlCfg.EXTCAP_HEADER.CAP_LENGTH.value = 16'h2;
     // Field: I3CCSR.I3C_EC.CtrlCfg.CONTROLLER_CONFIG.OPERATION_MODE
@@ -12462,7 +12534,7 @@ module I3CCSR (
     logic [31:0] readback_data;
 
     // Assign readback values to a flattened array
-    logic [136-1:0][31:0] readback_array;
+    logic [138-1:0][31:0] readback_array;
     assign readback_array[0][31:0] = (decoded_reg_strb.I3CBase.HCI_VERSION && !decoded_req_is_wr) ? 32'h120 : '0;
     assign readback_array[1][0:0] = (decoded_reg_strb.I3CBase.HC_CONTROL && !decoded_req_is_wr) ? field_storage.I3CBase.HC_CONTROL.IBA_INCLUDE.value : '0;
     assign readback_array[1][2:1] = '0;
@@ -12989,7 +13061,7 @@ module I3CCSR (
     assign readback_array[107][26:24] = (decoded_reg_strb.I3C_EC.TTI.DATA_BUFFER_THLD_CTRL && !decoded_req_is_wr) ? field_storage.I3C_EC.TTI.DATA_BUFFER_THLD_CTRL.RX_START_THLD.value : '0;
     assign readback_array[107][31:27] = '0;
     assign readback_array[108][7:0] = (decoded_reg_strb.I3C_EC.SoCMgmtIf.EXTCAP_HEADER && !decoded_req_is_wr) ? 8'hc1 : '0;
-    assign readback_array[108][23:8] = (decoded_reg_strb.I3C_EC.SoCMgmtIf.EXTCAP_HEADER && !decoded_req_is_wr) ? 16'h18 : '0;
+    assign readback_array[108][23:8] = (decoded_reg_strb.I3C_EC.SoCMgmtIf.EXTCAP_HEADER && !decoded_req_is_wr) ? 16'h1a : '0;
     assign readback_array[108][31:24] = '0;
     assign readback_array[109][31:0] = (decoded_reg_strb.I3C_EC.SoCMgmtIf.SOC_MGMT_CONTROL && !decoded_req_is_wr) ? field_storage.I3C_EC.SoCMgmtIf.SOC_MGMT_CONTROL.PLACEHOLDER.value : '0;
     assign readback_array[110][31:0] = (decoded_reg_strb.I3C_EC.SoCMgmtIf.SOC_MGMT_STATUS && !decoded_req_is_wr) ? field_storage.I3C_EC.SoCMgmtIf.SOC_MGMT_STATUS.PLACEHOLDER.value : '0;
@@ -13039,17 +13111,21 @@ module I3CCSR (
     assign readback_array[128][31:0] = (decoded_reg_strb.I3C_EC.SoCMgmtIf.T_FREE_REG && !decoded_req_is_wr) ? field_storage.I3C_EC.SoCMgmtIf.T_FREE_REG.T_FREE.value : '0;
     assign readback_array[129][31:0] = (decoded_reg_strb.I3C_EC.SoCMgmtIf.T_AVAL_REG && !decoded_req_is_wr) ? field_storage.I3C_EC.SoCMgmtIf.T_AVAL_REG.T_AVAL.value : '0;
     assign readback_array[130][31:0] = (decoded_reg_strb.I3C_EC.SoCMgmtIf.T_IDLE_REG && !decoded_req_is_wr) ? field_storage.I3C_EC.SoCMgmtIf.T_IDLE_REG.T_IDLE.value : '0;
-    assign readback_array[131][7:0] = (decoded_reg_strb.I3C_EC.CtrlCfg.EXTCAP_HEADER && !decoded_req_is_wr) ? 8'h2 : '0;
-    assign readback_array[131][23:8] = (decoded_reg_strb.I3C_EC.CtrlCfg.EXTCAP_HEADER && !decoded_req_is_wr) ? 16'h2 : '0;
-    assign readback_array[131][31:24] = '0;
-    assign readback_array[132][3:0] = '0;
-    assign readback_array[132][5:4] = (decoded_reg_strb.I3C_EC.CtrlCfg.CONTROLLER_CONFIG && !decoded_req_is_wr) ? field_storage.I3C_EC.CtrlCfg.CONTROLLER_CONFIG.OPERATION_MODE.value : '0;
-    assign readback_array[132][31:6] = '0;
-    assign readback_array[133][7:0] = (decoded_reg_strb.I3C_EC.TERMINATION_EXTCAP_HEADER && !decoded_req_is_wr) ? 8'h0 : '0;
-    assign readback_array[133][23:8] = (decoded_reg_strb.I3C_EC.TERMINATION_EXTCAP_HEADER && !decoded_req_is_wr) ? 16'h1 : '0;
+    assign readback_array[131][0:0] = (decoded_reg_strb.I3C_EC.SoCMgmtIf.HDR_TIMEOUT_EN_REG && !decoded_req_is_wr) ? field_storage.I3C_EC.SoCMgmtIf.HDR_TIMEOUT_EN_REG.HDR_TIMEOUT_EN.value : '0;
+    assign readback_array[131][31:1] = '0;
+    assign readback_array[132][19:0] = (decoded_reg_strb.I3C_EC.SoCMgmtIf.T_HDR_TIMEOUT_REG && !decoded_req_is_wr) ? field_storage.I3C_EC.SoCMgmtIf.T_HDR_TIMEOUT_REG.T_HDR_TIMEOUT.value : '0;
+    assign readback_array[132][31:20] = '0;
+    assign readback_array[133][7:0] = (decoded_reg_strb.I3C_EC.CtrlCfg.EXTCAP_HEADER && !decoded_req_is_wr) ? 8'h2 : '0;
+    assign readback_array[133][23:8] = (decoded_reg_strb.I3C_EC.CtrlCfg.EXTCAP_HEADER && !decoded_req_is_wr) ? 16'h2 : '0;
     assign readback_array[133][31:24] = '0;
-    assign readback_array[134] = hwif_in.DAT.rd_ack ? hwif_in.DAT.rd_data : '0;
-    assign readback_array[135] = hwif_in.DCT.rd_ack ? hwif_in.DCT.rd_data : '0;
+    assign readback_array[134][3:0] = '0;
+    assign readback_array[134][5:4] = (decoded_reg_strb.I3C_EC.CtrlCfg.CONTROLLER_CONFIG && !decoded_req_is_wr) ? field_storage.I3C_EC.CtrlCfg.CONTROLLER_CONFIG.OPERATION_MODE.value : '0;
+    assign readback_array[134][31:6] = '0;
+    assign readback_array[135][7:0] = (decoded_reg_strb.I3C_EC.TERMINATION_EXTCAP_HEADER && !decoded_req_is_wr) ? 8'h0 : '0;
+    assign readback_array[135][23:8] = (decoded_reg_strb.I3C_EC.TERMINATION_EXTCAP_HEADER && !decoded_req_is_wr) ? 16'h1 : '0;
+    assign readback_array[135][31:24] = '0;
+    assign readback_array[136] = hwif_in.DAT.rd_ack ? hwif_in.DAT.rd_data : '0;
+    assign readback_array[137] = hwif_in.DCT.rd_ack ? hwif_in.DCT.rd_data : '0;
 
     // Reduce the array
     always_comb begin
@@ -13057,7 +13133,7 @@ module I3CCSR (
         readback_done = decoded_req & ~decoded_req_is_wr & ~decoded_strb_is_external;
         readback_err = '0;
         readback_data_var = '0;
-        for(int i=0; i<136; i++) readback_data_var |= readback_array[i];
+        for(int i=0; i<138; i++) readback_data_var |= readback_array[i];
         readback_data = readback_data_var;
     end
 

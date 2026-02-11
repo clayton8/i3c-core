@@ -84,7 +84,7 @@ async def test_setup(dut, fclk=333.0, fbus=12.5,
     for k, v in timings.items():
         dut._log.info(f"{k} = {v}")
 
-    await boot_init(tb, timings,
+    await boot_init(tb, timings, fclk=fclk,
                     static_addr=static_addr, virtual_static_addr=virtual_static_addr,
                     dynamic_addr=dynamic_addr, virtual_dynamic_addr=virtual_dynamic_addr)
 

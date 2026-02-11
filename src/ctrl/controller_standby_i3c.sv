@@ -76,6 +76,10 @@ module controller_standby_i3c
     input  i3c_timeparam_t t_bus_idle_i,
     input  i3c_timeparam_t t_bus_available_i,
 
+    // HDR error recovery timer configuration (I3C spec §5.1.10.1.9)
+    input  logic           hdr_timeout_en_i,
+    input  i3c_timeparam_t t_hdr_timeout_i,
+
     // Address Control
     input  logic      target_sta_addr_valid_i,
     input  i3c_addr_t target_sta_addr_i,
@@ -233,6 +237,7 @@ module controller_standby_i3c
   // Special bus patterns
   logic target_reset_detect;
   logic hdr_exit_detect;
+  logic in_hdr_err_mode;
 
   // SubFSMs status
   logic ibi_pending;
@@ -527,6 +532,7 @@ module controller_standby_i3c
 
     .exit_hdr_i    (hdr_exit_detect),
     .in_hdr_mode_o (in_hdr_mode_o),
+    .in_hdr_err_mode_o (in_hdr_err_mode),
 
     .set_dasa_o,
     .set_dasa_valid_o,
@@ -632,6 +638,10 @@ module controller_standby_i3c
     .bus_i                (hdr_exit_bus_i),
 
     .is_in_hdr_mode_i     (in_hdr_mode_o),
+    .is_in_hdr_err_mode_i (in_hdr_err_mode),
+
+    .hdr_timeout_en_i     (hdr_timeout_en_i),
+    .t_hdr_timeout_i      (t_hdr_timeout_i),
 
     .hdr_exit_detect_o    (hdr_exit_detect),
     .target_reset_detect_o(target_reset_detect)

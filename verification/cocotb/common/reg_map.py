@@ -4622,7 +4622,7 @@ reg_map = Munch.fromDict({
                 "CAP_LENGTH": {
                     "low": 8,
                     "mask": 16776960,
-                    "reset": 24,
+                    "reset": 26,
                     "sw": "r",
                     "hw": "r",
                     "woclr": 0,
@@ -5057,13 +5057,41 @@ reg_map = Munch.fromDict({
                     "rclr": 0,
                     "hwclr": 0
                 }
+            },
+            "HDR_TIMEOUT_EN_REG": {
+                "base_addr": 860,
+                "offset": 860,
+                "HDR_TIMEOUT_EN": {
+                    "low": 0,
+                    "mask": 1,
+                    "reset": 0,
+                    "sw": "rw",
+                    "hw": "r",
+                    "woclr": 0,
+                    "rclr": 0,
+                    "hwclr": 0
+                }
+            },
+            "T_HDR_TIMEOUT_REG": {
+                "base_addr": 864,
+                "offset": 864,
+                "T_HDR_TIMEOUT": {
+                    "low": 0,
+                    "mask": 1048575,
+                    "reset": 60000,
+                    "sw": "rw",
+                    "hw": "r",
+                    "woclr": 0,
+                    "rclr": 0,
+                    "hwclr": 0
+                }
             }
         },
         "CTRLCFG": {
-            "start_addr": 864,
+            "start_addr": 872,
             "EXTCAP_HEADER": {
-                "base_addr": 864,
-                "offset": 864,
+                "base_addr": 872,
+                "offset": 872,
                 "CAP_ID": {
                     "low": 0,
                     "mask": 255,
@@ -5086,8 +5114,8 @@ reg_map = Munch.fromDict({
                 }
             },
             "CONTROLLER_CONFIG": {
-                "base_addr": 868,
-                "offset": 868,
+                "base_addr": 876,
+                "offset": 876,
                 "OPERATION_MODE": {
                     "low": 4,
                     "mask": 48,
@@ -5101,8 +5129,8 @@ reg_map = Munch.fromDict({
             }
         },
         "TERMINATION_EXTCAP_HEADER": {
-            "base_addr": 872,
-            "offset": 872,
+            "base_addr": 880,
+            "offset": 880,
             "CAP_ID": {
                 "low": 0,
                 "mask": 255,

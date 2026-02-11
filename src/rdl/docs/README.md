@@ -1076,7 +1076,7 @@ When set to 0, it holds execution of enqueued commands and runs current command 
 
 - Absolute Address: 0x100
 - Base Offset: 0x100
-- Size: 0x26C
+- Size: 0x274
 
 |Offset|        Identifier       |               Name               |
 |------|-------------------------|----------------------------------|
@@ -1084,8 +1084,8 @@ When set to 0, it holds execution of enqueued commands and runs current command 
 | 0x080|      StdbyCtrlMode      |      Standby Controller Mode     |
 | 0x100|           TTI           |   Target Transaction Interface   |
 | 0x200|        SoCMgmtIf        |     SoC Management Interface     |
-| 0x260|         CtrlCfg         |         Controller Config        |
-| 0x268|TERMINATION_EXTCAP_HEADER|                 —                |
+| 0x268|         CtrlCfg         |         Controller Config        |
+| 0x270|TERMINATION_EXTCAP_HEADER|                 —                |
 
 ## SecFwRecoveryIf register file
 
@@ -3880,7 +3880,7 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 - Absolute Address: 0x300
 - Base Offset: 0x200
-- Size: 0x5C
+- Size: 0x64
 
 |Offset|       Identifier      |                  Name                  |
 |------|-----------------------|----------------------------------------|
@@ -3907,6 +3907,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 | 0x50 |       T_FREE_REG      |                                        |
 | 0x54 |       T_AVAL_REG      |                                        |
 | 0x58 |       T_IDLE_REG      |                                        |
+| 0x5C |   HDR_TIMEOUT_EN_REG  |                                        |
+| 0x60 |   T_HDR_TIMEOUT_REG   |                                        |
 
 ### EXTCAP_HEADER register
 
@@ -3917,7 +3919,7 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 |Bits|Identifier|Access|Reset|   Name   |
 |----|----------|------|-----|----------|
 | 7:0|  CAP_ID  |   r  | 0xC1|  CAP_ID  |
-|23:8|CAP_LENGTH|   r  | 0x18|CAP_LENGTH|
+|23:8|CAP_LENGTH|   r  | 0x1A|CAP_LENGTH|
 
 #### CAP_ID field
 
@@ -4327,10 +4329,38 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 <p>Time in clock cycles from STOP detection until Bus Idle Condition (tIDLE). Configure based on System Clock</p>
 
-## CtrlCfg register file
+### HDR_TIMEOUT_EN_REG register
+
+- Absolute Address: 0x35C
+- Base Offset: 0x5C
+- Size: 0x4
+
+|Bits|  Identifier  |Access|Reset|Name|
+|----|--------------|------|-----|----|
+|  0 |HDR_TIMEOUT_EN|  rw  | 0x0 |    |
+
+#### HDR_TIMEOUT_EN field
+
+<p>Enable bit for the optional 60us HDR error recovery timer (I3C spec 5.1.10.1.9). When enabled, the Target can recover from TE0/TE1 errors if both SCL and SDA stay High for a period exceeding the configured threshold. Disabled on reset.</p>
+
+### T_HDR_TIMEOUT_REG register
 
 - Absolute Address: 0x360
-- Base Offset: 0x260
+- Base Offset: 0x60
+- Size: 0x4
+
+|Bits|  Identifier |Access| Reset|Name|
+|----|-------------|------|------|----|
+|19:0|T_HDR_TIMEOUT|  rw  |0xEA60|    |
+
+#### T_HDR_TIMEOUT field
+
+<p>Timer threshold in clock cycles for the optional HDR error recovery (I3C spec 5.1.10.1.9). If both SCL and SDA stay High for this many clock cycles during a TE0/TE1 error-induced HDR mode, the Target exits HDR mode and returns to Idle. Configure based on System Clock to achieve 60us.</p>
+
+## CtrlCfg register file
+
+- Absolute Address: 0x368
+- Base Offset: 0x268
 - Size: 0x8
 
 |Offset|    Identifier   |       Name      |
@@ -4340,7 +4370,7 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### EXTCAP_HEADER register
 
-- Absolute Address: 0x360
+- Absolute Address: 0x368
 - Base Offset: 0x0
 - Size: 0x4
 
@@ -4359,7 +4389,7 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### CONTROLLER_CONFIG register
 
-- Absolute Address: 0x364
+- Absolute Address: 0x36C
 - Base Offset: 0x4
 - Size: 0x4
 
@@ -4373,8 +4403,8 @@ Part of data in the IBI queue is considered corrupted and will be discarded.
 
 ### TERMINATION_EXTCAP_HEADER register
 
-- Absolute Address: 0x368
-- Base Offset: 0x268
+- Absolute Address: 0x370
+- Base Offset: 0x270
 - Size: 0x4
 
 <p>Register after the last EC must advertise ID == 0.

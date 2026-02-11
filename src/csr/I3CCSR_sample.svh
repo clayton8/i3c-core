@@ -4087,6 +4087,56 @@
         end
     endfunction
 
+    /*----------------------- I3CCSR__I3C_EC__SOCMGMTIF__HDR_TIMEOUT_EN_REG SAMPLE FUNCTIONS -----------------------*/
+    function void I3CCSR__I3C_EC__SoCMgmtIf__HDR_TIMEOUT_EN_REG::sample(uvm_reg_data_t  data,
+                                                   uvm_reg_data_t  byte_en,
+                                                   bit             is_read,
+                                                   uvm_reg_map     map);
+        m_current = get();
+        m_data    = data;
+        m_is_read = is_read;
+        if (get_coverage(UVM_CVR_REG_BITS)) begin
+            foreach(HDR_TIMEOUT_EN_bit_cg[bt]) this.HDR_TIMEOUT_EN_bit_cg[bt].sample(data[0 + bt]);
+        end
+        if (get_coverage(UVM_CVR_FIELD_VALS)) begin
+            this.fld_cg.sample( data[0:0]/*HDR_TIMEOUT_EN*/   );
+        end
+    endfunction
+
+    function void I3CCSR__I3C_EC__SoCMgmtIf__HDR_TIMEOUT_EN_REG::sample_values();
+        if (get_coverage(UVM_CVR_REG_BITS)) begin
+            foreach(HDR_TIMEOUT_EN_bit_cg[bt]) this.HDR_TIMEOUT_EN_bit_cg[bt].sample(HDR_TIMEOUT_EN.get_mirrored_value() >> bt);
+        end
+        if (get_coverage(UVM_CVR_FIELD_VALS)) begin
+            this.fld_cg.sample( HDR_TIMEOUT_EN.get_mirrored_value()   );
+        end
+    endfunction
+
+    /*----------------------- I3CCSR__I3C_EC__SOCMGMTIF__T_HDR_TIMEOUT_REG SAMPLE FUNCTIONS -----------------------*/
+    function void I3CCSR__I3C_EC__SoCMgmtIf__T_HDR_TIMEOUT_REG::sample(uvm_reg_data_t  data,
+                                                   uvm_reg_data_t  byte_en,
+                                                   bit             is_read,
+                                                   uvm_reg_map     map);
+        m_current = get();
+        m_data    = data;
+        m_is_read = is_read;
+        if (get_coverage(UVM_CVR_REG_BITS)) begin
+            foreach(T_HDR_TIMEOUT_bit_cg[bt]) this.T_HDR_TIMEOUT_bit_cg[bt].sample(data[0 + bt]);
+        end
+        if (get_coverage(UVM_CVR_FIELD_VALS)) begin
+            this.fld_cg.sample( data[19:0]/*T_HDR_TIMEOUT*/   );
+        end
+    endfunction
+
+    function void I3CCSR__I3C_EC__SoCMgmtIf__T_HDR_TIMEOUT_REG::sample_values();
+        if (get_coverage(UVM_CVR_REG_BITS)) begin
+            foreach(T_HDR_TIMEOUT_bit_cg[bt]) this.T_HDR_TIMEOUT_bit_cg[bt].sample(T_HDR_TIMEOUT.get_mirrored_value() >> bt);
+        end
+        if (get_coverage(UVM_CVR_FIELD_VALS)) begin
+            this.fld_cg.sample( T_HDR_TIMEOUT.get_mirrored_value()   );
+        end
+    endfunction
+
     /*----------------------- I3CCSR__I3C_EC__CTRLCFG__EXTCAP_HEADER SAMPLE FUNCTIONS -----------------------*/
     function void I3CCSR__I3C_EC__CtrlCfg__EXTCAP_HEADER::sample(uvm_reg_data_t  data,
                                                    uvm_reg_data_t  byte_en,

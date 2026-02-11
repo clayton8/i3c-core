@@ -28,6 +28,10 @@ module configuration (
     output logic [19:0] t_bus_idle_o,
     output logic [19:0] t_bus_available_o,
 
+    // HDR error recovery timer (I3C spec §5.1.10.1.9)
+    output logic        hdr_timeout_en_o,
+    output logic [19:0] t_hdr_timeout_o,
+
     output logic [15:0] get_mwl_o,  // Get Max Write Length
     output logic [15:0] get_mrl_o,  // Get Max Read Length
     output logic [ 7:0] get_ibil_o,  // Get Max IBI Length
@@ -127,6 +131,10 @@ module configuration (
   assign t_bus_free_o = 20'(hwif_out_i.I3C_EC.SoCMgmtIf.T_FREE_REG.T_FREE.value);
   assign t_bus_idle_o = 20'(hwif_out_i.I3C_EC.SoCMgmtIf.T_IDLE_REG.T_IDLE.value);
   assign t_bus_available_o = 20'(hwif_out_i.I3C_EC.SoCMgmtIf.T_AVAL_REG.T_AVAL.value);
+
+  // Configuration: HDR error recovery timer
+  assign hdr_timeout_en_o = hwif_out_i.I3C_EC.SoCMgmtIf.HDR_TIMEOUT_EN_REG.HDR_TIMEOUT_EN.value;
+  assign t_hdr_timeout_o = hwif_out_i.I3C_EC.SoCMgmtIf.T_HDR_TIMEOUT_REG.T_HDR_TIMEOUT.value;
 
 
   assign target_sta_addr_valid_o =

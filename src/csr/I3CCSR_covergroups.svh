@@ -3397,6 +3397,46 @@
 
     endgroup
 
+    /*----------------------- I3CCSR__I3C_EC__SOCMGMTIF__HDR_TIMEOUT_EN_REG COVERGROUPS -----------------------*/
+    covergroup I3CCSR__I3C_EC__SoCMgmtIf__HDR_TIMEOUT_EN_REG_bit_cg with function sample(input bit reg_bit);
+        option.per_instance = 1;
+        reg_bit_cp : coverpoint reg_bit {
+            bins value[2] = {0,1};
+        }
+        reg_bit_edge_cp : coverpoint reg_bit {
+            bins rise = (0 => 1);
+            bins fall = (1 => 0);
+        }
+
+    endgroup
+    covergroup I3CCSR__I3C_EC__SoCMgmtIf__HDR_TIMEOUT_EN_REG_fld_cg with function sample(
+    input bit [1-1:0] HDR_TIMEOUT_EN
+    );
+        option.per_instance = 1;
+        HDR_TIMEOUT_EN_cp : coverpoint HDR_TIMEOUT_EN;
+
+    endgroup
+
+    /*----------------------- I3CCSR__I3C_EC__SOCMGMTIF__T_HDR_TIMEOUT_REG COVERGROUPS -----------------------*/
+    covergroup I3CCSR__I3C_EC__SoCMgmtIf__T_HDR_TIMEOUT_REG_bit_cg with function sample(input bit reg_bit);
+        option.per_instance = 1;
+        reg_bit_cp : coverpoint reg_bit {
+            bins value[2] = {0,1};
+        }
+        reg_bit_edge_cp : coverpoint reg_bit {
+            bins rise = (0 => 1);
+            bins fall = (1 => 0);
+        }
+
+    endgroup
+    covergroup I3CCSR__I3C_EC__SoCMgmtIf__T_HDR_TIMEOUT_REG_fld_cg with function sample(
+    input bit [20-1:0] T_HDR_TIMEOUT
+    );
+        option.per_instance = 1;
+        T_HDR_TIMEOUT_cp : coverpoint T_HDR_TIMEOUT;
+
+    endgroup
+
     /*----------------------- I3CCSR__I3C_EC__CTRLCFG__EXTCAP_HEADER COVERGROUPS -----------------------*/
     covergroup I3CCSR__I3C_EC__CtrlCfg__EXTCAP_HEADER_bit_cg with function sample(input bit reg_bit);
         option.per_instance = 1;

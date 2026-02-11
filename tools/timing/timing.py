@@ -233,12 +233,14 @@ def bus_condition_timing_register(freq=3e8):
     t_free = [38.4e-9, 0.5e-6, 1.3e-6]  # pure, mixed fm+, mixed
     t_aval = 1e-6
     t_idle = 200e-6
+    t_hdr_timeout = 60e-6  # I3C spec §5.1.10.1.9 - Optional HDR error recovery
 
     period = f2T(freq)
 
     T_FREE = norm_ceil(t_free[0], period)
     T_IDLE = norm_ceil(t_aval, period)
     T_AVAL = norm_ceil(t_idle, period)
+    T_HDR_TIMEOUT = norm_ceil(t_hdr_timeout, period)
 
     logging.info(
         f"[NORMATIVE]::: Register T_FREE should have reset value : {T_FREE} or {hex(T_FREE)}"
@@ -248,6 +250,9 @@ def bus_condition_timing_register(freq=3e8):
     )
     logging.info(
         f"[NORMATIVE]::: Register T_AVAL should have reset value : {T_AVAL} or {hex(T_AVAL)}"
+    )
+    logging.info(
+        f"[NORMATIVE]::: Register T_HDR_TIMEOUT should have reset value : {T_HDR_TIMEOUT} or {hex(T_HDR_TIMEOUT)}"
     )
 
 
