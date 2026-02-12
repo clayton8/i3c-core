@@ -803,7 +803,8 @@ async def test_i3c_target_pwrite_err_detection(dut):
         assert err_stat == 1, "Expected error detection"
 
         desc_len = data & 0xFFFF
-        assert desc_len == 1
+        # All bytes have corrupted T-bits so none enter the RX FIFO
+        assert desc_len == 0, f"Expected desc_len 0 (parity-errored bytes dropped), got {desc_len}"
 
         # Clear RX data FIFO
         await tb.write_csr_field(

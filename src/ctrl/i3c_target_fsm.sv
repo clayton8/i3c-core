@@ -321,9 +321,11 @@ module i3c_target_fsm import i3c_pkg::*; #(
 
   assign rx_overflow_err_o = ~rx_overflow_err_q & rx_overflow_err_r;
 
-  // RX FIFO valid when we finish reading byte (leave RxPWriteData) and there was no protocol error
+  // RX FIFO valid when we finish reading byte (leave RxPWriteTbit) and there was no protocol error.
+  // Use te2_err_priv_wr (combinational) so that errored byte is blocked in the same cycle the 
+  // mismatch is detected.
   assign rx_fifo_wvalid = (state_q == RxPWriteTbit) && (state_d != RxPWriteTbit) &&
-                          !(parity_err || rx_overflow_err_o);
+                          !(te2_err_priv_wr || parity_err || rx_overflow_err_o);
 
   always_ff @(posedge clk_i or negedge rst_ni) begin : latch_rx_fifo_wvalid
     if (~rst_ni) begin
