@@ -759,7 +759,8 @@ module controller_standby_i3c
     .ibi_byte_valid_o(ibi_fifo_rvalid),
     .ibi_byte_ready_i(ibi_fifo_rready),
     .ibi_byte_o      (ibi_fifo_rdata),
-    .ibi_byte_last_o (ibi_last_byte)
+    .ibi_byte_last_o (ibi_last_byte),
+    .ibi_byte_flush_i(1'b0)
   );
 
   assign tx_host_nack_o = tx_host_nack;

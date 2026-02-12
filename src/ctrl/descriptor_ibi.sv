@@ -33,13 +33,15 @@ module descriptor_ibi #(
   output logic                    ibi_byte_valid_o,
   input  logic                    ibi_byte_ready_i,
   output logic [IbiFifoWidth-1:0] ibi_byte_o,
-  output logic                    ibi_byte_last_o
+  output logic                    ibi_byte_last_o,
+  input  logic                    ibi_byte_flush_i
 );
 
   logic [7:0] data_mdb;
   logic [7:0] data_len;
   logic [7:0] data_words;
   logic [7:0] data_cnt;
+  logic [7:0] data_cnt_q, data_cnt_d;
   logic [7:0] data_byte;
   logic       queue_data_pop;
   logic       latch_descriptor;
@@ -49,7 +51,8 @@ module descriptor_ibi #(
     DescLatch,
     DescPop,
     WriteMdb,
-    WriteData
+    WriteData,
+    Flush
   } state_e;
 
   state_e state_q, state_d;
@@ -58,8 +61,10 @@ module descriptor_ibi #(
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
       state_q <= Idle;
+      data_cnt_q <= '0;
     end else begin
       state_q <= state_d;
+      data_cnt_q <= data_cnt_d;
     end
   end
 
@@ -86,7 +91,7 @@ module descriptor_ibi #(
     end else if (state_q == Idle) begin
       data_cnt <= '0;
     end else if (state_q == WriteData) begin
-      if (ibi_queue_rvalid_i && ibi_byte_ready_i) data_cnt <= data_cnt + 1;
+      //if (ibi_byte_valid_o && ibi_byte_ready_i) data_cnt <= data_cnt + 1;
     end
   end
 
@@ -99,10 +104,12 @@ module descriptor_ibi #(
 
     latch_descriptor = 1'b0;
 
+    data_cnt_d = data_cnt_q;
     state_d = state_q;
     case (state_q)
       Idle: begin
         if (ibi_queue_rvalid_i) begin
+          data_cnt_d = '0;
           latch_descriptor = 1'b1;
           state_d = DescLatch;
         end
@@ -123,9 +130,22 @@ module descriptor_ibi #(
       WriteMdb: begin
         ibi_byte_o       = data_mdb;
         ibi_byte_valid_o = 1'b1;
-        ibi_byte_last_o  = (data_len == 8'hFF); // No payload data
+        // No payload data - data_len is derived by subtracting 1 from the respective descriptor
+        // field, said field being zero therefore results in 0xFF for data_len (deliberate underflow).
+        ibi_byte_last_o  = (data_len == 8'hFF);
 
-        if (ibi_byte_ready_i) begin
+        if (ibi_byte_flush_i) begin
+          // Handle special cases for flushing
+          if (data_words == 0) begin
+            // No data after MDB, flushing is a NOP
+            state_d = Idle;
+          end else begin
+            // At least one word in queue after descriptor, flush it out
+            ibi_queue_rready_o = 1'b1;
+            // If there's more than one word, actually go to the Flush state
+            state_d = (data_words == 8'd1) ? Idle : Flush;
+          end
+        end else if (ibi_byte_ready_i) begin
           // Back to Idle on no payload data
           state_d = (data_len == 8'hFF) ? Idle : WriteData;
         end
@@ -134,21 +154,54 @@ module descriptor_ibi #(
       WriteData: begin
         ibi_byte_o       = data_byte;
         ibi_byte_valid_o = ibi_queue_rvalid_i;
-        ibi_byte_last_o  = (data_len == data_cnt); // Last payload byte
+        ibi_byte_last_o  = (data_len == data_cnt_q); // Last payload byte
 
-        ibi_queue_rready_o = ibi_byte_ready_i && queue_data_pop;
-        // Back to Idle when last byte read by target FSM
-        if (ibi_byte_ready_i && (data_cnt == data_len)) begin
+        if (ibi_byte_flush_i) begin
+          ibi_queue_rready_o = 1'b1;
+          // Overflow check
+          if (data_cnt_q[7:2] != '1) begin
+            // Round up to next full word and pop word from queue
+            data_cnt_d = {data_cnt_q[7:2] + 1, 2'b00};
+            state_d = Flush;
+          end else begin
+            // This was a very big IBI and we happened to be at the last word already
+            data_cnt_d = '0;
+            state_d = Idle;
+          end
+        end else if (ibi_byte_ready_i && (data_cnt_q == data_len)) begin
+          // Last byte read by target FSM; back to Idle
+          ibi_queue_rready_o = 1'b1;
+          data_cnt_d = '0;
           state_d = Idle;
+        end else if (ibi_byte_ready_i) begin
+          data_cnt_d = data_cnt_q + 1;
+          ibi_queue_rready_o = (data_cnt_q[1:0] == 2'b11);
+        end
+      end
+
+      Flush: begin
+        if (data_cnt_q >= data_len) begin
+          data_cnt_d = '0;
+          state_d = Idle;
+        end else begin
+          // Flush out any data as fast as possible
+          ibi_queue_rready_o = 1'b1;
+          // Overflow check, only increment if not at last word already
+          if (data_cnt_q[7:2] != '1) begin
+            data_cnt_d = data_cnt_q + 4;
+          end else begin
+            data_cnt_d = '0;
+            state_d = Idle;
+          end
         end
       end
     endcase
   end
 
   // 32-bit to 8-bit conversion
-  assign data_byte = ibi_queue_rdata_i[data_cnt[1:0]*8 +: 8];
+  assign data_byte = ibi_queue_rdata_i[data_cnt_q[1:0]*8 +: 8];
 
   // Pop every 4 bytes and on the last byte
-  assign queue_data_pop = (data_cnt[1:0] == 2'b11) || (data_cnt == data_len);
+  assign queue_data_pop = (data_cnt_q[1:0] == 2'b11) || (data_cnt_q == data_len);
 
 endmodule
