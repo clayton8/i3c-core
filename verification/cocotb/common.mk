@@ -51,7 +51,7 @@ ifeq ($(SIM), verilator)
     COMPILE_ARGS += --x-assign unique --x-initial unique
 
     ifeq ($(WAVES), 1)
-        EXTRA_ARGS += --trace --trace-structs --trace-fst
+        EXTRA_ARGS += --trace --trace-structs
     endif
     EXTRA_ARGS += $(VERILATOR_COVERAGE)
     EXTRA_ARGS += -Wno-DECLFILENAME -Wno-TIMESCALEMOD
@@ -70,6 +70,11 @@ ifeq ($(SIM), vcs)
     SIM_ARGS += +fsdbfile+dump.fsdb +fsdb+all=on +fsdb+mda=on
     EXTRA_ARGS += +vcs+lic+wait
 
+
+    # XPROP: propagate X through conditionals instead of optimistic resolution
+    ifneq ($(XPROP),)
+        COMPILE_ARGS += -xprop=$(XPROP)
+    endif
 
     ifneq ($(COVERAGE_TYPE),)
         EXTRA_ARGS += -cm line+cond+fsm+tgl+branch -lca

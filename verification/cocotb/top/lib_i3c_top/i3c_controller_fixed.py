@@ -21,7 +21,7 @@ Usage:
 from typing import Iterable, Optional
 
 from cocotbext_i3c.i3c_controller import I3cController, I3cXferMode
-from cocotbext_i3c.common import I3C_RSVD_BYTE, I3cPWResp, I3cState
+from cocotbext_i3c.common import I3C_RSVD_BYTE, I3cPRResp, I3cPWResp, I3cState
 from cocotb.triggers import Timer
 
 
@@ -143,6 +143,159 @@ class I3cControllerFixed(I3cController):
         """
         await self.send_stop()
         self.give_bus_control()
+
+    async def normalize_after_tbit_abort(self):
+        """
+        Normalize bus state after a T-bit abort with stop=False.
+
+        tbit_eod(request_end=True) generates Sr leaving SCL=H, SDA=L.
+        This brings SCL low so the next write_addr_header() can clock
+        out address bits with correct framing.
+
+        Bus timeline:
+                        tbit_eod            normalize       write_addr_header
+                     (request_end=True)     (this method)     (first bit)
+            SCL: ──H──────────H──────────── ───L─────────── ──L──┐  ┌H──
+            SDA: ──?──────────L──────────── ───L─────────── ──b0─┘  └───
+                         ▲ Sr complete     ▲ SCL pulled low     ▲ first addr bit
+        """
+        self.scl = 0
+        await self.tcasr
+        self._state = I3cState.RS
+
+    # =========================================================================
+    # CHAIN-AWARE METHODS (skip initial Sr after T-bit abort)
+    # =========================================================================
+
+    async def i3c_ccc_read_chained(
+        self,
+        ccc: int,
+        addr: int,
+        count: int,
+        defining_byte=None,
+        stop: bool = True,
+    ):
+        """
+        Directed CCC read for chaining after a T-bit abort.
+
+        After T-bit abort with stop=False, the Sr is already on the bus and
+        SCL has been normalized to LOW. This skips the initial send_start()
+        and goes directly to the 0x7E/W address header.
+
+        Framing: [Sr from T-bit] + 0x7E/W + CCC + Sr + Addr+R + data + [P]
+        """
+        if isinstance(addr, int):
+            addr = [addr]
+
+        # Skip send_start() — T-bit Sr already completed
+        await self.write_addr_header(I3C_RSVD_BYTE)
+        await self.send_byte_tbit(ccc)
+        if defining_byte is not None:
+            await self.send_byte_tbit(defining_byte)
+
+        responses = []
+        for a in addr:
+            await self.send_start()
+            ack = await self.write_addr_header(a, read=True)
+            data = bytearray()
+            await self.recv_until_eod_tbit(data, count, stop=False)
+            responses.append((ack, data))
+
+        if stop:
+            await self.send_stop()
+            self.give_bus_control()
+
+        return responses
+
+    async def i3c_ccc_write_chained(
+        self,
+        ccc: int,
+        directed_data=None,
+        broadcast_data=None,
+        defining_byte=None,
+        stop: bool = True,
+    ):
+        """
+        CCC write for chaining after a T-bit abort.
+
+        Framing: [Sr from T-bit] + 0x7E/W + CCC + [Sr + Addr+W + data]+ + [P]
+        """
+        is_broadcast = ccc <= 0x7F
+        acks = []
+
+        # Skip send_start() — T-bit Sr already completed
+        await self.write_addr_header(I3C_RSVD_BYTE)
+        await self.send_byte_tbit(ccc)
+        if defining_byte is not None:
+            await self.send_byte_tbit(defining_byte)
+
+        if is_broadcast:
+            if broadcast_data is not None:
+                for byte in broadcast_data:
+                    await self.send_byte_tbit(byte)
+        else:
+            assert directed_data is not None
+            for addr, data in directed_data:
+                await self.send_start()
+                acks.append(await self.write_addr_header(addr))
+                for byte in data:
+                    await self.send_byte_tbit(byte)
+
+        if stop:
+            await self.send_stop()
+            self.give_bus_control()
+
+        return acks
+
+    async def i3c_read_chained(
+        self,
+        addr: int,
+        count: int,
+        stop: bool = True,
+    ):
+        """
+        Private read for chaining after a T-bit abort.
+
+        Framing: [Sr from T-bit] + 0x7E/W + Sr + Addr+R + data + [P]
+        """
+        # Skip send_start() — T-bit Sr already completed
+        await self.write_addr_header(I3C_RSVD_BYTE)
+        await self.send_start()
+        ack = await self.write_addr_header(addr, read=True)
+        data = bytearray()
+        if ack:
+            await self.recv_until_eod_tbit(data, count)
+
+        if stop:
+            await self.send_stop()
+            self.give_bus_control()
+
+        return I3cPRResp(not ack, data)
+
+    async def i3c_write_after_abort(
+        self,
+        addr: int,
+        data: Iterable[int],
+        stop: bool = True,
+    ):
+        """
+        Private write for chaining after a T-bit abort.
+
+        Framing: [Sr from T-bit] + 0x7E/W + Sr + Addr+W + data + [P]
+        """
+        # Skip send_start() — T-bit Sr already completed
+        await self.write_addr_header(I3C_RSVD_BYTE)
+        await self.send_start()
+        ack = await self.write_addr_header(addr)
+        if ack:
+            for d in data:
+                await self.send_byte_tbit(d)
+
+        if stop:
+            await self.send_stop()
+            self.give_bus_control()
+
+        return I3cPWResp(not ack, len(data))
 
     # =========================================================================
     # TARGET RESET PATTERN STRESS TEST METHODS
@@ -429,6 +582,154 @@ class I3cControllerFixed(I3cController):
         await wait_time
 
         self.give_bus_control()
+
+    # =========================================================================
+    # CCC READ ABORT METHOD
+    # =========================================================================
+
+    async def i3c_ccc_read_abort(
+        self,
+        ccc: int,
+        addr: int,
+        abort_after_bytes: int = 1,
+        stop: bool = True,
+    ) -> list[int]:
+        """
+        Issue a directed CCC read but abort mid-read via T-bit mechanism.
+
+        Sends the CCC command phase, starts the directed read, then aborts
+        after reading abort_after_bytes by signaling request_end on the T-bit
+        (generating Sr). If stop=True, follows with P. If stop=False, leaves
+        bus active for chaining.
+
+        Args:
+            ccc: CCC command code (must be a directed read CCC)
+            addr: Target I3C address
+            abort_after_bytes: Number of bytes to read before T-bit abort
+            stop: If True, send P after Sr. If False, leave bus active.
+
+        Returns:
+            List of bytes read before the abort.
+        """
+        await self.take_bus_control()
+
+        # CCC command phase: S + 0x7E + CCC code
+        await self.send_start()
+        await self.write_addr_header(I3C_RSVD_BYTE)
+        await self.send_byte_tbit(ccc)
+
+        # Directed read phase: Sr + Addr+R
+        await self.send_start()
+        ack = await self.write_addr_header(addr, read=True)
+
+        bytes_read = []
+        if ack:
+            for i in range(abort_after_bytes):
+                is_abort_byte = (i == abort_after_bytes - 1)
+                byte, tgt_stop = await self.recv_byte_t_bit(stop=is_abort_byte)
+                bytes_read.append(byte)
+                if tgt_stop:
+                    break
+
+        if stop:
+            await self.send_stop(pull_scl_low=False)
+            self.give_bus_control()
+        else:
+            await self.normalize_after_tbit_abort()
+
+        return bytes_read
+
+    async def i3c_read_abort(
+        self,
+        addr: int,
+        abort_after_bytes: int = 1,
+        stop: bool = True,
+    ) -> list[int]:
+        """
+        Issue a private read but abort mid-read via T-bit mechanism.
+
+        Follows standard private read framing (S + 0x7E/W + Sr + Addr+R),
+        then aborts after reading abort_after_bytes by signaling request_end
+        on the T-bit (generating Sr). If stop=True, follows with P.
+        If stop=False, leaves bus active for chaining.
+
+        Args:
+            addr: Target I3C address
+            abort_after_bytes: Number of bytes to read before T-bit abort
+            stop: If True, send P after Sr. If False, leave bus active.
+
+        Returns:
+            List of bytes read before the abort.
+        """
+        await self.take_bus_control()
+
+        # Private read framing: S + 0x7E/W + Sr + Addr+R
+        await self.send_start()
+        await self.write_addr_header(I3C_RSVD_BYTE)
+        await self.send_start()
+        ack = await self.write_addr_header(addr, read=True)
+
+        bytes_read = []
+        if ack:
+            for i in range(abort_after_bytes):
+                is_abort_byte = (i == abort_after_bytes - 1)
+                byte, tgt_stop = await self.recv_byte_t_bit(stop=is_abort_byte)
+                bytes_read.append(byte)
+                if tgt_stop:
+                    break
+
+        if stop:
+            await self.send_stop(pull_scl_low=False)
+            self.give_bus_control()
+        else:
+            await self.normalize_after_tbit_abort()
+
+        return bytes_read
+
+    # =========================================================================
+    # TE0/TE1 ERROR INJECTION METHODS
+    # =========================================================================
+
+    async def send_te0_error(self) -> None:
+        """
+        Trigger a TE0 error by sending START followed by 0x7E/R.
+
+        Per I3C spec §5.1.10.1.1, receipt of 7'h7E/R (broadcast address with
+        read bit) after a dynamic address has been assigned is an Error Type
+        TE0. The target enters HDR error mode (deaf) until it detects the HDR
+        Exit Pattern or the optional 60µs timeout (§5.1.10.1.9).
+
+        After calling this method the controller still holds bus control.
+        The caller must release the bus (e.g., send_hdr_exit + give_bus_control,
+        or send_stop + give_bus_control) when done.
+        """
+        await self.take_bus_control()
+        await self.send_start()
+        await self.write_addr_header(I3C_RSVD_BYTE, read=True)
+
+    async def send_te1_error(self, ccc: int = 0x20) -> None:
+        """
+        Trigger a TE1 error by sending a CCC with bad T-bit parity.
+
+        Per I3C spec §5.1.10.1.2, if the target detects a parity error during
+        a CCC code it cannot know whether the bus has changed to HDR mode.
+        The target enters HDR error mode (deaf) until it detects the HDR Exit
+        Pattern or the optional 60µs timeout (§5.1.10.1.9).
+
+        Args:
+            ccc: CCC command code to send with bad parity (default: ENTHDR0 0x20).
+
+        After calling this method the controller still holds bus control.
+        The caller must release the bus when done.
+        """
+        await self.take_bus_control()
+        await self.send_start()
+        await self.write_addr_header(I3C_RSVD_BYTE)
+        await self.send_byte_tbit(ccc, inject_tbit_err=True)
+
+    # =========================================================================
+    # BUS STATE CONTROL METHODS
+    # =========================================================================
 
     async def set_bus_idle(self) -> None:
         """

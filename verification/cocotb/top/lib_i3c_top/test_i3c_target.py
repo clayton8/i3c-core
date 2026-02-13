@@ -8,6 +8,7 @@ from boot import boot_init
 from bus2csr import dword2int, int2dword
 from ccc import CCC
 from i3c_controller_fixed import I3cControllerFixed as I3cController
+from i3c_recovery_interface_fixed import I3cRecoveryInterfaceFixed as I3cRecoveryInterface
 from cocotbext_i3c.i3c_target import I3CTarget
 from interface import I3CTopTestInterface
 from utils import format_ibi_data, get_interrupt_status
@@ -106,7 +107,11 @@ async def test_setup(dut, fclk=333.0, fbus=12.5,
 
 @cocotb.test()
 async def test_i3c_target_write(dut):
-
+    """
+    Sends multiple private writes from the controller and verifies the
+    target receives correct data via interrupt-driven RX descriptor
+    handling.
+    """
     test_data = [[0xAA, 0x00, 0xBB, 0xCC, 0xDD], [0xDE, 0xAD, 0xBA, 0xBE]]
     recv_data = []
 
@@ -195,7 +200,11 @@ async def test_i3c_target_write(dut):
 
 @cocotb.test()
 async def test_i3c_target_read(dut):
-
+    """
+    Tests private reads with varying queue depths: single, batched, and
+    short reads (fewer bytes than queued). Verifies data correctness
+    across all patterns.
+    """
     # Setup
     i3c_controller, i3c_target, tb = await test_setup(dut)
 
@@ -290,7 +299,10 @@ async def test_i3c_target_read(dut):
 
 @cocotb.test()
 async def test_i3c_target_read_empty(dut):
-
+    """
+    Randomly populates or leaves TX FIFO empty before each read.
+    Verifies ACK + correct data when populated, NACK when empty.
+    """
     # Setup
     i3c_controller, i3c_target, tb = await test_setup(dut)
     # Generates a randomized transfer and puts it into the TTI TX queue
@@ -347,7 +359,11 @@ async def test_i3c_target_read_empty(dut):
 
 @cocotb.test()
 async def test_i3c_target_read_to_multiple_targets(dut):
-
+    """
+    Issues multi-target read sequences mixing the DUT address with
+    random other addresses. Verifies the target ACKs only its own
+    address and NACKs all others.
+    """
     # Setup
     i3c_controller, i3c_target, tb = await test_setup(dut, fclk=100)
 
@@ -670,7 +686,11 @@ async def test_i3c_target_ibi_data(dut):
 
 @cocotb.test()
 async def test_i3c_target_writes_and_reads(dut):
-
+    """
+    Interleaves private writes and reads in a single test: sends two
+    writes, drains them from the RX FIFO, then reads back pre-queued
+    TX data.
+    """
     # Setup
     i3c_controller, i3c_target, tb = await test_setup(dut)
 
@@ -754,6 +774,11 @@ async def test_i3c_target_writes_and_reads(dut):
 
 @cocotb.test()
 async def test_i3c_target_pwrite_err_detection(dut):
+    """
+    Injects T-bit parity errors on private writes and verifies the
+    target sets PROTOCOL_ERROR, drops all received bytes (desc_len=0),
+    and recovers for subsequent transfers.
+    """
     I3C_DIRECT_GETSTATUS = 0x90
     PROTOCOL_ERR_LOW = 5
 
@@ -837,6 +862,11 @@ async def test_i3c_target_pwrite_err_detection(dut):
 
 @cocotb.test()
 async def test_i3c_target_pwrite_overflow_detection(dut):
+    """
+    Sends private writes exceeding the RX FIFO capacity (261-512 bytes).
+    Verifies the target captures exactly 260 bytes (256 FIFO + 4 pipeline),
+    flags err_stat in the RX descriptor, but does NOT set PROTOCOL_ERROR.
+    """
     I3C_DIRECT_GETSTATUS = 0x90
     PROTOCOL_ERR_LOW = 5
 
@@ -912,8 +942,11 @@ async def test_i3c_target_private_read_sizes_and_abort(dut):
     1. Private read of exactly 256 bytes
     2. Private read of exactly 8 bytes
     3. Private read of exactly 11 bytes (non-word-aligned)
-    4. Private read: target has 64 bytes, controller aborts after 4 bytes
+    4. Private read: target has 64 bytes, controller aborts after 4 bytes,
+       then recovery read verifies target is still functional
     5. Private read: target has 64 bytes, controller aborts after 5 bytes
+       (non-word-aligned), then recovery read verifies target is still
+       functional
     """
 
     # Setup
@@ -1007,3 +1040,311 @@ async def test_i3c_target_private_read_sizes_and_abort(dut):
     await ClockCycles(tb.clk, 10)
 
     await ClockCycles(tb.clk, 100)
+
+
+@cocotb.test()
+async def test_i3c_target_private_read_tbit_abort_and_chain(dut):
+    """
+    Verifies the I3C T-bit abort mechanism during a private read (16-byte
+    TTI TX response), followed by chained transactions without releasing
+    the bus.
+
+    Preloads 16 bytes into TTI TX FIFO. Abort points: byte 1 (first),
+    byte 10 (mid-transfer), byte 15 (second-to-last).
+
+    Parts 1-3:   Private read abort → RI read (DEVICE_ID)
+    Parts 4-6:   Private read abort → CCC GETSTATUS read
+    Parts 7-9:   Private read abort → Private read
+    Parts 10-12: Private read abort → RI write (RECOVERY_CTRL)
+    Parts 13-15: Private read abort → CCC SETMWL write
+    Parts 16-18: Private read abort → Private write
+    """
+
+    STATIC_ADDR = 0x5A
+    VIRT_STATIC_ADDR = 0x5B
+    DYNAMIC_ADDR = 0x52
+    VIRT_DYNAMIC_ADDR = 0x53
+
+    i3c_controller, i3c_target, tb = await test_setup(dut)
+    recovery = I3cRecoveryInterface(i3c_controller)
+
+    await tb.enable_target_err_intr()
+
+    # Enable recovery mode so RI commands are accepted
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_STATUS_0.base_addr,
+        int2dword(0x3), 4,
+    )
+
+    # Assign dynamic addresses
+    await i3c_controller.i3c_ccc_write(
+        ccc=CCC.DIRECT.SETDASA, directed_data=[(STATIC_ADDR, [DYNAMIC_ADDR << 1])]
+    )
+    await i3c_controller.i3c_ccc_write(
+        ccc=CCC.DIRECT.SETDASA, directed_data=[(VIRT_STATIC_ADDR, [VIRT_DYNAMIC_ADDR << 1])]
+    )
+
+    def make_word(bs):
+        return (bs[3] << 24) | (bs[2] << 16) | (bs[1] << 8) | bs[0]
+
+    # Pre-load DEVICE_ID for chained RI reads
+    device_id_bytes = [random.randint(1, 255) for _ in range(24)]
+    for i, reg in enumerate([
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_ID_0,
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_ID_1,
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_ID_2,
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_ID_3,
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_ID_4,
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_ID_5,
+    ]):
+        await tb.write_csr(reg.base_addr, int2dword(make_word(device_id_bytes[i*4:(i+1)*4])), 4)
+
+    # Baseline DEVICE_ID read
+    expected_dev_id, pec_ok = await recovery.command_read(
+        VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.DEVICE_ID
+    )
+    assert pec_ok, "Baseline DEVICE_ID read failed"
+    dut._log.info(f"Baseline DEVICE_ID: {len(expected_dev_id)} bytes")
+
+    # 16-byte TX payload for private reads
+    tx_payload = [random.randint(0, 255) for _ in range(16)]
+    dut._log.info(f"TX payload: {[f'0x{b:02X}' for b in tx_payload]}")
+
+    abort_configs = [
+        (1,  "byte 1 (first)"),
+        (10, "byte 10 (mid-transfer)"),
+        (15, "byte 15 (second-to-last)"),
+    ]
+
+    async def queue_tx_data(data):
+        """Load TX FIFO in 4-byte words, then write the descriptor."""
+        for i in range(0, len(data), 4):
+            await tb.write_csr(
+                tb.reg_map.I3C_EC.TTI.TX_DATA_PORT.base_addr, data[i:i+4], 4,
+            )
+        await tb.write_csr(
+            tb.reg_map.I3C_EC.TTI.TX_DESC_QUEUE_PORT.base_addr,
+            int2dword(len(data)), 4,
+        )
+
+    # =========================================================================
+    # Parts 1-3: Private read abort → RI read (DEVICE_ID)
+    # =========================================================================
+    for part_num, (abort_count, desc) in enumerate(abort_configs, start=1):
+        dut._log.info("")
+        dut._log.info(f"Part {part_num}: Abort private read after {desc}, chain into RI DEVICE_ID read")
+
+        await queue_tx_data(tx_payload)
+
+        abort_bytes = await i3c_controller.i3c_read_abort(
+            addr=DYNAMIC_ADDR,
+            abort_after_bytes=abort_count, stop=False,
+        )
+
+        assert len(abort_bytes) == abort_count, (
+            f"Part {part_num}: Expected {abort_count} bytes, got {len(abort_bytes)}"
+        )
+        for idx in range(abort_count):
+            assert abort_bytes[idx] == tx_payload[idx], (
+                f"Part {part_num}: Byte {idx} mismatch: got 0x{abort_bytes[idx]:02X}, "
+                f"expected 0x{tx_payload[idx]:02X}"
+            )
+        dut._log.info(f"  Aborted {abort_count} byte(s), data correct")
+
+        chain_data, chain_pec_ok = await recovery.command_read(
+            VIRT_DYNAMIC_ADDR,
+            I3cRecoveryInterface.Command.DEVICE_ID,
+            start=False,
+        )
+
+        assert chain_data is not None, f"Part {part_num}: Chained DEVICE_ID read returned None"
+        assert chain_pec_ok, f"Part {part_num}: Chained DEVICE_ID PEC failed"
+        assert chain_data == expected_dev_id, f"Part {part_num}: DEVICE_ID data mismatch"
+        dut._log.info(f"  Chained DEVICE_ID read OK: {len(chain_data)} bytes, PEC valid")
+
+    # =========================================================================
+    # Parts 4-6: Private read abort → CCC GETSTATUS read
+    # =========================================================================
+    for part_num, (abort_count, desc) in enumerate(abort_configs, start=4):
+        dut._log.info("")
+        dut._log.info(f"Part {part_num}: Abort private read after {desc}, chain into CCC GETSTATUS")
+
+        await queue_tx_data(tx_payload)
+
+        abort_bytes = await i3c_controller.i3c_read_abort(
+            addr=DYNAMIC_ADDR,
+            abort_after_bytes=abort_count, stop=False,
+        )
+
+        assert len(abort_bytes) == abort_count, (
+            f"Part {part_num}: Expected {abort_count} bytes, got {len(abort_bytes)}"
+        )
+        dut._log.info(f"  Aborted {abort_count} byte(s)")
+
+        responses = await i3c_controller.i3c_ccc_read_chained(
+            ccc=CCC.DIRECT.GETSTATUS, addr=DYNAMIC_ADDR, count=2
+        )
+
+        assert len(responses) == 1, f"Part {part_num}: Expected 1 response"
+        ack, status_data = responses[0]
+        assert ack, f"Part {part_num}: CCC GETSTATUS got NACK"
+        assert len(status_data) == 2, f"Part {part_num}: GETSTATUS unexpected length"
+        dut._log.info(f"  Chained CCC GETSTATUS OK: 0x{status_data[0]:02X} 0x{status_data[1]:02X}")
+
+    # =========================================================================
+    # Parts 7-9: Private read abort → Private read (fresh TX data)
+    # =========================================================================
+    chain_read_data = [random.randint(0, 255) for _ in range(4)]
+
+    for part_num, (abort_count, desc) in enumerate(abort_configs, start=7):
+        dut._log.info("")
+        dut._log.info(f"Part {part_num}: Abort private read after {desc}, chain into private read")
+
+        # Queue the abort source (16 bytes)
+        await queue_tx_data(tx_payload)
+
+        abort_bytes = await i3c_controller.i3c_read_abort(
+            addr=DYNAMIC_ADDR,
+            abort_after_bytes=abort_count, stop=False,
+        )
+
+        assert len(abort_bytes) == abort_count, (
+            f"Part {part_num}: Expected {abort_count} bytes, got {len(abort_bytes)}"
+        )
+        dut._log.info(f"  Aborted {abort_count} byte(s)")
+
+        # Queue fresh data for the chained read
+        await queue_tx_data(chain_read_data)
+
+        readback = await i3c_controller.i3c_read_chained(DYNAMIC_ADDR, len(chain_read_data))
+
+        assert list(readback.data) == chain_read_data, (
+            f"Part {part_num}: Private read mismatch:\n"
+            f"  got:      {[f'0x{b:02X}' for b in readback.data]}\n"
+            f"  expected: {[f'0x{b:02X}' for b in chain_read_data]}"
+        )
+        dut._log.info(f"  Chained private read OK: {[f'0x{b:02X}' for b in readback.data]}")
+
+    # =========================================================================
+    # Parts 10-12: Private read abort → RI write (RECOVERY_CTRL)
+    # =========================================================================
+    for part_num, (abort_count, desc) in enumerate(abort_configs, start=10):
+        dut._log.info("")
+        dut._log.info(f"Part {part_num}: Abort private read after {desc}, chain into RI write")
+
+        write_val = (part_num & 0xFF)
+        ri_write_data = [write_val, write_val ^ 0xFF, write_val + 1]
+
+        await queue_tx_data(tx_payload)
+
+        abort_bytes = await i3c_controller.i3c_read_abort(
+            addr=DYNAMIC_ADDR,
+            abort_after_bytes=abort_count, stop=False,
+        )
+
+        assert len(abort_bytes) == abort_count, (
+            f"Part {part_num}: Expected {abort_count} bytes, got {len(abort_bytes)}"
+        )
+        dut._log.info(f"  Aborted {abort_count} byte(s)")
+
+        await recovery.command_write(
+            VIRT_DYNAMIC_ADDR,
+            I3cRecoveryInterface.Command.RECOVERY_CTRL,
+            ri_write_data, start=False,
+        )
+
+        csr_val = dword2int(
+            await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.RECOVERY_CTRL.base_addr, 4)
+        )
+        written_word = ri_write_data[0] | (ri_write_data[1] << 8) | (ri_write_data[2] << 16)
+        assert (csr_val & 0xFFFFFF) == written_word, (
+            f"Part {part_num}: RECOVERY_CTRL mismatch: got 0x{csr_val:08X}, "
+            f"expected 0x{written_word:06X}"
+        )
+        dut._log.info(f"  RI write verified: RECOVERY_CTRL = 0x{csr_val:08X}")
+
+    # =========================================================================
+    # Parts 13-15: Private read abort → CCC SETMWL write
+    # =========================================================================
+    for part_num, (abort_count, desc) in enumerate(abort_configs, start=13):
+        dut._log.info("")
+        dut._log.info(f"Part {part_num}: Abort private read after {desc}, chain into CCC SETMWL")
+
+        mwl_val = 64 + part_num
+        mwl_bytes = [mwl_val & 0xFF, (mwl_val >> 8) & 0xFF]
+
+        await queue_tx_data(tx_payload)
+
+        abort_bytes = await i3c_controller.i3c_read_abort(
+            addr=DYNAMIC_ADDR,
+            abort_after_bytes=abort_count, stop=False,
+        )
+
+        assert len(abort_bytes) == abort_count, (
+            f"Part {part_num}: Expected {abort_count} bytes, got {len(abort_bytes)}"
+        )
+        dut._log.info(f"  Aborted {abort_count} byte(s)")
+
+        acks = await i3c_controller.i3c_ccc_write_chained(
+            ccc=CCC.DIRECT.SETMWL,
+            directed_data=[(DYNAMIC_ADDR, mwl_bytes)],
+        )
+        assert len(acks) == 1 and acks[0], f"Part {part_num}: CCC SETMWL got NACK"
+
+        responses = await i3c_controller.i3c_ccc_read(
+            ccc=CCC.DIRECT.GETMWL, addr=DYNAMIC_ADDR, count=2
+        )
+        ack, mwl_readback = responses[0]
+        assert ack and list(mwl_readback) == mwl_bytes, (
+            f"Part {part_num}: MWL readback mismatch"
+        )
+        dut._log.info(f"  CCC SETMWL verified: MWL = {mwl_val}")
+
+    # =========================================================================
+    # Parts 16-18: Private read abort → Private write
+    # =========================================================================
+    for part_num, (abort_count, desc) in enumerate(abort_configs, start=16):
+        dut._log.info("")
+        dut._log.info(f"Part {part_num}: Abort private read after {desc}, chain into private write")
+
+        priv_write_data = [part_num & 0xFF, 0xCA, 0xFE, 0x00 | part_num]
+
+        await queue_tx_data(tx_payload)
+
+        abort_bytes = await i3c_controller.i3c_read_abort(
+            addr=DYNAMIC_ADDR,
+            abort_after_bytes=abort_count, stop=False,
+        )
+
+        assert len(abort_bytes) == abort_count, (
+            f"Part {part_num}: Expected {abort_count} bytes, got {len(abort_bytes)}"
+        )
+        dut._log.info(f"  Aborted {abort_count} byte(s)")
+
+        await i3c_controller.i3c_write_after_abort(DYNAMIC_ADDR, priv_write_data)
+
+        rx_desc = dword2int(
+            await tb.read_csr(tb.reg_map.I3C_EC.TTI.RX_DESC_QUEUE_PORT.base_addr, 4)
+        )
+        rx_len = rx_desc & 0xFFFF
+        assert rx_len == len(priv_write_data), (
+            f"Part {part_num}: RX length mismatch: got {rx_len}, expected {len(priv_write_data)}"
+        )
+
+        rx_data = []
+        for _ in range((rx_len + 3) // 4):
+            word = dword2int(
+                await tb.read_csr(tb.reg_map.I3C_EC.TTI.RX_DATA_PORT.base_addr, 4)
+            )
+            for i in range(4):
+                if len(rx_data) < rx_len:
+                    rx_data.append((word >> (8 * i)) & 0xFF)
+
+        assert rx_data == priv_write_data, (
+            f"Part {part_num}: Private write mismatch:\n"
+            f"  got:      {[f'0x{b:02X}' for b in rx_data]}\n"
+            f"  expected: {[f'0x{b:02X}' for b in priv_write_data]}"
+        )
+        dut._log.info(f"  Private write verified: {[f'0x{b:02X}' for b in rx_data]}")
+
+    await tb.assert_no_target_errors()

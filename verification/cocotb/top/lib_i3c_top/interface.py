@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
-from bus2csr import get_frontend_bus_if
+from bus2csr import dword2int, get_frontend_bus_if, int2dword
 from cocotb_helpers import reset_n
 from reg_map import reg_map
 
@@ -41,3 +41,39 @@ class I3CTopTestInterface:
         await self.busIf.register_test_interfaces(fclk)
         await ClockCycles(self.clk, 20)
         await reset_n(self.clk, self.rst_n, cycles=5)
+
+    async def enable_target_err_intr(self):
+        """Enable all TARGET_ERR_INTR_ENABLE bits so errors are captured."""
+        # Bits [13:1]: all TE0-TE5, FRAMING, RI_PEC, RI_LENGTH,
+        # RI_READONLY, RI_UNSUPPORTED, RI_RX_FIFO_OVERFLOW,
+        # RI_INDIRECT_FIFO_OVERFLOW
+        await self.write_csr(
+            self.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_ENABLE.base_addr,
+            int2dword(0x3FFE), 4,
+        )
+
+    async def assert_no_target_errors(self):
+        """Assert PROTOCOL_ERROR, TRANSFER_ERR_STAT, and all
+        TARGET_ERR_INTR_STATUS fields are zero."""
+        protocol_err = await self.read_csr_field(
+            self.reg_map.I3C_EC.TTI.STATUS.base_addr,
+            self.reg_map.I3C_EC.TTI.STATUS.PROTOCOL_ERROR,
+        )
+        assert protocol_err == 0, (
+            f"PROTOCOL_ERROR is set (STATUS = 0x{protocol_err:X})"
+        )
+
+        xfer_err = await self.read_csr_field(
+            self.reg_map.I3C_EC.TTI.INTERRUPT_STATUS.base_addr,
+            self.reg_map.I3C_EC.TTI.INTERRUPT_STATUS.TRANSFER_ERR_STAT,
+        )
+        assert xfer_err == 0, "TRANSFER_ERR_STAT is set"
+
+        tgt_err = dword2int(
+            await self.read_csr(
+                self.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.base_addr, 4
+            )
+        )
+        assert tgt_err == 0, (
+            f"TARGET_ERR_INTR_STATUS is non-zero: 0x{tgt_err:04X}"
+        )

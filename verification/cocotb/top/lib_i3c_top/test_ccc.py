@@ -4,10 +4,11 @@ import logging
 import random
 
 from boot import boot_init
-from bus2csr import bytes2int
+from bus2csr import bytes2int, dword2int, int2dword
 from ccc import CCC
 from cocotbext_i3c.common import I3cTargetResetAction
 from i3c_controller_fixed import I3cControllerFixed as I3cController
+from i3c_recovery_interface_fixed import I3cRecoveryInterfaceFixed as I3cRecoveryInterface
 from interface import I3CTopTestInterface
 
 import cocotb
@@ -57,7 +58,11 @@ async def test_setup(dut, static_addr=0x5A, virtual_static_addr=0x5B, dynamic_ad
 
 @cocotb.test()
 async def test_ccc_getstatus(dut):
-
+    """
+    Verifies directed GETSTATUS CCC returns correct PENDING_INTERRUPT
+    field for the main target and fixed activity-mode status for the
+    virtual target, using randomized addresses.
+    """
     (STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR) = random.sample(VALID_I3C_ADDRESSES, 4)
     # Once dynamic address is assigned, static address can no longer be used
     ADDRs = [DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR]
@@ -97,7 +102,11 @@ async def test_ccc_getstatus(dut):
 
 @cocotb.test()
 async def test_ccc_setdasa(dut):
-
+    """
+    Assigns dynamic addresses to main and virtual targets via directed
+    SETDASA, interleaving commands to unrelated addresses, then verifies
+    the addresses and valid flags are set in CSRs.
+    """
     list_of_values = VALID_I3C_ADDRESSES.copy()
 
     (STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR) = random.sample(list_of_values, 4)
@@ -179,7 +188,10 @@ async def test_ccc_setdasa(dut):
 
 @cocotb.test()
 async def test_ccc_setdasa_nack(dut):
-
+    """
+    Verifies a second SETDASA to a target that already has a dynamic
+    address is NACKed.
+    """
     list_of_values = VALID_I3C_ADDRESSES.copy()
 
     (STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR) = random.sample(list_of_values, 4)
@@ -220,8 +232,10 @@ async def test_ccc_setdasa_nack(dut):
 
 @cocotb.test()
 async def test_ccc_setnewda(dut):
-
-
+    """
+    Pre-assigns dynamic addresses via CSR, then changes them with
+    directed SETNEWDA and verifies the new values in CSRs.
+    """
     list_of_values = VALID_I3C_ADDRESSES.copy()
 
     (STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR, NEW_DYNAMIC_ADDR, NEW_VIRT_DYNAMIC_ADDR) = random.sample(list_of_values, 6)
@@ -289,7 +303,10 @@ async def test_ccc_setnewda(dut):
 
 @cocotb.test()
 async def test_ccc_rstdaa(dut):
-
+    """
+    Pre-assigns dynamic addresses via CSR, sends broadcast RSTDAA, and
+    verifies addresses and valid flags are cleared.
+    """
     DYNAMIC_ADDR = 0x52
     VIRT_DYNAMIC_ADDR = 0x53
     i3c_controller, i3c_target, tb = await test_setup(dut)
@@ -367,7 +384,10 @@ async def test_ccc_rstdaa(dut):
 
 @cocotb.test()
 async def test_ccc_getbcr(dut):
-
+    """
+    Sets random BCR variable bits in CSRs and verifies directed GETBCR
+    returns the correct combined (fixed | variable) value.
+    """
     _BCR_FIXED = 0b001  # CSR reset value
     _BCR_VARs = [random.randint(0, 31), random.randint(0, 31)]
     command = CCC.DIRECT.GETBCR
@@ -400,7 +420,10 @@ async def test_ccc_getbcr(dut):
 
 @cocotb.test()
 async def test_ccc_getdcr(dut):
-
+    """
+    Sets random DCR values in CSRs and verifies directed GETDCR returns
+    the correct values for both targets.
+    """
     _DCR_VARs = [random.randint(0, 255), random.randint(0, 255)]
     command = CCC.DIRECT.GETDCR
 
@@ -431,7 +454,10 @@ async def test_ccc_getdcr(dut):
 
 @cocotb.test()
 async def test_ccc_getmwl(dut):
-
+    """
+    Verifies directed GETMWL returns the expected Max Write Length
+    derived from the TX/RX queue size.
+    """
     _TXRX_QUEUE_SIZE = 2 ** (5 + 1)  # Dwords
     _MWL_VALUE = 4 * _TXRX_QUEUE_SIZE  # Bytes
 
@@ -449,7 +475,10 @@ async def test_ccc_getmwl(dut):
 
 @cocotb.test()
 async def test_ccc_getmrl(dut):
-
+    """
+    Verifies directed GETMRL returns the expected Max Read Length and
+    IBI payload size.
+    """
     _TXRX_QUEUE_SIZE = 2 ** (5 + 1)  # Dwords
     _MRL_VALUE = 4 * _TXRX_QUEUE_SIZE  # Bytes
     _IBI_PAYLOAD_SIZE = 255  # Bytes
@@ -468,7 +497,10 @@ async def test_ccc_getmrl(dut):
 
 @cocotb.test()
 async def test_ccc_setaasa(dut):
-
+    """
+    Sends broadcast SETAASA and verifies both targets' dynamic addresses
+    are set to their static addresses.
+    """
     STATIC_ADDR = 0x5A
     VIRT_STATIC_ADDR = 0x5B
     I3C_BCAST_SETAASA = 0x29
@@ -512,7 +544,10 @@ async def test_ccc_setaasa(dut):
 
 @cocotb.test()
 async def test_ccc_setaasa_ignore(dut):
-
+    """
+    Verifies broadcast SETAASA is ignored when targets already have
+    dynamic addresses assigned via SETDASA.
+    """
     STATIC_ADDR = 0x5A
     VIRT_STATIC_ADDR = 0x5B
     DYNAMIC_ADDR = 0x3A
@@ -563,7 +598,10 @@ async def test_ccc_setaasa_ignore(dut):
 
 @cocotb.test()
 async def test_ccc_getpid(dut):
-
+    """
+    Configures PID_HI/PID_LO in CSRs and verifies directed GETPID
+    returns the correct 6-byte PID for both targets.
+    """
     _PID_HIs = [random.randint(0, 32767), random.randint(0, 32767)]
     _PID_LOs = [random.randint(0, (2**32)-1), random.randint(0, (2**32)-1)]
     command = CCC.DIRECT.GETPID
@@ -624,7 +662,10 @@ async def read_target_events(tb):
 
 @cocotb.test()
 async def test_ccc_enec_disec_direct(dut):
-
+    """
+    Verifies directed DISEC clears and directed ENEC restores IBI, CRR,
+    and HJ event enable bits.
+    """
     command_enec = CCC.DIRECT.ENEC
     command_disec = CCC.DIRECT.DISEC
 
@@ -658,7 +699,10 @@ async def test_ccc_enec_disec_direct(dut):
 
 @cocotb.test()
 async def test_ccc_enec_disec_bcast(dut):
-
+    """
+    Verifies broadcast DISEC clears and broadcast ENEC restores IBI,
+    CRR, and HJ event enable bits.
+    """
     command_enec = CCC.BCAST.ENEC
     command_disec = CCC.BCAST.DISEC
 
@@ -688,7 +732,9 @@ async def test_ccc_enec_disec_bcast(dut):
 
 @cocotb.test()
 async def test_ccc_setmwl_direct(dut):
-
+    """
+    Sends directed SETMWL and verifies the MWL output signal matches.
+    """
     command = CCC.DIRECT.SETMWL
 
     i3c_controller, _, tb = await test_setup(dut)
@@ -707,7 +753,9 @@ async def test_ccc_setmwl_direct(dut):
 
 @cocotb.test()
 async def test_ccc_setmrl_direct(dut):
-
+    """
+    Sends directed SETMRL and verifies the MRL output signal matches.
+    """
     command = CCC.DIRECT.SETMRL
 
     i3c_controller, _, tb = await test_setup(dut)
@@ -726,13 +774,16 @@ async def test_ccc_setmrl_direct(dut):
 
 @cocotb.test()
 async def test_ccc_setmwl_bcast(dut):
+    """
+    Sends broadcast SETMWL and verifies the MWL output signal matches.
+    """
 
     command = CCC.BCAST.SETMWL
 
     i3c_controller, _, tb = await test_setup(dut)
     await ClockCycles(tb.clk, 50)
 
-    # Send direct SETMWL
+    # Send broadcast SETMWL
     mwl_msb = 0xAB
     mwl_lsb = 0xCD
     await i3c_controller.i3c_ccc_write(ccc=command, broadcast_data=[mwl_msb, mwl_lsb])
@@ -745,13 +796,16 @@ async def test_ccc_setmwl_bcast(dut):
 
 @cocotb.test()
 async def test_ccc_setmrl_bcast(dut):
+    """
+    Sends broadcast SETMRL and verifies the MRL output signal matches.
+    """
 
     command = CCC.BCAST.SETMRL
 
     i3c_controller, _, tb = await test_setup(dut)
     await ClockCycles(tb.clk, 50)
 
-    # Send direct SETMRL
+    # Send broadcast SETMRL
     mrl_msb = 0xAB
     mrl_lsb = 0xCD
     await i3c_controller.i3c_ccc_write(ccc=command, broadcast_data=[mrl_msb, mrl_lsb])
@@ -768,6 +822,10 @@ SUPPORTED_RESET_ACTIONS = [
     I3cTargetResetAction.RESET_WHOLE_TARGET,
 ]
 async def test_ccc_rstact(dut, type, rstact):
+    """
+    Verifies RSTACT CCC (broadcast and directed) stores the correct
+    reset action and triggers the target reset pattern output.
+    """
     i3c_controller, _, tb = await test_setup(dut)
     await ClockCycles(tb.clk, 50)
 
@@ -862,7 +920,7 @@ async def test_ccc_direct_multiple_wr(dut):
 @cocotb.test()
 async def test_ccc_direct_multiple_rd(dut):
     """
-    Send SETMWL CCC. Then send multiple directed GETMWL CCCs to thee different
+    Send SETMWL CCC. Then send multiple directed GETMWL CCCs to three different
     addresses. Only the one for the target should contain ACK with correct
     MWL content.
     """
@@ -902,3 +960,320 @@ async def test_ccc_direct_multiple_rd(dut):
                 result = False
 
     assert result
+
+
+@cocotb.test()
+async def test_ccc_read_tbit_abort_and_chain(dut):
+    """
+    Verifies the I3C T-bit abort mechanism during a directed CCC read
+    (GETPID, 6-byte response), followed by chained transactions without
+    releasing the bus.
+
+    Uses GETPID as the aborted CCC since it returns 6 bytes, providing
+    meaningful abort points at bytes 1 (first), 3 (middle), and 5
+    (second-to-last).
+
+    Parts 1-3:   CCC GETPID abort → RI read (DEVICE_ID)
+    Parts 4-6:   CCC GETPID abort → CCC GETSTATUS read
+    Parts 7-9:   CCC GETPID abort → Private read
+    Parts 10-12: CCC GETPID abort → RI write (RECOVERY_CTRL)
+    Parts 13-15: CCC GETPID abort → CCC SETMWL write
+    Parts 16-18: CCC GETPID abort → Private write
+    """
+
+    STATIC_ADDR = 0x5A
+    VIRT_STATIC_ADDR = 0x5B
+    DYNAMIC_ADDR = 0x52
+    VIRT_DYNAMIC_ADDR = 0x53
+
+    i3c_controller, i3c_target, tb = await test_setup(dut)
+    recovery = I3cRecoveryInterface(i3c_controller)
+
+    await tb.enable_target_err_intr()
+
+    # Enable recovery mode so RI commands are accepted
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_STATUS_0.base_addr,
+        int2dword(0x3), 4,
+    )
+
+    await i3c_controller.i3c_ccc_write(
+        ccc=CCC.DIRECT.SETDASA, directed_data=[(STATIC_ADDR, [DYNAMIC_ADDR << 1])]
+    )
+    await i3c_controller.i3c_ccc_write(
+        ccc=CCC.DIRECT.SETDASA, directed_data=[(VIRT_STATIC_ADDR, [VIRT_DYNAMIC_ADDR << 1])]
+    )
+
+    def make_word(bs):
+        return (bs[3] << 24) | (bs[2] << 16) | (bs[1] << 8) | bs[0]
+
+    # Configure PID with known non-zero values
+    pid_hi = random.randint(1, 32767)
+    pid_lo = random.randint(1, (2**32) - 1)
+
+    await tb.write_csr_field(
+        tb.reg_map.I3C_EC.STDBYCTRLMODE.STBY_CR_DEVICE_CHAR.base_addr,
+        tb.reg_map.I3C_EC.STDBYCTRLMODE.STBY_CR_DEVICE_CHAR.PID_HI,
+        pid_hi,
+    )
+    await tb.write_csr_field(
+        tb.reg_map.I3C_EC.STDBYCTRLMODE.STBY_CR_DEVICE_PID_LO.base_addr,
+        tb.reg_map.I3C_EC.STDBYCTRLMODE.STBY_CR_DEVICE_PID_LO.PID_LO,
+        pid_lo,
+    )
+    await ClockCycles(tb.clk, 50)
+
+    # Pre-load DEVICE_ID for chained RI reads
+    device_id_bytes = [random.randint(1, 255) for _ in range(24)]
+    for i, reg in enumerate([
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_ID_0,
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_ID_1,
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_ID_2,
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_ID_3,
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_ID_4,
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_ID_5,
+    ]):
+        await tb.write_csr(reg.base_addr, int2dword(make_word(device_id_bytes[i*4:(i+1)*4])), 4)
+
+    # Baseline GETPID read to get expected data
+    responses = await i3c_controller.i3c_ccc_read(
+        ccc=CCC.DIRECT.GETPID, addr=DYNAMIC_ADDR, count=6
+    )
+    expected_pid = list(responses[0][1])
+    assert len(expected_pid) == 6, f"Unexpected GETPID length: {len(expected_pid)}"
+    assert any(b != 0 for b in expected_pid), "GETPID returned all zeros"
+    dut._log.info(f"Baseline GETPID: {[f'0x{b:02X}' for b in expected_pid]}")
+
+    # Baseline DEVICE_ID read
+    expected_dev_id, pec_ok = await recovery.command_read(
+        VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.DEVICE_ID
+    )
+    assert pec_ok, "Baseline DEVICE_ID read failed"
+    dut._log.info(f"Baseline DEVICE_ID: {len(expected_dev_id)} bytes")
+
+    # Abort at first, middle, and second-to-last PID bytes
+    abort_configs = [
+        (1, "PID byte 1 (first)"),
+        (3, "PID byte 3 (middle)"),
+        (5, "PID byte 5 (second-to-last)"),
+    ]
+
+    # =========================================================================
+    # Parts 1-3: CCC GETPID abort → RI read (DEVICE_ID)
+    # =========================================================================
+    for part_num, (abort_count, desc) in enumerate(abort_configs, start=1):
+        dut._log.info("")
+        dut._log.info(f"Part {part_num}: Abort CCC GETPID after {desc}, chain into RI DEVICE_ID read")
+
+        abort_bytes = await i3c_controller.i3c_ccc_read_abort(
+            ccc=CCC.DIRECT.GETPID, addr=DYNAMIC_ADDR,
+            abort_after_bytes=abort_count, stop=False,
+        )
+
+        assert len(abort_bytes) == abort_count, (
+            f"Part {part_num}: Expected {abort_count} bytes, got {len(abort_bytes)}"
+        )
+        for idx in range(abort_count):
+            assert abort_bytes[idx] == expected_pid[idx], (
+                f"Part {part_num}: PID byte {idx} mismatch: got 0x{abort_bytes[idx]:02X}, "
+                f"expected 0x{expected_pid[idx]:02X}"
+            )
+        dut._log.info(f"  Aborted {abort_count} byte(s), data correct")
+
+        chain_data, chain_pec_ok = await recovery.command_read(
+            VIRT_DYNAMIC_ADDR,
+            I3cRecoveryInterface.Command.DEVICE_ID,
+            start=False,
+        )
+
+        assert chain_data is not None, f"Part {part_num}: Chained DEVICE_ID read returned None"
+        assert chain_pec_ok, f"Part {part_num}: Chained DEVICE_ID PEC failed"
+        assert chain_data == expected_dev_id, f"Part {part_num}: DEVICE_ID data mismatch"
+        dut._log.info(f"  Chained DEVICE_ID read OK: {len(chain_data)} bytes, PEC valid")
+
+    # =========================================================================
+    # Parts 4-6: CCC GETPID abort → CCC GETSTATUS read
+    # =========================================================================
+    for part_num, (abort_count, desc) in enumerate(abort_configs, start=4):
+        dut._log.info("")
+        dut._log.info(f"Part {part_num}: Abort CCC GETPID after {desc}, chain into CCC GETSTATUS")
+
+        abort_bytes = await i3c_controller.i3c_ccc_read_abort(
+            ccc=CCC.DIRECT.GETPID, addr=DYNAMIC_ADDR,
+            abort_after_bytes=abort_count, stop=False,
+        )
+
+        assert len(abort_bytes) == abort_count, (
+            f"Part {part_num}: Expected {abort_count} bytes, got {len(abort_bytes)}"
+        )
+        for idx in range(abort_count):
+            assert abort_bytes[idx] == expected_pid[idx], (
+                f"Part {part_num}: PID byte {idx} mismatch"
+            )
+        dut._log.info(f"  Aborted {abort_count} byte(s)")
+
+        responses = await i3c_controller.i3c_ccc_read_chained(
+            ccc=CCC.DIRECT.GETSTATUS, addr=DYNAMIC_ADDR, count=2
+        )
+
+        assert len(responses) == 1, f"Part {part_num}: Expected 1 response"
+        ack, status_data = responses[0]
+        assert ack, f"Part {part_num}: CCC GETSTATUS got NACK"
+        assert len(status_data) == 2, f"Part {part_num}: GETSTATUS unexpected length"
+        dut._log.info(f"  Chained CCC GETSTATUS OK: 0x{status_data[0]:02X} 0x{status_data[1]:02X}")
+
+    # =========================================================================
+    # Parts 7-9: CCC GETPID abort → Private read
+    # =========================================================================
+    priv_read_data = [random.randint(0, 255) for _ in range(4)]
+
+    for part_num, (abort_count, desc) in enumerate(abort_configs, start=7):
+        dut._log.info("")
+        dut._log.info(f"Part {part_num}: Abort CCC GETPID after {desc}, chain into private read")
+
+        # Queue TX data for private read
+        await tb.write_csr(
+            tb.reg_map.I3C_EC.TTI.TX_DATA_PORT.base_addr,
+            int2dword(int.from_bytes(priv_read_data, byteorder="little")), 4,
+        )
+        await tb.write_csr(
+            tb.reg_map.I3C_EC.TTI.TX_DESC_QUEUE_PORT.base_addr,
+            int2dword(len(priv_read_data)), 4,
+        )
+
+        abort_bytes = await i3c_controller.i3c_ccc_read_abort(
+            ccc=CCC.DIRECT.GETPID, addr=DYNAMIC_ADDR,
+            abort_after_bytes=abort_count, stop=False,
+        )
+
+        assert len(abort_bytes) == abort_count, (
+            f"Part {part_num}: Expected {abort_count} bytes, got {len(abort_bytes)}"
+        )
+        dut._log.info(f"  Aborted {abort_count} byte(s)")
+
+        readback = await i3c_controller.i3c_read_chained(DYNAMIC_ADDR, len(priv_read_data))
+
+        assert list(readback.data) == priv_read_data, (
+            f"Part {part_num}: Private read mismatch:\n"
+            f"  got:      {[f'0x{b:02X}' for b in readback.data]}\n"
+            f"  expected: {[f'0x{b:02X}' for b in priv_read_data]}"
+        )
+        dut._log.info(f"  Private read OK: {[f'0x{b:02X}' for b in readback.data]}")
+
+    # =========================================================================
+    # Parts 10-12: CCC GETPID abort → RI write (RECOVERY_CTRL)
+    # =========================================================================
+    for part_num, (abort_count, desc) in enumerate(abort_configs, start=10):
+        dut._log.info("")
+        dut._log.info(f"Part {part_num}: Abort CCC GETPID after {desc}, chain into RI write")
+
+        write_val = (part_num & 0xFF)
+        ri_write_data = [write_val, write_val ^ 0xFF, write_val + 1]
+
+        abort_bytes = await i3c_controller.i3c_ccc_read_abort(
+            ccc=CCC.DIRECT.GETPID, addr=DYNAMIC_ADDR,
+            abort_after_bytes=abort_count, stop=False,
+        )
+
+        assert len(abort_bytes) == abort_count, (
+            f"Part {part_num}: Expected {abort_count} bytes, got {len(abort_bytes)}"
+        )
+        dut._log.info(f"  Aborted {abort_count} byte(s)")
+
+        await recovery.command_write(
+            VIRT_DYNAMIC_ADDR,
+            I3cRecoveryInterface.Command.RECOVERY_CTRL,
+            ri_write_data, start=False,
+        )
+
+        csr_val = dword2int(
+            await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.RECOVERY_CTRL.base_addr, 4)
+        )
+        written_word = ri_write_data[0] | (ri_write_data[1] << 8) | (ri_write_data[2] << 16)
+        assert (csr_val & 0xFFFFFF) == written_word, (
+            f"Part {part_num}: RECOVERY_CTRL mismatch: got 0x{csr_val:08X}, "
+            f"expected 0x{written_word:06X}"
+        )
+        dut._log.info(f"  RI write verified: RECOVERY_CTRL = 0x{csr_val:08X}")
+
+    # =========================================================================
+    # Parts 13-15: CCC GETPID abort → CCC SETMWL write
+    # =========================================================================
+    for part_num, (abort_count, desc) in enumerate(abort_configs, start=13):
+        dut._log.info("")
+        dut._log.info(f"Part {part_num}: Abort CCC GETPID after {desc}, chain into CCC SETMWL")
+
+        mwl_val = 64 + part_num
+        mwl_bytes = [mwl_val & 0xFF, (mwl_val >> 8) & 0xFF]
+
+        abort_bytes = await i3c_controller.i3c_ccc_read_abort(
+            ccc=CCC.DIRECT.GETPID, addr=DYNAMIC_ADDR,
+            abort_after_bytes=abort_count, stop=False,
+        )
+
+        assert len(abort_bytes) == abort_count, (
+            f"Part {part_num}: Expected {abort_count} bytes, got {len(abort_bytes)}"
+        )
+        dut._log.info(f"  Aborted {abort_count} byte(s)")
+
+        acks = await i3c_controller.i3c_ccc_write_chained(
+            ccc=CCC.DIRECT.SETMWL,
+            directed_data=[(DYNAMIC_ADDR, mwl_bytes)],
+        )
+        assert len(acks) == 1 and acks[0], f"Part {part_num}: CCC SETMWL got NACK"
+
+        responses = await i3c_controller.i3c_ccc_read(
+            ccc=CCC.DIRECT.GETMWL, addr=DYNAMIC_ADDR, count=2
+        )
+        ack, mwl_readback = responses[0]
+        assert ack and list(mwl_readback) == mwl_bytes, (
+            f"Part {part_num}: MWL readback mismatch"
+        )
+        dut._log.info(f"  CCC SETMWL verified: MWL = {mwl_val}")
+
+    # =========================================================================
+    # Parts 16-18: CCC GETPID abort → Private write
+    # =========================================================================
+    for part_num, (abort_count, desc) in enumerate(abort_configs, start=16):
+        dut._log.info("")
+        dut._log.info(f"Part {part_num}: Abort CCC GETPID after {desc}, chain into private write")
+
+        priv_write_data = [part_num & 0xFF, 0xCA, 0xFE, 0x00 | part_num]
+
+        abort_bytes = await i3c_controller.i3c_ccc_read_abort(
+            ccc=CCC.DIRECT.GETPID, addr=DYNAMIC_ADDR,
+            abort_after_bytes=abort_count, stop=False,
+        )
+
+        assert len(abort_bytes) == abort_count, (
+            f"Part {part_num}: Expected {abort_count} bytes, got {len(abort_bytes)}"
+        )
+        dut._log.info(f"  Aborted {abort_count} byte(s)")
+
+        await i3c_controller.i3c_write_after_abort(DYNAMIC_ADDR, priv_write_data)
+
+        rx_desc = dword2int(
+            await tb.read_csr(tb.reg_map.I3C_EC.TTI.RX_DESC_QUEUE_PORT.base_addr, 4)
+        )
+        rx_len = rx_desc & 0xFFFF
+        assert rx_len == len(priv_write_data), (
+            f"Part {part_num}: RX length mismatch: got {rx_len}, expected {len(priv_write_data)}"
+        )
+
+        rx_data = []
+        for _ in range((rx_len + 3) // 4):
+            word = dword2int(
+                await tb.read_csr(tb.reg_map.I3C_EC.TTI.RX_DATA_PORT.base_addr, 4)
+            )
+            for i in range(4):
+                if len(rx_data) < rx_len:
+                    rx_data.append((word >> (8 * i)) & 0xFF)
+
+        assert rx_data == priv_write_data, (
+            f"Part {part_num}: Private write mismatch:\n"
+            f"  got:      {[f'0x{b:02X}' for b in rx_data]}\n"
+            f"  expected: {[f'0x{b:02X}' for b in priv_write_data]}"
+        )
+        dut._log.info(f"  Private write verified: {[f'0x{b:02X}' for b in rx_data]}")
+
+    await tb.assert_no_target_errors()
