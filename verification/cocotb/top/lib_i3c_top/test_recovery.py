@@ -5621,3 +5621,190 @@ async def test_private_read_and_ri_read(dut):
     dut._log.info("Private read data verified OK")
 
     dut._log.info("PASS: Recovery interface read and private read are independent")
+
+
+@cocotb.test()
+async def test_parity_error_isolation(dut):
+    """
+    Verifies that parity/PEC errors on RI writes don't leak into TTI
+    interrupt path, and that T-bit errors on normal target writes do
+    produce the expected TTI interrupt and descriptor error bits.
+
+    Part 1: RI write with corrupted PEC byte
+    Part 2: RI write with T-bit error on last data byte
+    Part 3: Normal target write with T-bit error on last byte
+    """
+
+    i3c_controller, i3c_target, tb, recovery = await initialize(dut, timeout=100)
+
+    # Assign both dynamic addresses
+    await i3c_controller.i3c_ccc_write(
+        ccc=CCC.DIRECT.SETDASA, directed_data=[(STATIC_ADDR, [DYNAMIC_ADDR << 1])]
+    )
+    await i3c_controller.i3c_ccc_write(
+        ccc=CCC.DIRECT.SETDASA, directed_data=[(VIRT_STATIC_ADDR, [VIRT_DYNAMIC_ADDR << 1])]
+    )
+
+    # Enable RI error interrupts so status bits are captured
+    ri_err_enable_mask = (1 << 8) | (1 << 9)  # RI_PEC_ERR_EN | RI_LENGTH_ERR_EN
+    current_enable = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_ENABLE.base_addr, 4)
+    )
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_ENABLE.base_addr,
+        int2dword(current_enable | ri_err_enable_mask), 4
+    )
+
+    # Clear error counters and status
+    await tb.write_csr(tb.reg_map.I3C_EC.TTI.TARGET_ERR_CNT_RI_PEC.base_addr, int2dword(0), 4)
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.base_addr, int2dword(0xFFFFFFFF), 4
+    )
+
+    # =========================================================================
+    # Part 1: RI write with T-bit error on PEC byte
+    # Correct PEC value but corrupted T-bit causes the target to detect a
+    # bus-level parity error. CSR should not update.
+    # TTI rx_desc/data_queue_write_r must not assert.
+    # =========================================================================
+    dut._log.info("Part 1: RI write with T-bit error on PEC byte")
+
+    # Seed the CSR with a known good value first
+    await recovery.command_write(
+        VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.DEVICE_RESET, [0x11, 0x22, 0x33]
+    )
+    await ClockCycles(tb.clk, 20)
+
+    # T-bit error on PEC byte (last byte in the xfer)
+    # xfer: [CMD(0), LEN_L(1), LEN_H(2), DATA0(3), DATA1(4), DATA2(5), PEC(6)]
+    write_data_p1 = [0xDE, 0xAD, 0xFF]
+    pec_byte_index = 3 + len(write_data_p1)  # = 6
+    await recovery.command_write_tbit_error(
+        VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.DEVICE_RESET,
+        write_data_p1, error_byte_index=pec_byte_index
+    )
+    await ClockCycles(tb.clk, 20)
+
+    # CSR should retain previous value
+    data = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_RESET.base_addr, 4)
+    )
+    assert data == 0x332211, (
+        f"Part 1: DEVICE_RESET should retain 0x00332211 after T-bit error, got 0x{data:08X}")
+
+    dut._log.info("Part 1: PASS")
+
+    # =========================================================================
+    # Part 2: RI write with T-bit error on last data byte
+    # The target should detect the bus error and abort. CSR should not update.
+    # TTI rx_desc/data_queue_write_r must not assert.
+    # =========================================================================
+    dut._log.info("Part 2: RI write with T-bit error on last data byte")
+
+    write_data = [0xAA, 0xBB, 0xCC]
+    # xfer layout: [CMD(0), LEN_L(1), LEN_H(2), DATA0(3), DATA1(4), DATA2(5), PEC(6)]
+    last_data_byte_index = 2 + len(write_data)  # 3 header bytes + data_len - 1 = index 5
+
+    await recovery.command_write_tbit_error(
+        VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.DEVICE_RESET,
+        write_data, error_byte_index=last_data_byte_index
+    )
+    await ClockCycles(tb.clk, 20)
+
+    # CSR should still have the Part 1 seeded value
+    data = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_RESET.base_addr, 4)
+    )
+    assert data == 0x332211, (
+        f"Part 2: DEVICE_RESET should retain 0x00332211 after T-bit error, got 0x{data:08X}")
+
+    dut._log.info("Part 2: PASS")
+
+    # =========================================================================
+    # Part 3: Normal target write with T-bit error on last byte
+    # This targets the main device (not RI). The TTI should see the write
+    # and rx_desc_queue_write_r SHOULD assert. The descriptor error bit
+    # should be set indicating a parity error.
+    # =========================================================================
+    dut._log.info("Part 3: Normal target write with T-bit error on last byte")
+
+    # Clear TTI INTERRUPT_STATUS before the write
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.TTI.INTERRUPT_STATUS.base_addr, int2dword(0xFFFFFFFF), 4
+    )
+
+    writes_before = tb.tti_monitor.normal_write_count
+
+    test_data = [0x01, 0x02, 0x03, 0x04]
+    await i3c_controller.i3c_write(DYNAMIC_ADDR, test_data, inject_tbit_err=True)
+    await ClockCycles(tb.clk, 50)
+
+    # TTI should have received the write — monitor counts normal writes
+    assert tb.tti_monitor.normal_write_count > writes_before, (
+        "Part 3: rx_desc/data_queue_write_r should have asserted for normal target write")
+
+    # Read RX descriptor — error bit should be set
+    rx_desc = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.TTI.RX_DESC_QUEUE_PORT.base_addr, 4)
+    )
+    err_stat = rx_desc >> 28
+    assert err_stat != 0, f"Part 3: RX descriptor error bits should be set, got err={err_stat}"
+
+    # TTI PROTOCOL_ERROR status should be set
+    protocol_err = await tb.read_csr_field(
+        tb.reg_map.I3C_EC.TTI.STATUS.base_addr, tb.reg_map.I3C_EC.TTI.STATUS.PROTOCOL_ERROR
+    )
+    assert protocol_err == 1, f"Part 3: TTI PROTOCOL_ERROR should be set, got {protocol_err}"
+
+    # Clear the RX data FIFO so it doesn't affect subsequent tests
+    await tb.write_csr_field(
+        tb.reg_map.I3C_EC.TTI.RESET_CONTROL.base_addr,
+        tb.reg_map.I3C_EC.TTI.RESET_CONTROL.RX_DATA_RST, 1
+    )
+    await tb.write_csr_field(
+        tb.reg_map.I3C_EC.TTI.RESET_CONTROL.base_addr,
+        tb.reg_map.I3C_EC.TTI.RESET_CONTROL.RX_DATA_RST, 0
+    )
+
+    dut._log.info("Part 3: PASS")
+
+    # =========================================================================
+    # Part 4: RI read with T-bit error on write-phase PEC byte
+    # Read flow: S + 0x7E + Sr + Addr+W + CMD(0) + PEC(1) + Sr + Addr+R + ...
+    # Corrupt T-bit on PEC (index 1). The target should detect the error
+    # and either NACK the read phase or return no data.
+    # =========================================================================
+    dut._log.info("Part 4: RI read with T-bit error on write-phase PEC byte")
+
+    # First do a valid write so the CSR has known data to read back
+    await recovery.command_write(
+        VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.DEVICE_RESET, [0x11, 0x22, 0x33]
+    )
+    await ClockCycles(tb.clk, 20)
+
+    # Now attempt a read with T-bit error on the PEC byte (index 1)
+    result = await recovery.command_read_tbit_error(
+        VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.DEVICE_RESET,
+        error_byte_index=1,
+    )
+    await ClockCycles(tb.clk, 20)
+
+    # The read should fail — either NACK (None) or protocol exception
+    assert result[0] is None, (
+        f"Part 4: Read should fail after T-bit error on write-phase PEC, got data={result[0]}")
+
+    dut._log.info("Part 4: PASS")
+
+    # =========================================================================
+    # Final: TTI monitor checks automatically at test end
+    # =========================================================================
+
+    dut._log.info("=" * 70)
+    dut._log.info("TEST SUMMARY: test_parity_error_isolation")
+    dut._log.info("=" * 70)
+    dut._log.info("  Part 1: RI write with T-bit error on PEC byte - PASS")
+    dut._log.info("  Part 2: RI write with T-bit error on last data byte - PASS")
+    dut._log.info("  Part 3: Normal target T-bit error (TTI interrupt fired) - PASS")
+    dut._log.info("  Part 4: RI read with T-bit error on write-phase PEC - PASS")
+    dut._log.info("  Monitor: No RI writes leaked to TTI - PASS")
+    dut._log.info("=" * 70)

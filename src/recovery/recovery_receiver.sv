@@ -227,6 +227,10 @@ module recovery_receiver
     output logic rx_fifo_overflow_err_o,       // RX FIFO overflow error (always reported)
     output logic indirect_fifo_overflow_err_o, // INDIRECT_FIFO overflow error
 
+    // RX descriptor interface — monitored for bus-level parity errors
+    input  logic                          rx_desc_wvalid_i,
+    input  logic [TtiRxDescDataWidth-1:0] rx_desc_wdata_i,
+
     //--------------------------------------------------------------------------
     // Recovery CSR Interface
     //--------------------------------------------------------------------------
@@ -556,6 +560,7 @@ module recovery_receiver
     inc_csr_sel            = 1'b0;
     load_csr_length        = 1'b0;
     rx_data_queue_select_o = 1'b0;
+    rx_data_queue_flush_o  = 1'b0;
     pec_enable_o           = 1'b0;
     pec_init_o             = 1'b0;
     tx_pec_enable_o        = 1'b0;
@@ -652,11 +657,17 @@ module recovery_receiver
             premature_stop      = 1'b1;
             length_underrun_err = length_err_det_en_i;  // Report as length error (underrun)
             state_d             = Error;
+          end else if (rx_desc_wvalid_i && |rx_desc_wdata_i[31:28] && pec_err_det_en_i) begin
+            // RX descriptor reports bus-level error (T-bit parity) on write-phase PEC
+            // rx_desc_wvalid_i will be asserted same clock cycle as
+            // bus_rstart_i. If not assertion fires
+            pec_err = 1'b1;
+            state_d = Error;
           end else if (bus_rstart_i) begin
             // Repeated Start (Sr) indicates READ command - controller wants to read
             set_cmd_is_rd      = 1'b1;
             latch_pec_from_len = 1'b1;
-            state_d            = CmdDispatch;
+            state_d = CmdDispatch;
           end else if (rx_flow) begin
             capture_len_msb = 1'b1;
             pec_enable_o    = 1'b1;
@@ -699,8 +710,16 @@ module recovery_receiver
             premature_stop      = 1'b1;
             length_underrun_err = ((payload_byte_cnt < cmd_len) || pec_rx_byte_cnt == '0) && length_err_det_en_i;
             state_d             = Error;
+          end else if (rx_data_last_i && |rx_desc_wdata_i[31:28] && pec_err_det_en_i) begin
+            // RX descriptor reports bus-level error (T-bit parity or overflow)
+            // rx_data_last_i should be asserted the same clock cycle
+            // as rx_desc_wvalid_i if not an assertion will fire.
+            pec_err        = 1'b1;
+            state_d        = Error;
           end else if (rx_data_last_i) begin
-            state_d = CmdDispatch;
+              state_d = CmdDispatch;
+              // Flush partial word from width converter before ExecCsrWrite reads
+              rx_data_queue_flush_o = |(payload_byte_cnt[1:0]);
           end
         end
 
@@ -885,18 +904,6 @@ module recovery_receiver
   // Ready to receive during all RX states AND during Error (to drain bus).
   // During Error, bytes are accepted but discarded via converter soft reset.
   assign rx_data_ready_o = state_q inside {RxCmd, RxLenL, RxLenH, RxData, RxPec, Error};
-
-
-  //----------------------------------------------------------------------------
-  // RX Queue Flush/Clear Control
-  //----------------------------------------------------------------------------
-  always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (!rst_ni) begin
-      rx_data_queue_flush_o <= 1'b0;
-    end else begin
-      rx_data_queue_flush_o <= (state_q == CmdDispatch) && |(payload_byte_cnt[1:0]);
-    end
-  end
 
   // Assert soft reset to width converters during Error state (combinational for immediate effect)
   assign conv_soft_reset_o = (state_q == Error);
@@ -1776,6 +1783,12 @@ module recovery_receiver
   assign rx_fifo_overflow_err_o = rx_fifo_overflow_err;
   // INDIRECT_FIFO overflow: reported on each overflow event
   assign indirect_fifo_overflow_err_o = indirect_fifo_overflow_err;
+
+  // rx_desc_wvalid_i must align with rx_data_last_i (both driven by transfer_ended)
+  `I3C_ASSERT(RxDescAlignedWithLast_A, rx_data_last_i |-> rx_desc_wvalid_i)
+
+  // rx_desc_wvalid_i must fire on Sr in RxLenH (read-flow write-phase ends here)
+  `I3C_ASSERT(RxDescAlignedWithRstart_A, (state_q == RxLenH) && bus_rstart_i |-> rx_desc_wvalid_i)
 
 endmodule
 

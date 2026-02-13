@@ -470,13 +470,7 @@ module recovery_handler
   // - ctl_bus_addr_valid_q: For posedge detection of address valid
   // - ctl_bus_addr_valid_posedge_q: Delayed posedge aligned with virtual_device_sel_i
   //
-  // FUTUREFIX: The descriptor_rx module sends tti_rx_queue_flush 1 cycle after the
-  // transfer ends (transfer_ended_q). However, virtual_device_sel_i goes low on
-  // the same cycle that transfer_ended fires, causing recovery_pending to
-  // deassert before the flush arrives. This creates a race where the mux
-  // selects descriptor_rx's flush instead of recovery's, corrupting the FIFO.
-  // Extending virtual_device_sel_i by 1 cycle ensures recovery_pending stays
-  // high to block the spurious flush from descriptor_rx.
+  // The flush race is resolved in descriptor_rx (flush fires on transfer_ended cycle).
   //----------------------------------------------------------------------------
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
@@ -724,23 +718,27 @@ module recovery_handler
   always_comb begin : R1MUX
     if (recovery_pending) begin
       tti_rx_desc_queue_wvalid                = '0;
-      ctl_tti_rx_desc_queue_full_o            = '0;
-      ctl_tti_rx_desc_queue_depth_o           = '0;
-      ctl_tti_rx_desc_queue_empty_o           = '0;
-      ctl_tti_rx_desc_queue_wready_o          = 1'b1;
+      ctl_tti_rx_desc_queue_empty_o           = 1'b1; // Need to hide empty to reject AXI reads
       csr_tti_rx_desc_queue_ready_thld_trig_o = '0;
+      
+      ctl_tti_rx_data_queue_empty_o           = 1'b1; // Need to hide empty to reject AXI reads
     end else begin
       tti_rx_desc_queue_wvalid                = ctl_tti_rx_desc_queue_wvalid_i;
-      ctl_tti_rx_desc_queue_full_o            = tti_rx_desc_queue_full;
-      ctl_tti_rx_desc_queue_depth_o           = tti_rx_desc_queue_depth;
       ctl_tti_rx_desc_queue_empty_o           = tti_rx_desc_queue_empty;
-      ctl_tti_rx_desc_queue_wready_o          = tti_rx_desc_queue_wready;
       csr_tti_rx_desc_queue_ready_thld_trig_o = tti_rx_desc_queue_ready_thld_trig;
+      
+      ctl_tti_rx_data_queue_empty_o           = tti_rx_data_queue_empty;
     end
 
-    tti_rx_desc_queue_wdata                   = ctl_tti_rx_desc_queue_wdata_i; // Don't mux data, disabling valid is enough
-  end
+    tti_rx_desc_queue_wdata                 = ctl_tti_rx_desc_queue_wdata_i; // Don't mux data, disabling valid is enough
+    
+    ctl_tti_rx_desc_queue_wready_o          = tti_rx_desc_queue_wready;
 
+    // Don't hide status of queue from status registers
+    ctl_tti_rx_desc_queue_full_o            = tti_rx_desc_queue_full;
+    ctl_tti_rx_desc_queue_depth_o           = tti_rx_desc_queue_depth;
+
+  end
   // Threshold
   assign ctl_tti_rx_desc_queue_ready_thld_o = tti_rx_desc_queue_ready_thld_o;
   assign ctl_tti_rx_desc_queue_ready_thld_trig_o = tti_rx_desc_queue_ready_thld_trig;
@@ -786,9 +784,6 @@ module recovery_handler
       recv_tti_rx_data_valid                  = ctl_tti_rx_data_queue_wvalid_i;
       tti_rx_data_queue_wvalid                = '0;
       tti_rx_data_queue_flush                 = recv_tti_rx_data_queue_flush;
-      ctl_tti_rx_data_queue_full_o            = tti_rx_data_queue_full;
-      ctl_tti_rx_data_queue_depth_o           = tti_rx_data_queue_depth;
-      ctl_tti_rx_data_queue_empty_o           = tti_rx_data_queue_empty;
       ctl_tti_rx_data_queue_wready_o          = recv_tti_rx_data_ready;
       ctl_tti_rx_data_queue_start_thld_trig_o = '0;
       csr_tti_rx_data_queue_ready_thld_trig_o = '0;
@@ -797,9 +792,6 @@ module recovery_handler
       recv_tti_rx_data_valid                  = '0;
       tti_rx_data_queue_wvalid                = ctl_tti_rx_data_queue_wvalid_i;
       tti_rx_data_queue_flush                 = ctl_tti_rx_data_queue_flush_i;
-      ctl_tti_rx_data_queue_full_o            = tti_rx_data_queue_full;
-      ctl_tti_rx_data_queue_depth_o           = tti_rx_data_queue_depth;
-      ctl_tti_rx_data_queue_empty_o           = tti_rx_data_queue_empty;
       ctl_tti_rx_data_queue_wready_o          = tti_rx_data_queue_wready;
       ctl_tti_rx_data_queue_start_thld_trig_o = tti_rx_data_queue_start_thld_trig;
       csr_tti_rx_data_queue_ready_thld_trig_o = tti_rx_data_queue_ready_thld_trig;
@@ -808,6 +800,10 @@ module recovery_handler
     tti_rx_data_queue_wdata                   = ctl_tti_rx_data_queue_wdata_i; // Don't mux data, disabling valid is enough
     recv_tti_rx_data_data = ctl_tti_rx_data_queue_wdata_i;
     recv_tti_rx_data_last = ctl_tti_rx_data_queue_wlast_i;
+
+    // Don't hide status of queue from status registers
+    ctl_tti_rx_data_queue_full_o            = tti_rx_data_queue_full;
+    ctl_tti_rx_data_queue_depth_o           = tti_rx_data_queue_depth;
   end
 
   // Thresholds
@@ -1098,6 +1094,8 @@ module recovery_handler
       .unsupported_err_o,
       .rx_fifo_overflow_err_o,
       .indirect_fifo_overflow_err_o,
+      .rx_desc_wvalid_i(ctl_tti_rx_desc_queue_wvalid_i),
+      .rx_desc_wdata_i (ctl_tti_rx_desc_queue_wdata_i),
       .exec_pending_o(recovery_exec_pending),
       .recovery_mode_enter_o
   );

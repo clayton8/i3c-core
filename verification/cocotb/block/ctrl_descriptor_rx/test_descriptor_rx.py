@@ -42,13 +42,15 @@ async def test_descriptor_rx(dut: SimHandleBase):
 
     assert dut.rx_byte_ready_o.value == 1
 
-    # Send 5 bytes and wait for the RX descriptor
+    # Send 5 bytes and signal end of transfer
     for i in range(5):
         await send_byte(dut, i)
-    await cycle(dut.clk_i, dut.rx_byte_last_i)
 
+    # Assert rx_byte_last_i for one cycle; descriptor is valid on the same cycle
+    dut.rx_byte_last_i.value = 1
     await ClockCycles(dut.clk_i, 1)
     assert dut.tti_rx_desc_queue_wvalid_o.value == 1
     assert dut.tti_rx_desc_queue_wdata_o.value == 5
+    dut.rx_byte_last_i.value = 0
 
     await ClockCycles(dut.clk_i, 3)

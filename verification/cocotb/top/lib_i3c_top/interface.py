@@ -3,6 +3,7 @@
 from bus2csr import get_frontend_bus_if
 from cocotb_helpers import reset_n
 from reg_map import reg_map
+from tti_monitor import TtiQueueMonitor
 
 import cocotb
 from cocotb.handle import SimHandleBase
@@ -23,6 +24,7 @@ class I3CTopTestInterface:
         self.write_csr = self.busIf.write_csr
         self.read_csr_field = self.busIf.read_csr_field
         self.write_csr_field = self.busIf.write_csr_field
+        self.tti_monitor = None
 
     async def setup(self, fclk=500.0):
 
@@ -41,3 +43,11 @@ class I3CTopTestInterface:
         await self.busIf.register_test_interfaces(fclk)
         await ClockCycles(self.clk, 20)
         await reset_n(self.clk, self.rst_n, cycles=5)
+
+        # Start TtiQueueMonitor for every test
+        try:
+            self.tti_monitor = TtiQueueMonitor(self.dut)
+            cocotb.start_soon(self.tti_monitor.run())
+        except AttributeError:
+            self.dut._log.warning("TtiQueueMonitor: required signals not found, skipping")
+            self.tti_monitor = None

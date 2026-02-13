@@ -343,6 +343,42 @@ class I3cRecoveryInterfaceFixed(I3cRecoveryInterface):
         await self.controller.send_stop()
         self.controller.give_bus_control()
 
+    async def command_read_tbit_error(self, address, command, error_byte_index=0):
+        """
+        Issues a read command with T-bit error on a specific byte in the write phase.
+
+        Write phase xfer: [CMD(0), PEC(1)]. After error injection, attempts
+        the read phase (Sr + Addr+R). Returns None if target NACKs.
+
+        Args:
+            address: I3C target address
+            command: OCP Recovery command code
+            error_byte_index: Byte index in write phase to corrupt (0=CMD, 1=PEC)
+
+        Returns:
+            Tuple of (data, pec_ok) or (None, None) if target NACKed
+        """
+        xfer = [command]
+        pec = int(self.pec_calc.checksum(bytes([address << 1] + xfer)))
+        xfer.append(pec)
+
+        await self.controller.take_bus_control()
+        await self.controller.send_start()
+        await self.controller.write_addr_header(I3C_RSVD_BYTE)
+        await self.controller.send_start()
+        ack = await self.controller.write_addr_header(address)
+
+        if ack:
+            for i, byte in enumerate(xfer):
+                inject_error = (i == error_byte_index)
+                await self.controller.send_byte_tbit(byte, inject_tbit_err=inject_error)
+
+        # Continue with read phase — target may NACK if error was detected
+        try:
+            return await self._i3c_recovery_read(address, send_stop=True)
+        except I3cRecoveryException:
+            return None, None
+
     async def command_write_truncated(self, address, command, data=None, truncate_before_pec=True):
         """
         Issues a write command but truncates it before sending PEC.

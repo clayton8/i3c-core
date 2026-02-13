@@ -51,11 +51,9 @@ module descriptor_rx #(
 
   logic [31:0] rx_descriptor;
   logic [15:0] byte_counter;
-  logic [15:0] byte_counter_q;
   logic [3:0] rx_error;
 
   logic transfer_ended;
-  logic transfer_ended_q;
 
   assign transfer_ended = rx_byte_last_i;
 
@@ -75,17 +73,11 @@ module descriptor_rx #(
 
   always_ff @(posedge clk_i or negedge rst_ni) begin : proc_error
     if (!rst_ni) begin
-      byte_counter_q <= '0;
-      transfer_ended_q <= '0;
       rx_error <= '0;
     end else begin
-      transfer_ended_q <= transfer_ended;
-      if (transfer_ended) begin
-        byte_counter_q <= byte_counter;
-      end
       if (rx_byte_err_i)
           rx_error <= 4'b0001;
-      else if (transfer_ended_q)
+      else if (transfer_ended)
           rx_error <= 4'b0000;
     end
   end
@@ -94,9 +86,11 @@ module descriptor_rx #(
   assign rx_byte_ready_o = tti_rx_queue_wready_i;
   assign tti_rx_queue_wdata_o = rx_byte_i;
 
-  assign rx_descriptor = {rx_error, {12{1'b0}}, byte_counter_q};
+  // Build descriptor combinationally: byte_counter is still valid during the
+  // transfer_ended cycle (before the clock edge resets it to 0)
+  assign rx_descriptor = {rx_error, {12{1'b0}}, byte_counter};
   assign tti_rx_desc_queue_wdata_o = rx_descriptor;
-  assign tti_rx_desc_queue_wvalid_o = transfer_ended_q;
-  assign tti_rx_queue_flush_o = transfer_ended_q;
+  assign tti_rx_desc_queue_wvalid_o = transfer_ended;
+  assign tti_rx_queue_flush_o = transfer_ended;
 
 endmodule
