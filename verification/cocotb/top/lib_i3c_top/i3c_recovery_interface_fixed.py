@@ -456,7 +456,12 @@ class I3cRecoveryInterfaceFixed(I3cRecoveryInterface):
 
     async def command_read_abort(self, address, command, abort_after_bytes=3):
         """
-        Issues a read command but aborts (sends STOP) after reading some bytes.
+        Issues a read command but aborts mid-read using the T-bit mechanism.
+
+        The abort is performed by signaling request_end=True on the T-bit of
+        the last byte to read. This causes the controller to pull SDA low
+        while SCL is high (Sr), followed by a STOP (P). This Sr+P sequence
+        is the proper I3C mid-read abort.
 
         Args:
             address: I3C target address
@@ -484,17 +489,18 @@ class I3cRecoveryInterfaceFixed(I3cRecoveryInterface):
         ack = await self.controller.write_addr_header(address, read=True)
 
         if ack:
-            # Read some bytes, then abort
+            # Read bytes; on the last byte use T-bit to signal abort (Sr)
             for i in range(abort_after_bytes):
                 try:
-                    byte, stop = await self.controller.recv_byte_t_bit(stop=False)
+                    is_abort_byte = (i == abort_after_bytes - 1)
+                    byte, stop = await self.controller.recv_byte_t_bit(stop=is_abort_byte)
                     if stop:
                         break
                 except Exception:
                     break
 
-        # Abort with STOP
-        await self.controller.send_stop()
+        # T-bit already generated Sr, now send P to complete the abort
+        await self.controller.send_stop(pull_scl_low=False)
         self.controller.give_bus_control()
 
     async def send_repeated_start_only(self, address):

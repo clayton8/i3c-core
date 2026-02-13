@@ -1266,15 +1266,9 @@ async def test_ri_error_injection_stress(dut):
     dut._log.info(f"  FAILED: {failed}/{len(scenario_results)}")
     dut._log.info("=" * 70)
 
-    # The test passes if at least some scenarios work - this is a stress test
-    # that reveals behavior, not a strict pass/fail test
-    if failed > 0:
-        dut._log.warning(f"NOTE: {failed} scenarios revealed recovery issues - these may be expected")
-
-    # Only fail if nothing works at all
-    assert passed > 0, "All scenarios failed - target is completely broken"
-
-    dut._log.info(f"TEST COMPLETE: {passed} scenarios passed, {failed} revealed issues")
+    assert failed == 0, f"{failed} scenario(s) failed: " + ", ".join(
+        name for name, result in scenario_results.items() if result != "PASS"
+    )
 
 
 @cocotb.test()
