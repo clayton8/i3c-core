@@ -102,6 +102,7 @@ module tti
     // IBI status
     input logic [1:0] ibi_status_i,
     input logic ibi_status_we_i,
+    input logic ibi_pending_i,
     // Virtual recovery target selection - gates TTI interrupts during recovery transactions
     input logic virtual_device_sel_i,
     // Private read status
@@ -274,8 +275,7 @@ module tti
     hwif_tti_o.RESET_CONTROL.SOFT_RST.we = '0;
     hwif_tti_o.RESET_CONTROL.SOFT_RST.next = '0;
 
-    hwif_tti_o.INTERRUPT_STATUS.PENDING_INTERRUPT.we = '0;
-    hwif_tti_o.INTERRUPT_STATUS.PENDING_INTERRUPT.next = '0;
+    hwif_tti_o.INTERRUPT_STATUS.PENDING_INTERRUPT.next = {3'h0, ibi_pending_i};
     hwif_tti_o.INTERRUPT_STATUS.RX_DESC_TIMEOUT.next = '0;
     hwif_tti_o.INTERRUPT_STATUS.TX_DESC_TIMEOUT.next = '0;
     hwif_tti_o.INTERRUPT_STATUS.TX_DATA_THLD_STAT.next = '0;
