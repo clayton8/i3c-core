@@ -286,8 +286,8 @@ module ccc
     // -------------------------------------------------------------------------
     input  logic target_reset_detect_i,
     input  logic peripheral_reset_done_i,
-    output logic rstact_armed_o,
-    output logic escalate_reset_o
+    output logic peripheral_reset_o,
+    output logic escalated_reset_o
 );
 
 
@@ -441,9 +441,14 @@ module ccc
   // ---------------------------------------------------------------------------
   // RSTACT Handling
   // ---------------------------------------------------------------------------
-  logic [7:0] rst_action;
-  logic       rst_action_valid;
-  logic       rstact_armed;
+  logic [7:0] rst_action_q;
+  logic [7:0] rst_action_d;
+  logic       rstact_armed_q;
+  logic       rstact_armed_d;
+  logic       escalate_rst_arm_q;
+  logic       escalate_rst_arm_d;
+  logic       set_peripheral_reset;
+  logic       set_escalate_reset;
 
   // ---------------------------------------------------------------------------
   // HDR Mode Handling
@@ -509,7 +514,6 @@ module ccc
   logic        disec_ibi_next;
   logic        disec_crr_next;
   logic        disec_hj_next;
-  logic        rst_action_valid_next;
 
   // ---------------------------------------------------------------------------
   // Broadcast CCC Handler Next-State Signals
@@ -1066,6 +1070,9 @@ module ccc
           end else if (target_addr_matches_any_get_cmd) begin
             // ACKed GET command: Target transmits data
             state_d = TxData;
+          end else if (is_rstact) begin
+            // RSTACT write: no data phase (defining byte already captured)
+            state_d = WaitForBusCond;
           end else begin
             // ACKed SET command (including SETDASA): Target receives data
             state_d = RxData;
@@ -1293,7 +1300,7 @@ module ccc
           tx_data = 8'hFF;
         end else if (defining_byte inside {8'h00, 8'h01, 8'h02}) begin
           // 0x00-0x02: Return armed action, or 0x80 if not armed
-          tx_data = rstact_armed ? rst_action : 8'h80;
+          tx_data = rstact_armed_q ? rst_action_q : 8'h80;
         end
       end
       
@@ -1445,7 +1452,6 @@ module ccc
     disec_ibi_next        = 1'b0;
     disec_crr_next        = 1'b0;
     disec_hj_next         = 1'b0;
-    rst_action_valid_next = 1'b0;
 
     // Process received data bytes
     // Note: For Direct CCCs, rx_data_valid only fires when target address matched
@@ -1553,24 +1559,6 @@ module ccc
       endcase
     end
 
-    // -----------------------------------------------------------------
-    // RSTACT: Arm reset action (triggers on ACK/T-bit, not data bytes)
-    // -----------------------------------------------------------------
-    case (command_code)
-      CCC_DIRECT_RSTACT: begin
-        // Direct RSTACT: Arm after target address ACK for action values (0x00-0x7F)
-        if (target_addr_ack_done && addr_ack_target && ~defining_byte[7]) begin
-          rst_action_valid_next = 1'b1;
-        end
-      end
-      CCC_BCAST_RSTACT: begin
-        // Broadcast RSTACT: Arm after defining byte T-bit for action values (0x00-0x7F)
-        if (def_byte_tbit_valid && ~defining_byte[7]) begin
-          rst_action_valid_next = 1'b1;
-        end
-      end
-      default: begin end
-    endcase
   end
 
   // ---------------------------------------------------------------------------
@@ -1594,7 +1582,6 @@ module ccc
       disec_ibi        <= '0;
       disec_crr        <= '0;
       disec_hj         <= '0;
-      rst_action_valid <= 1'b0;
     end else begin
       set_dasa_valid   <= set_dasa_valid_next;
       set_dasa_addr    <= set_dasa_addr_next;
@@ -1612,7 +1599,6 @@ module ccc
       disec_ibi        <= disec_ibi_next;
       disec_crr        <= disec_crr_next;
       disec_hj         <= disec_hj_next;
-      rst_action_valid <= rst_action_valid_next;
     end
   end
 
@@ -1671,58 +1657,107 @@ module ccc
   end
 
   // ===========================================================================
-  // RSTACT STATE MACHINE
+  // RSTACT
   // ===========================================================================
-  // Track RSTACT armed state and handle reset actions
-  always_ff @(posedge clk_i or negedge rst_ni) begin : rst_action_state
-    if (~rst_ni) begin
-      rstact_armed <= '0;
-      rst_action   <= '0;
+
+  always_comb begin : proc_rstact_comb
+    rstact_armed_d    = rstact_armed_q;
+    rst_action_d      = rst_action_q;
+
+    // --- Arming: Clear on START (not Repeated START) ---
+    // Spec: "Any reset action configured via the RSTACT CCC shall be cleared
+    // by the next SCL falling edge following a START (but not by the next
+    // Repeated START)."
+    if (bus_start_det_i) begin
+      rstact_armed_d = 1'b0;
+      rst_action_d   = 8'h00;
     end else begin
-      if (rst_action_valid) begin
-        rstact_armed <= 1'b1;
-        rst_action   <= defining_byte;
+
+      case(command_code) 
+        CCC_BCAST_RSTACT: begin
+          if (def_byte_tbit_valid && (defining_byte inside {8'h00, 8'h01, 8'h02})) begin
+            rstact_armed_d = 1'b1;
+            rst_action_d   = defining_byte;
+          end
+        end
+
+        CCC_DIRECT_RSTACT: begin
+          if (target_addr_ack_done && addr_ack && ~target_rnw &&
+             (defining_byte inside {8'h00, 8'h01, 8'h02})) begin
+            rstact_armed_d = 1'b1;
+            rst_action_d   = defining_byte;
+          end
+        end
+      endcase
+
+    end
+  end
+
+
+  always_comb begin : proc_escalate_rst_arm_comb
+    escalate_rst_arm_d = escalate_rst_arm_q;
+
+    // --- Escalation: Clear on any RSTACT CCC (any format) or GETSTATUS ---
+    // FAQ: "receiving the RSTACT CCC in any format will cause the Target to
+    // clear any escalation operation that might be in progress even if the
+    // Target does not support that Defining Byte value or if the Target NACKs"
+    // FAQ: "This state is cleared if the Target sees either any RSTACT CCC, or a
+    //       GETSTATUS CCC addressed to it."
+    if ((command_code_valid && (command_code == CCC_BCAST_RSTACT)) ||
+        (target_addr_ack_done && target_addr_matches_any &&
+            ((command_code == CCC_DIRECT_RSTACT) || 
+             (command_code == CCC_DIRECT_GETSTATUS)))) begin 
+      escalate_rst_arm_d = 1'b0;
+    // --- Escalation: Arm after default peripheral reset ---
+    // First reset pattern with no armed RSTACT action sets the escalation flag.
+    // A second reset pattern (still without RSTACT/GETSTATUS) will then escalate.
+    end else if (target_reset_detect_i && ~rstact_armed_q && ~escalate_rst_arm_q) begin
+      escalate_rst_arm_d = 1'b1;
+    end
+  end
+
+  // Armed path, 0x01: peripheral reset on Target Reset Pattern
+  // Default path, first reset pattern without RSTACT: peripheral reset
+  assign set_peripheral_reset = target_reset_detect_i && (
+                                  (rstact_armed_q && (rst_action_q == 8'h01)) ||
+                                  (~rstact_armed_q && ~escalate_rst_arm_q));
+
+  // Armed path, 0x02: whole-target reset on Target Reset Pattern
+  // Default path, second reset pattern without intervening RSTACT/GETSTATUS: escalate
+  assign set_escalate_reset = target_reset_detect_i && (
+                                (rstact_armed_q && (rst_action_q == 8'h02)) ||
+                                (~rstact_armed_q && escalate_rst_arm_q));
+                                
+
+  // ---------------------------------------------------------------------------
+  // Sequential logic: RSTACT registers
+  // ---------------------------------------------------------------------------
+  always_ff @(posedge clk_i or negedge rst_ni) begin : proc_rstact_seq
+    if (~rst_ni) begin
+      rstact_armed_q     <= 1'b0;
+      rst_action_q       <= 8'h00;
+      escalate_rst_arm_q <= 1'b0;
+      peripheral_reset_o <= 1'b0;
+      escalated_reset_o   <= 1'b0;
+    end else begin
+      rstact_armed_q     <= rstact_armed_d;
+      rst_action_q       <= rst_action_d;
+      escalate_rst_arm_q <= escalate_rst_arm_d;
+
+      if (set_peripheral_reset) begin
+        peripheral_reset_o <= 1'b1;
+      end else if (peripheral_reset_done_i) begin
+        peripheral_reset_o <= 1'b0;
       end
 
-      // Clear on start condition
-      if (bus_start_det_i) begin
-        rstact_armed <= '0;
-        rst_action   <= '0;
+      if (set_escalate_reset) begin
+        escalated_reset_o <= 1'b1;
       end
     end
   end
 
-  assign rstact_armed_o = rstact_armed;
-  
-  // Generate reset action outputs when armed and reset detected
-  always_ff @(posedge clk_i or negedge rst_ni) begin : rst_action_output_gen
-    if (~rst_ni) begin
-      rst_action_valid_o <= '0;
-      rst_action_o <= '0;
-    end else begin
-      if (rstact_armed & target_reset_detect_i) begin
-        rst_action_valid_o <= 1'b1;
-        rst_action_o <= rst_action;
-      end
-
-      if (bus_start_det_i) begin
-        rst_action_valid_o <= '0;
-        rst_action_o <= '0;
-      end
-    end
-  end
-
-  // Reset escalation logic
-  always_ff @(posedge clk_i or negedge rst_ni) begin : reset_escalation
-    if (~rst_ni) begin
-      escalate_reset_o <= '0;
-    end else begin
-      if (peripheral_reset_done_i) escalate_reset_o <= '1;
-      if (command_code inside {CCC_DIRECT_RSTACT, CCC_BCAST_RSTACT, CCC_DIRECT_GETSTATUS} &
-          command_code_valid)
-        escalate_reset_o <= '0;
-    end
-  end
+  assign rst_action_o       = rst_action_q;
+  assign rst_action_valid_o = rstact_armed_q;
 
   // ===========================================================================
   // ENEC/DISEC OUTPUT ASSIGNMENTS

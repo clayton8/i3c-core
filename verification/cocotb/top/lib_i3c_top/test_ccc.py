@@ -809,11 +809,10 @@ async def test_ccc_rstact(dut, type, rstact):
         stop=False,
     )
 
-    # Check if reset action got stored correctly in the logic after Target Reset Pattern
+    # Check if reset action got stored correctly in the logic after RSTACT CCC
     sig = dut.xi3c_wrapper.i3c.xcontroller.xcontroller_standby.xcontroller_standby_i3c.rst_action_o
-    assert int(sig) == 0
-    await i3c_controller.send_target_reset_pattern()
     assert rst_action == int(sig), f"Expected rst_action_o={rst_action}, got {int(sig)}"
+    await i3c_controller.send_target_reset_pattern()
     await i3c_controller.send_stop()
 
     # Start new frame and reset target with reset action set to peripheral reset

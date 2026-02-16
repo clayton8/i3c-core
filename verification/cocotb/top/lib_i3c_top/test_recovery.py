@@ -790,7 +790,7 @@ async def test_chained_ri_and_ccc_commands(dut):
     # 16. CCC command (GETMRL) - STOP
     # =========================================================================
     responses = await i3c_controller.i3c_ccc_read(
-        ccc=CCC.DIRECT.GETMRL, addr=DYNAMIC_ADDR, count=2,
+        ccc=CCC.DIRECT.GETMRL, addr=DYNAMIC_ADDR, count=3,
         stop=True
     )
 
@@ -3375,7 +3375,7 @@ async def test_ri_comprehensive_stress(dut):
 
         # Directed CCC: GETMRL
         responses = await i3c_controller.i3c_ccc_read(
-            ccc=CCC.DIRECT.GETMRL, addr=DYNAMIC_ADDR, count=2, stop=True
+            ccc=CCC.DIRECT.GETMRL, addr=DYNAMIC_ADDR, count=3, stop=True
         )
         dut._log.info(f"  GETMRL: {responses[0][1].hex()}")
 
