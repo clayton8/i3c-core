@@ -3579,7 +3579,7 @@ package I3CCSR_uvm;
 
         virtual function void build();
             this.RST_ACTION = new("RST_ACTION");
-            this.RST_ACTION.configure(this, 8, 0, "RO", 1, 'h0, 1, 1, 0);
+            this.RST_ACTION.configure(this, 8, 0, "RO", 1, 'h1, 1, 1, 0);
             this.RESET_TIME_PERIPHERAL = new("RESET_TIME_PERIPHERAL");
             this.RESET_TIME_PERIPHERAL.configure(this, 8, 8, "RW", 1, 'h0, 1, 1, 0);
             this.RESET_TIME_TARGET = new("RESET_TIME_TARGET");

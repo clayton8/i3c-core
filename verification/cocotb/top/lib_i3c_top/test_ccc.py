@@ -6,6 +6,7 @@ import random
 from boot import boot_init
 from bus2csr import bytes2int
 from ccc import CCC
+from ccc import RSTACT_DEF_BYTE
 from cocotbext_i3c.common import I3cTargetResetAction
 from i3c_controller_fixed import I3cControllerFixed as I3cController
 from interface import I3CTopTestInterface
@@ -791,11 +792,10 @@ async def test_ccc_rstact(dut, type, rstact):
         stop=False,
     )
 
-    # Check if reset action got stored correctly in the logic after Target Reset Pattern
+    # Check if reset action got stored correctly in the logic after RSTACT CCC
     sig = dut.xi3c_wrapper.i3c.xcontroller.xcontroller_standby.xcontroller_standby_i3c.rst_action_o
-    assert int(sig) == 0
-    await i3c_controller.send_target_reset_pattern()
     assert rst_action == int(sig), f"Expected rst_action_o={rst_action}, got {int(sig)}"
+    await i3c_controller.send_target_reset_pattern()
     await i3c_controller.send_stop()
 
     # Start new frame and reset target with reset action set to peripheral reset
@@ -817,6 +817,140 @@ rstact_tf = TestFactory(test_function=test_ccc_rstact)
 rstact_tf.add_option(name="rstact", optionlist=SUPPORTED_RESET_ACTIONS)
 rstact_tf.add_option(name="type", optionlist=["broadcast", "direct"])
 rstact_tf.generate_tests()
+
+
+async def send_rstact_write(i3c_controller, defining_byte, ccc_type, target_addr):
+    """Send RSTACT write CCC (broadcast or direct) with the given defining byte."""
+    if ccc_type == "broadcast":
+        await i3c_controller.i3c_ccc_write(
+            ccc=CCC.BCAST.RSTACT, defining_byte=defining_byte, stop=True)
+    else:
+        await i3c_controller.i3c_ccc_write(
+            ccc=CCC.DIRECT.RSTACT, defining_byte=defining_byte,
+            directed_data=[(target_addr, [])], stop=True)
+
+
+async def read_rstact(i3c_controller, defining_byte, target_addr):
+    """Direct read RSTACT with given defining byte, return single data byte."""
+    responses = await i3c_controller.i3c_ccc_read(
+        ccc=CCC.DIRECT.RSTACT, addr=target_addr, count=1,
+        defining_byte=defining_byte)
+    assert responses[0][0], \
+        f"Target 0x{target_addr:02X} NACKed RSTACT read DB=0x{defining_byte:02X}"
+    return responses[0][1][0]
+
+
+@cocotb.test()
+async def test_ccc_rstact_vt_detect(dut):
+    """
+    Verify RSTACT Defining Byte 0x04 (Virtual Target Detect) flag set/clear
+    and Defining Byte 0x84 (Virtual Target Indication) read-back.
+    """
+    log = logging.getLogger("test_ccc_rstact_vt_detect")
+
+    (STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR) = \
+        random.sample(VALID_I3C_ADDRESSES, 4)
+    i3c_controller, _, tb = await test_setup(
+        dut, STATIC_ADDR, VIRT_STATIC_ADDR,
+        dynamic_addr=DYNAMIC_ADDR, virtual_dynamic_addr=VIRT_DYNAMIC_ADDR)
+    await ClockCycles(tb.clk, 50)
+
+    addr_name = {DYNAMIC_ADDR: "main", VIRT_DYNAMIC_ADDR: "virt"}
+
+    for i in range(10):
+        # --- Set VT detect flag ---
+        # DB=0x04 is Direct-only per spec (line 3613)
+        set_addr = random.choice([DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR])
+        log.info(f"[Iter {i}] SET flag via direct RSTACT DB=0x04 to {addr_name[set_addr]} (0x{set_addr:02X})")
+        await send_rstact_write(
+            i3c_controller, RSTACT_DEF_BYTE.VIRTUAL_TARGET_DETECT,
+            "direct", set_addr)
+
+        # Both targets should read back flag=1
+        for addr in [DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR]:
+            val = await read_rstact(
+                i3c_controller, RSTACT_DEF_BYTE.VIRTUAL_TARGET_DETECT, addr)
+            log.info(f"  Read DB=0x04 from {addr_name[addr]} (0x{addr:02X}): 0x{val:02X}")
+            assert val == 0x01, \
+                f"Iter {i}: Expected VT detect flag 0x01 from {addr_name[addr]} (0x{addr:02X}), got 0x{val:02X}"
+
+        # --- Clear VT detect flag ---
+        clr_type = random.choice(["broadcast", "direct"])
+        clr_addr = random.choice([DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR])
+        if clr_type == "broadcast":
+            log.info(f"[Iter {i}] CLEAR flag via broadcast RSTACT DB=0x00")
+        else:
+            log.info(f"[Iter {i}] CLEAR flag via direct RSTACT DB=0x00 to {addr_name[clr_addr]} (0x{clr_addr:02X})")
+        await send_rstact_write(
+            i3c_controller, RSTACT_DEF_BYTE.NO_RESET,
+            clr_type, clr_addr if clr_type == "direct" else None)
+
+        # Both targets should read back flag=0
+        for addr in [DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR]:
+            val = await read_rstact(
+                i3c_controller, RSTACT_DEF_BYTE.VIRTUAL_TARGET_DETECT, addr)
+            log.info(f"  Read DB=0x04 from {addr_name[addr]} (0x{addr:02X}): 0x{val:02X}")
+            assert val == 0x00, \
+                f"Iter {i}: Expected VT detect flag 0x00 from {addr_name[addr]} (0x{addr:02X}), got 0x{val:02X}"
+
+    # --- VT Indication (DB=0x84): both targets always report 0x01 ---
+    log.info("Checking DB=0x84 (VT Indication) from both targets")
+    for addr in [DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR]:
+        val = await read_rstact(
+            i3c_controller, RSTACT_DEF_BYTE.VIRTUAL_TARGET_INDICATION, addr)
+        log.info(f"  Read DB=0x84 from {addr_name[addr]} (0x{addr:02X}): 0x{val:02X}")
+        assert val == 0x01, \
+            f"Expected VT indication 0x01 from {addr_name[addr]} (0x{addr:02X}), got 0x{val:02X}"
+
+    log.info("PASS: All VT detect flag set/clear/indication checks passed")
+
+
+@cocotb.test()
+async def test_ccc_rstact_vt_detect_no_reset_arm(dut):
+    """
+    Verify DB=0x04 does not arm a reset action: default peripheral→escalation
+    path still works after sending RSTACT with VT detect defining byte.
+    """
+    log = logging.getLogger("test_ccc_rstact_vt_detect_no_reset_arm")
+
+    (SA, VSA, DA, VDA) = random.sample(VALID_I3C_ADDRESSES, 4)
+    i3c_controller, _, tb = await test_setup(dut, SA, VSA, DA, VDA)
+    dut.peripheral_reset_done_i.value = 0
+    await ClockCycles(tb.clk, 50)
+
+    addr_name = {DA: "main", VDA: "virt"}
+
+    # Send RSTACT DB=0x04 — sets VT detect flag but does NOT arm reset
+    # DB=0x04 is Direct-only per spec (line 3613)
+    tgt_addr = random.choice([DA, VDA])
+    log.info(f"RSTACT DB=0x04 via direct to {addr_name[tgt_addr]} (0x{tgt_addr:02X})")
+    await send_rstact_write(
+        i3c_controller, RSTACT_DEF_BYTE.VIRTUAL_TARGET_DETECT,
+        "direct", tgt_addr)
+
+    # 1st reset pattern → default peripheral reset (rstact not armed)
+    await i3c_controller.send_target_reset_pattern()
+    await ClockCycles(tb.clk, 10)
+    log.info(f"1st pattern: peripheral_reset_o={int(dut.peripheral_reset_o)}, "
+             f"escalated_reset_o={int(dut.escalated_reset_o)}")
+    assert dut.peripheral_reset_o == 1, "Expected peripheral_reset_o=1 after 1st pattern"
+    assert dut.escalated_reset_o == 0, "Expected escalated_reset_o=0 after 1st pattern"
+
+    # Clear peripheral reset handshake before 2nd pattern
+    dut.peripheral_reset_done_i.value = 1
+    await ClockCycles(tb.clk, 2)
+    dut.peripheral_reset_done_i.value = 0
+    await ClockCycles(tb.clk, 10)
+
+    # 2nd reset pattern → escalated reset (no intervening RSTACT/GETSTATUS)
+    await i3c_controller.send_target_reset_pattern()
+    await ClockCycles(tb.clk, 10)
+    log.info(f"2nd pattern: peripheral_reset_o={int(dut.peripheral_reset_o)}, "
+             f"escalated_reset_o={int(dut.escalated_reset_o)}")
+    assert dut.peripheral_reset_o == 0, "Expected peripheral_reset_o=0 after escalation"
+    assert dut.escalated_reset_o == 1, "Expected escalated_reset_o=1 after escalation"
+
+    log.info("PASS: DB=0x04 does not interfere with default reset escalation")
 
 
 @cocotb.test()

@@ -903,7 +903,6 @@ package I3CCSR_pkg;
 
     typedef struct packed{
         logic [7:0] next;
-        logic we;
     } I3CCSR__I3C_EC__StdbyCtrlMode__STBY_CR_CCC_CONFIG_RSTACT_PARAMS__RST_ACTION__in_t;
 
     typedef struct packed{
