@@ -1008,3 +1008,89 @@ async def test_i3c_target_private_read_sizes_and_abort(dut):
     await ClockCycles(tb.clk, 10)
 
     await ClockCycles(tb.clk, 100)
+
+
+@cocotb.test()
+async def test_i3c_target_tx_flush_clears_converter(dut):
+    """
+    Verify that TTI RESET_CONTROL.TX_DATA_RST flushes both the TX FIFO
+    and the width_converter_Nto8 shift register.
+
+    Steps:
+    1. Write 8 bytes (2 dwords) to the TX FIFO (no descriptor yet, so no read).
+       The first dword is eagerly pulled into the Nto8 converter's sreg.
+    2. Flush TX data queue via RESET_CONTROL.TX_DATA_RST.
+    3. Write new data and a descriptor, then perform a private read.
+    4. Verify the read returns only the new data (no stale sreg bytes).
+    """
+
+    i3c_controller, i3c_target, tb = await test_setup(dut)
+
+    def compare(expected, received):
+        dut._log.info("Expected: [" + " ".join([f"{d:02X}" for d in expected]) + "]")
+        dut._log.info("Received: [" + " ".join([f"{d:02X}" for d in received]) + "]")
+        assert expected == received
+
+    async def enqueue_tx_data(data):
+        """Write data to TTI TX FIFO and TX descriptor."""
+        length = len(data)
+        for i in range((length + 3) // 4):
+            word = data[4 * i]
+            if 4 * i + 1 < length:
+                word |= data[4 * i + 1] << 8
+            if 4 * i + 2 < length:
+                word |= data[4 * i + 2] << 16
+            if 4 * i + 3 < length:
+                word |= data[4 * i + 3] << 24
+            await tb.write_csr(tb.reg_map.I3C_EC.TTI.TX_DATA_PORT.base_addr, int2dword(word), 4)
+        await tb.write_csr(tb.reg_map.I3C_EC.TTI.TX_DESC_QUEUE_PORT.base_addr, int2dword(length), 4)
+
+    # Step 1: Write stale data to TX FIFO (data only, no descriptor)
+    stale_data = [0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE, 0xBA, 0xBE]
+    for i in range(2):
+        word = (stale_data[4 * i]
+                | stale_data[4 * i + 1] << 8
+                | stale_data[4 * i + 2] << 16
+                | stale_data[4 * i + 3] << 24)
+        await tb.write_csr(tb.reg_map.I3C_EC.TTI.TX_DATA_PORT.base_addr, int2dword(word), 4)
+
+    # Wait for the converter to pull the first dword into its sreg
+    await ClockCycles(tb.clk, 10)
+
+    # Step 2: Flush TX data queue via RESET_CONTROL
+    await tb.write_csr_field(
+        tb.reg_map.I3C_EC.TTI.RESET_CONTROL.base_addr,
+        tb.reg_map.I3C_EC.TTI.RESET_CONTROL.TX_DATA_RST,
+        1,
+    )
+    await ClockCycles(tb.clk, 10)
+    await tb.write_csr_field(
+        tb.reg_map.I3C_EC.TTI.RESET_CONTROL.base_addr,
+        tb.reg_map.I3C_EC.TTI.RESET_CONTROL.TX_DATA_RST,
+        0,
+    )
+
+    # Also flush the TX descriptor queue
+    await tb.write_csr_field(
+        tb.reg_map.I3C_EC.TTI.RESET_CONTROL.base_addr,
+        tb.reg_map.I3C_EC.TTI.RESET_CONTROL.TX_DESC_RST,
+        1,
+    )
+    await ClockCycles(tb.clk, 10)
+    await tb.write_csr_field(
+        tb.reg_map.I3C_EC.TTI.RESET_CONTROL.base_addr,
+        tb.reg_map.I3C_EC.TTI.RESET_CONTROL.TX_DESC_RST,
+        0,
+    )
+    await ClockCycles(tb.clk, 10)
+
+    # Step 3: Write new data and enqueue descriptor, then do private read
+    new_data = [random.randint(0, 255) for _ in range(8)]
+    await enqueue_tx_data(new_data)
+    rx_resp = await i3c_controller.i3c_read(TARGET_ADDRESS, 8)
+    assert not rx_resp.nack, "Unexpected NACK on post-flush read"
+
+    # Step 4: Verify we got the new data, not stale sreg contents
+    compare(new_data, list(rx_resp.data))
+
+    await ClockCycles(tb.clk, 100)
