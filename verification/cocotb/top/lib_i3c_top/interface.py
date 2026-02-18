@@ -4,6 +4,7 @@ from bus2csr import get_frontend_bus_if
 from cocotb_helpers import reset_n
 from reg_map import reg_map
 from tti_monitor import TtiQueueMonitor
+from i3c_bus_monitor import I3cBusMonitor
 
 import cocotb
 from cocotb.handle import SimHandleBase
@@ -25,6 +26,7 @@ class I3CTopTestInterface:
         self.read_csr_field = self.busIf.read_csr_field
         self.write_csr_field = self.busIf.write_csr_field
         self.tti_monitor = None
+        self.bus_monitor = None
 
     async def setup(self, fclk=500.0):
 
@@ -51,3 +53,15 @@ class I3CTopTestInterface:
         except AttributeError:
             self.dut._log.warning("TtiQueueMonitor: required signals not found, skipping")
             self.tti_monitor = None
+
+        # Start I3C Bus Monitor for every test
+        try:
+            self.bus_monitor = I3cBusMonitor(self.dut)
+            if self.bus_monitor.is_available():
+                await self.bus_monitor.start()
+            else:
+                self.dut._log.warning("I3cBusMonitor: signals not available, skipping")
+                self.bus_monitor = None
+        except Exception as e:
+            self.dut._log.warning(f"I3cBusMonitor: failed to start: {e}")
+            self.bus_monitor = None

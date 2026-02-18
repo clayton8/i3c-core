@@ -113,6 +113,11 @@ async def boot_init(
         tb, static_addr, virtual_static_addr, dynamic_addr, virtual_dynamic_addr
     )
 
+    # Inform the I3C bus monitor of the DUT's dynamic address
+    dut_addr = dynamic_addr if dynamic_addr is not None else static_addr
+    if hasattr(tb, 'bus_monitor') and tb.bus_monitor is not None:
+        tb.bus_monitor.set_dut_dynamic_addr(dut_addr)
+
 
 async def check_version(tb):
     """Check HCI version"""
