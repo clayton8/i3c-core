@@ -2225,11 +2225,7 @@ async def test_ccc_entdaa_te3_te4(dut):
     TE3: Parity error on assigned address → target NACKs, retries on next Sr+7E/R.
     TE4: Invalid reserved byte (not 7E/R) → target NACKs, waits for STOP.
 
-    DESIGN BUG (ccc_entdaa.sv:166):
-      parity_ok = (~^bus_rx_rsp_i.data[7:1] == bus_rx_rsp_i.data[0]) || te3_err_det_en_i;
-      When te3_err_det_en_i=1 (enabled), parity_ok is ALWAYS True → TE3 never fires.
-      Should be: || !te3_err_det_en_i  (per the TE4 pattern at line 229).
-      RTL fix: ccc_entdaa.sv:166: change `|| te3_err_det_en_i` to `|| !te3_err_det_en_i`
+    BLOCKED BY DESIGN BUG: see verification/bugs/ccc_entdaa_te3_parity_bypass.md
     """
     log = logging.getLogger("test_ccc_entdaa_te3_te4")
 
