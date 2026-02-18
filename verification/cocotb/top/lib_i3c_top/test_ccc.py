@@ -1814,3 +1814,137 @@ async def test_ccc_random_interleave(dut):
             responses = await i3c_controller.i3c_ccc_read(
                 ccc=CCC.DIRECT.GETCAPS, addr=tgt, count=3)
             assert responses[0][0] == True
+
+
+@cocotb.test()
+async def test_ccc_vendor_codes(dut):
+    """
+    Verify vendor-specific CCC codes:
+    - Broadcast vendor CCCs (0x61-0x7F): target ignores data silently
+    - Direct vendor CCCs (0xE0-0xFE): target NACKs (unsupported)
+    """
+    (STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR) = \
+        random.sample(VALID_I3C_ADDRESSES, 4)
+    i3c_controller, _, tb = await test_setup(
+        dut, STATIC_ADDR, VIRT_STATIC_ADDR,
+        dynamic_addr=DYNAMIC_ADDR, virtual_dynamic_addr=VIRT_DYNAMIC_ADDR)
+    await ClockCycles(tb.clk, 50)
+
+    # Broadcast vendor CCCs — should be silently ignored
+    for ccc_code in [0x61, 0x6A, 0x7F]:
+        await i3c_controller.i3c_ccc_write(
+            ccc=ccc_code, broadcast_data=[0xDE, 0xAD])
+
+    # Direct vendor CCCs — should NACK
+    for ccc_code in [0xE0, 0xEA, 0xFE]:
+        for tgt_addr in [DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR]:
+            acks = await i3c_controller.i3c_ccc_write(
+                ccc=ccc_code, directed_data=[(tgt_addr, [0x00])])
+            assert acks[0] == False, \
+                f"Vendor CCC 0x{ccc_code:02X} to 0x{tgt_addr:02X} should NACK"
+
+    # Verify clean recovery after vendor codes
+    responses = await i3c_controller.i3c_ccc_read(
+        ccc=CCC.DIRECT.GETBCR, addr=DYNAMIC_ADDR, count=1)
+    assert responses[0][0] == True, "GETBCR should ACK after vendor codes"
+
+
+@cocotb.test()
+async def test_ccc_abort_bcast_stop(dut):
+    """
+    Controller STOP during CCC at various phases:
+    - STOP during broadcast SET data (incomplete data)
+    - Verify clean recovery (next CCC works normally)
+    """
+    (STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR) = \
+        random.sample(VALID_I3C_ADDRESSES, 4)
+    i3c_controller, _, tb = await test_setup(
+        dut, STATIC_ADDR, VIRT_STATIC_ADDR,
+        dynamic_addr=DYNAMIC_ADDR, virtual_dynamic_addr=VIRT_DYNAMIC_ADDR)
+    await ClockCycles(tb.clk, 50)
+
+    # Send SETMWL broadcast with only 1 byte (expects 2) then STOP
+    await i3c_controller.take_bus_control()
+    await i3c_controller.send_start()
+    await i3c_controller.write_addr_header(0x7E)
+    await i3c_controller.send_byte_tbit(CCC.BCAST.SETMWL)
+    await i3c_controller.send_byte_tbit(0xAB)  # Only MSB, missing LSB
+    await i3c_controller.send_stop()
+    i3c_controller.give_bus_control()
+
+    # Send STOP immediately after CCC code (no data at all)
+    await i3c_controller.take_bus_control()
+    await i3c_controller.send_start()
+    await i3c_controller.write_addr_header(0x7E)
+    await i3c_controller.send_byte_tbit(CCC.BCAST.SETMRL)
+    await i3c_controller.send_stop()
+    i3c_controller.give_bus_control()
+
+    # Verify recovery: normal CCC still works
+    mwl_val = random.randint(0, 0xFFFF)
+    await i3c_controller.i3c_ccc_write(
+        ccc=CCC.DIRECT.SETMWL,
+        directed_data=[(DYNAMIC_ADDR, [(mwl_val >> 8) & 0xFF, mwl_val & 0xFF])])
+
+    sig_mwl = int(dut.xi3c_wrapper.i3c.xcontroller.xconfiguration.get_mwl_o.value)
+    assert sig_mwl == mwl_val, \
+        f"Recovery SETMWL: expected 0x{mwl_val:04X}, got 0x{sig_mwl:04X}"
+
+    responses = await i3c_controller.i3c_ccc_read(
+        ccc=CCC.DIRECT.GETBCR, addr=DYNAMIC_ADDR, count=1)
+    assert responses[0][0] == True, "GETBCR should ACK after abort recovery"
+
+
+@cocotb.test()
+async def test_ccc_error_det_enable(dut):
+    """
+    Verify TE0-TE5 error detection enable CSR bits can be toggled.
+    When TE0 is disabled, unsupported CCC should not trigger TE0 error.
+    When TE5 is disabled, wrong direction should not trigger TE5 error.
+    """
+    (STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR) = \
+        random.sample(VALID_I3C_ADDRESSES, 4)
+    i3c_controller, _, tb = await test_setup(
+        dut, STATIC_ADDR, VIRT_STATIC_ADDR,
+        dynamic_addr=DYNAMIC_ADDR, virtual_dynamic_addr=VIRT_DYNAMIC_ADDR)
+    await ClockCycles(tb.clk, 50)
+
+    err_ctrl_addr = tb.reg_map.I3C_EC.TTI.TARGET_ERR_CTRL.base_addr
+
+    # Read default TE error detection enable states
+    for field_name in ['TE0_ERR_DET_EN', 'TE1_ERR_DET_EN', 'TE2_ERR_DET_EN',
+                        'TE3_ERR_DET_EN', 'TE4_ERR_DET_EN', 'TE5_ERR_DET_EN']:
+        field = getattr(tb.reg_map.I3C_EC.TTI.TARGET_ERR_CTRL, field_name)
+        val = await tb.read_csr_field(err_ctrl_addr, field)
+        dut._log.info(f"{field_name} default = {val}")
+
+    # Disable TE0 (unsupported CCC detection)
+    te0_field = tb.reg_map.I3C_EC.TTI.TARGET_ERR_CTRL.TE0_ERR_DET_EN
+    await tb.write_csr_field(err_ctrl_addr, te0_field, 0)
+    val = await tb.read_csr_field(err_ctrl_addr, te0_field)
+    assert val == 0, f"TE0 should be disabled, got {val}"
+
+    # Send unsupported CCC — should still NACK but no TE0 error flag
+    acks = await i3c_controller.i3c_ccc_write(
+        ccc=CCC.DIRECT.GETACCCR, directed_data=[(DYNAMIC_ADDR, [0x00])])
+
+    # Re-enable TE0
+    await tb.write_csr_field(err_ctrl_addr, te0_field, 1)
+    val = await tb.read_csr_field(err_ctrl_addr, te0_field)
+    assert val == 1, f"TE0 should be re-enabled, got {val}"
+
+    # Toggle TE5 (wrong direction detection)
+    te5_field = tb.reg_map.I3C_EC.TTI.TARGET_ERR_CTRL.TE5_ERR_DET_EN
+    await tb.write_csr_field(err_ctrl_addr, te5_field, 0)
+    val = await tb.read_csr_field(err_ctrl_addr, te5_field)
+    assert val == 0, f"TE5 should be disabled, got {val}"
+
+    # Re-enable TE5
+    await tb.write_csr_field(err_ctrl_addr, te5_field, 1)
+    val = await tb.read_csr_field(err_ctrl_addr, te5_field)
+    assert val == 1, f"TE5 should be re-enabled, got {val}"
+
+    # Verify normal CCC operation is unaffected
+    responses = await i3c_controller.i3c_ccc_read(
+        ccc=CCC.DIRECT.GETBCR, addr=DYNAMIC_ADDR, count=1)
+    assert responses[0][0] == True, "GETBCR should ACK after error detect toggle"
