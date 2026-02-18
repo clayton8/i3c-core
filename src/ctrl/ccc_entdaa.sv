@@ -163,7 +163,7 @@ module ccc_entdaa
 
   // Odd parity check on received address byte
   // Address is in bits [7:1], parity bit is in bit [0]
-  assign parity_ok = (~^bus_rx_rsp_i.data[7:1] == bus_rx_rsp_i.data[0]) || te3_err_det_en_i;
+  assign parity_ok = (~^bus_rx_rsp_i.data[7:1] == bus_rx_rsp_i.data[0]) || !te3_err_det_en_i;
 
   // Extract 7-bit address from received byte (discard parity bit)
   assign address_o = bus_rx_rsp_i.data[7:1];
