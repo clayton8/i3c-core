@@ -22,7 +22,7 @@ from typing import Iterable, Optional
 
 from cocotbext_i3c.i3c_controller import I3cController, I3cXferMode
 from cocotbext_i3c.common import I3C_RSVD_BYTE, I3cPWResp, I3cState
-from cocotb.triggers import Timer
+from cocotb.triggers import FallingEdge, Timer, NextTimeStep
 
 
 
@@ -514,3 +514,112 @@ class I3cControllerFixed(I3cController):
             return await self.recv_addr_ack()
         else:
             return await self.recv_bit_od()
+
+    # =========================================================================
+    # MANUAL IBI HANDLING — Sr→CCC SEQUENCING
+    # =========================================================================
+
+    # Directed GET CCCs — read from target. All other directed CCCs are SET (write).
+    # Derived from ccc.py; names starting with "GET" are read-direction commands.
+    _DIRECTED_GET_CCCS = frozenset({
+        0x8B, 0x8C, 0x8D, 0x8E, 0x8F,  # GETMWL, GETMRL, GETPID, GETBCR, GETDCR
+        0x90, 0x91,                       # GETSTATUS, GETACCCR
+        0x94, 0x95,                       # GETMXDS, GETCAPS
+        0x99,                              # GETXTIME
+    })
+
+    async def handle_ibi_manual(self, ack=True, ccc=None, ccc_data=None,
+                                ccc_addr=None, skip_ibi_data=False,
+                                chain_write_addr=None, chain_write_data=None,
+                                max_data_len=65536):
+        """
+        Manually handle an IBI with explicit ACK/NACK and optional Sr chaining.
+
+        Pauses the background IBI monitor, waits for the DUT to initiate
+        an IBI (SDA pull-low), then performs ACK/NACK + data read.
+        Optionally issues Sr→CCC or Sr→Private Write after IBI handling.
+
+        Args:
+            ack: True to ACK the IBI, False to NACK
+            ccc: Optional CCC command to issue via Sr after IBI handling.
+            ccc_data: Data bytes for the CCC
+            ccc_addr: Address for directed CCC. If None, CCC is broadcast.
+            skip_ibi_data: If True, skip data read after ACK (BCR[2]=0 mode)
+            chain_write_addr: Target address for Sr→Private Write after IBI
+            chain_write_data: Data bytes for the chained Private Write
+            max_data_len: Max IBI data bytes to accept after MDB
+
+        Returns:
+            dict with keys: addr, data (bytearray), ack (bool),
+            ccc_response, chain_write_ack
+        """
+        assert not (ccc is not None and chain_write_addr is not None), \
+            "Cannot chain both CCC and Private Write"
+
+        await self.take_bus_control()
+
+        result = {"addr": None, "data": bytearray(), "ack": ack,
+                  "ccc_response": None, "chain_write_ack": None}
+
+        # Wait for DUT to pull SDA low (IBI initiation)
+        await FallingEdge(self.sda_i)
+        # Complete the START by pulling SCL low
+        await self.tcas
+        self.scl = 0
+        await self.tsu_od
+
+        # Receive address byte with ACK/NACK
+        addr_byte = await self.recv_byte(send_ack=ack)
+        result["addr"] = addr_byte >> 1
+
+        if ack and not skip_ibi_data:
+            target_idx = self.get_target_idx_by_addr(result["addr"])
+            if target_idx is not None:
+                target = self.targets[target_idx]
+                mdb_enabled = target.bcr & (1 << 2)
+                if mdb_enabled:
+                    await self.recv_until_eod_tbit(
+                        result["data"], max_data_len + 1
+                    )
+
+        if ccc is not None:
+            # Sr→CCC chain
+            await self.send_start()
+            await self.write_addr_header(I3C_RSVD_BYTE)
+            await self.send_byte_tbit(ccc)
+            if ccc_data is not None:
+                if ccc_addr is not None:
+                    # Directed CCC — GET CCCs use read direction, all others write
+                    is_read = ccc in self._DIRECTED_GET_CCCS
+                    await self.send_start()
+                    await self.write_addr_header(ccc_addr, read=is_read)
+                    if is_read:
+                        resp_data = bytearray()
+                        await self.recv_until_eod_tbit(resp_data, len(ccc_data))
+                        result["ccc_response"] = resp_data
+                    else:
+                        for byte in ccc_data:
+                            await self.send_byte_tbit(byte)
+                else:
+                    for byte in ccc_data:
+                        await self.send_byte_tbit(byte)
+            await self.send_stop()
+        elif chain_write_addr is not None:
+            # Sr→Private Write chain
+            await self.send_start()
+            await self.write_addr_header(I3C_RSVD_BYTE)
+            await self.send_start()
+            write_ack = await self.write_addr_header(chain_write_addr)
+            result["chain_write_ack"] = write_ack
+            if write_ack and chain_write_data:
+                for byte in chain_write_data:
+                    await self.send_byte_tbit(byte)
+            await self.send_stop()
+        else:
+            await self.send_stop()
+
+        if ack:
+            self.got_ibi.set(bytearray([result["addr"]]) + result["data"])
+
+        self.give_bus_control()
+        return result
