@@ -2845,7 +2845,7 @@ permitted by the retry counter.</p>
 
 #### TX_DATA_RST field
 
-<p>TTI TX Data Queue Buffer Software Reset</p>
+<p>TTI TX Data Queue Buffer Software Reset. Also resets the tti_conv_Nto8 since first dword is immediatly loaded into the converter and can't be cleared otherwise.</p>
 
 #### RX_DATA_RST field
 

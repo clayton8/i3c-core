@@ -842,7 +842,7 @@ module recovery_handler
 
     end else begin
       tti_tx_data_queue_rready_conv_source    = ctl_tti_tx_data_queue_rready_i;
-      tti_tx_data_queue_flush_conv_source     = ctl_tti_tx_data_queue_flush_i;
+      tti_tx_data_queue_flush_conv_source     = ctl_tti_tx_data_queue_flush_i | tti_tx_data_queue_reg_rst;
       send_tti_tx_data_ready                  = '0;
       ctl_tti_tx_data_queue_full_o            = tti_tx_data_queue_full;
       ctl_tti_tx_data_queue_depth_o           = tti_tx_data_queue_depth;
