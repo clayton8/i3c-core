@@ -293,7 +293,7 @@ async def test_ibi_accept_partial_no_repeat(dut):
 async def _test_ibi_refuse_retry(dut, retry_num):
     """
     Sec 5.1.6.2 item 2: Refuse IBI sweep over all retry_num values.
-    Counts exact bus-level attempts via handle_ibi_manual.
+    Counts exact bus-level attempts via NACK counting.
     """
     i3c_controller, _, tb = await test_setup(dut)
     await init_ibi(i3c_controller, tb, retry_num=retry_num)
@@ -302,70 +302,70 @@ async def _test_ibi_refuse_retry(dut, retry_num):
     data = [0xBE, 0xEF]
     await send_ibi(tb, mdb, data)
 
-    attempts = 0
+    i3c_controller.enable_ibi(False)
+    i3c_controller.reset_ibi_state()
 
     if retry_num == 7:
         # Infinite retries: NACK >8 times to prove unbounded, then ACK
         for _ in range(9):
             result = await with_timeout(
-                i3c_controller.handle_ibi_manual(ack=False), 20, "us",
+                i3c_controller.wait_for_ibi_event(), 20, "us",
             )
-            attempts += 1
             assert result["ack"] is False
             assert result["addr"] == TARGET_ADDRESS
 
+        assert i3c_controller.ibi_nack_count == 9
+
         # Accept the IBI to finish cleanly
-        result = await with_timeout(
-            i3c_controller.handle_ibi_manual(ack=True), 20, "us",
+        i3c_controller.enable_ibi(True)
+        response = await with_timeout(
+            i3c_controller.wait_for_ibi(), 20, "us",
         )
-        assert result["ack"] is True
-        await verify_ibi_response(
-            dut, bytearray([result["addr"]]) + result["data"],
-            TARGET_ADDRESS, mdb, data,
-        )
+        await verify_ibi_response(dut, response, TARGET_ADDRESS, mdb, data)
         await check_ibi_status(tb, 0, "infinite retry success")
 
-        dut._log.info(f"retry_num=7: >8 NACKs confirmed ({attempts}), then ACK")
+        dut._log.info(f"retry_num=7: >8 NACKs confirmed ({i3c_controller.ibi_nack_count}), then ACK")
 
         # CP7: Verify retry counter auto-reset on success — queue 2nd IBI
         # and confirm full retry budget is available again
         mdb2 = 0xBB
         data2 = [0xCA, 0xFE]
+        i3c_controller.enable_ibi(False)
+        i3c_controller.reset_ibi_state()
         await send_ibi(tb, mdb2, data2)
         for _ in range(5):
             result = await with_timeout(
-                i3c_controller.handle_ibi_manual(ack=False), 20, "us",
+                i3c_controller.wait_for_ibi_event(), 20, "us",
             )
             assert result["ack"] is False
-        result = await with_timeout(
-            i3c_controller.handle_ibi_manual(ack=True), 20, "us",
+        i3c_controller.enable_ibi(True)
+        response = await with_timeout(
+            i3c_controller.wait_for_ibi(), 20, "us",
         )
-        assert result["ack"] is True
+        assert response[0] == TARGET_ADDRESS
         await check_ibi_status(tb, 0, "2nd IBI success after counter reset")
     else:
-        # Finite retries: expect exactly retry_num + 1 attempts
+        # Finite retries: wait for DUT to exhaust its retry budget
+        # The background monitor auto-NACKs each attempt. Wait for the DUT
+        # to stop retrying (timeout), then count NACKs.
         while True:
             try:
                 result = await with_timeout(
-                    i3c_controller.handle_ibi_manual(ack=False),
-                    20 if attempts == 0 else 3, "us",
+                    i3c_controller.wait_for_ibi_event(),
+                    20 if i3c_controller.ibi_nack_count == 0 else 3, "us",
                 )
-                attempts += 1
                 assert result["ack"] is False
                 assert result["addr"] == TARGET_ADDRESS
             except SimTimeoutError:
-                # handle_ibi_manual called take_bus_control before timeout;
-                # release it so the monitor can resume.
-                i3c_controller.give_bus_control()
                 break
 
         expected = retry_num + 1
-        assert attempts == expected, (
-            f"retry_num={retry_num}: expected {expected} bus attempts, got {attempts}"
+        assert i3c_controller.ibi_nack_count == expected, (
+            f"retry_num={retry_num}: expected {expected} bus attempts, got {i3c_controller.ibi_nack_count}"
         )
         await check_ibi_status(tb, 3, f"retry exhausted (retry_num={retry_num})")
 
-        dut._log.info(f"retry_num={retry_num}: {attempts} attempts confirmed")
+        dut._log.info(f"retry_num={retry_num}: {i3c_controller.ibi_nack_count} attempts confirmed")
 
     await ClockCycles(tb.clk, 10)
 
@@ -436,7 +436,7 @@ async def test_ibi_refuse_and_disable(dut):
     """
     Sec 5.1.6.2 item 3: Refuse IBI, then disable interrupts via DISEC CCC.
     Target must NOT retry until ENEC re-enables.
-    Uses handle_ibi_manual to NACK + Sr->broadcast DISEC in one frame,
+    NACKs the IBI + chains Sr->broadcast DISEC in one frame,
     preventing the DUT from re-arbitrating IBI on a separate Start.
     """
     i3c_controller, _, tb = await test_setup(dut)
@@ -448,12 +448,10 @@ async def test_ibi_refuse_and_disable(dut):
 
     # NACK the IBI and immediately issue Sr->broadcast DISEC in the same frame.
     # Broadcast DISEC (0x07) sends: Sr->7E+W->CCC->data->STOP
-    result = await i3c_controller.handle_ibi_manual(
-        ack=False,
-        ccc=CCC.BCAST.DISEC,
-        ccc_data=[0x01],
-        ccc_addr=None,
-    )
+    i3c_controller.enable_ibi(False)
+    i3c_controller.set_ibi_chain_ccc(CCC.BCAST.DISEC, ccc_data=[0x01])
+
+    result = await i3c_controller.wait_for_ibi_event()
     assert result["ack"] is False
 
     await ClockCycles(tb.clk, 50)
@@ -508,13 +506,14 @@ async def test_ibi_accept_then_ccc(dut):
     await ClockCycles(tb.clk, 5)
     await check_pending_interrupt(tb, 1)
 
-    # Manual IBI handling: ACK + read data + Sr->CCC(GETSTATUS)
-    result = await i3c_controller.handle_ibi_manual(
-        ack=True,
-        ccc=CCC.DIRECT.GETSTATUS,
+    # IBI handling: ACK + read data + Sr->CCC(GETSTATUS)
+    i3c_controller.set_ibi_chain_ccc(
+        CCC.DIRECT.GETSTATUS,
         ccc_data=[0x00, 0x00],
         ccc_addr=TARGET_ADDRESS,
     )
+    response = await i3c_controller.wait_for_ibi()
+    result = i3c_controller.last_ibi_result
 
     # Verify IBI data received correctly
     expected_data = bytearray([mdb] + data)
@@ -560,12 +559,14 @@ async def test_ibi_refuse_then_ccc(dut):
     await send_ibi(tb, mdb, data)
 
     # NACK the IBI + issue Sr->CCC(GETSTATUS)
-    result = await i3c_controller.handle_ibi_manual(
-        ack=False,
-        ccc=CCC.DIRECT.GETSTATUS,
+    i3c_controller.enable_ibi(False)
+    i3c_controller.set_ibi_chain_ccc(
+        CCC.DIRECT.GETSTATUS,
         ccc_data=[0x00, 0x00],
         ccc_addr=TARGET_ADDRESS,
     )
+
+    result = await i3c_controller.wait_for_ibi_event()
 
     assert result["ack"] is False
 
@@ -974,11 +975,10 @@ async def test_ibi_nack_sr_private_write(dut):
 
     # NACK IBI, then Sr → Private Write to target
     write_payload = [0xDE, 0xAD]
-    result = await i3c_controller.handle_ibi_manual(
-        ack=False,
-        chain_write_addr=TARGET_ADDRESS,
-        chain_write_data=write_payload,
-    )
+    i3c_controller.enable_ibi(False)
+    i3c_controller.set_ibi_chain_write(TARGET_ADDRESS, write_payload)
+
+    result = await i3c_controller.wait_for_ibi_event()
     assert result["ack"] is False
     assert result["chain_write_ack"], "Target should ACK the chained Private Write"
 
@@ -1022,12 +1022,14 @@ async def test_ibi_nack_sr_directed_disec(dut):
     await send_ibi(tb, mdb, data)
 
     # NACK IBI, then Sr → Directed DISEC (CCC 0x81, SET → addr+W)
-    result = await i3c_controller.handle_ibi_manual(
-        ack=False,
-        ccc=CCC.DIRECT.DISEC,
+    i3c_controller.enable_ibi(False)
+    i3c_controller.set_ibi_chain_ccc(
+        CCC.DIRECT.DISEC,
         ccc_data=[0x01],                # DISINT byte
         ccc_addr=TARGET_ADDRESS,
     )
+
+    result = await i3c_controller.wait_for_ibi_event()
     assert result["ack"] is False
 
     await ClockCycles(tb.clk, 50)
@@ -1081,10 +1083,10 @@ async def test_ibi_accept_no_mdb_stop(dut):
     await send_ibi(tb, mdb, data)
 
     # ACK but refuse to read MDB — violates BCR[2]=1 contract
-    result = await i3c_controller.handle_ibi_manual(
-        ack=True,
-        skip_ibi_data=True,
-    )
+    i3c_controller.set_ibi_skip_data(True)
+
+    response = await i3c_controller.wait_for_ibi()
+    result = i3c_controller.last_ibi_result
     assert result["ack"] is True
     assert result["addr"] == TARGET_ADDRESS
 
@@ -1124,12 +1126,11 @@ async def test_ibi_accept_no_mdb_sr_ccc(dut):
     await send_ibi(tb, mdb, data)
 
     # ACK but refuse to read MDB, chain Sr → CCC instead
-    result = await i3c_controller.handle_ibi_manual(
-        ack=True,
-        skip_ibi_data=True,
-        ccc=CCC.BCAST.ENEC,
-        ccc_data=[0x0B],
-    )
+    i3c_controller.set_ibi_skip_data(True)
+    i3c_controller.set_ibi_chain_ccc(CCC.BCAST.ENEC, ccc_data=[0x0B])
+
+    response = await i3c_controller.wait_for_ibi()
+    result = i3c_controller.last_ibi_result
     assert result["ack"] is True
 
     await ClockCycles(tb.clk, 50)
@@ -1164,13 +1165,15 @@ async def test_ibi_tbit_abort_sr_ccc(dut):
     await send_ibi(tb, mdb, full_data)
 
     # ACK and read only MDB + 2 data bytes, then Sr → GETSTATUS
-    result = await i3c_controller.handle_ibi_manual(
-        ack=True,
-        max_data_len=2,
-        ccc=CCC.DIRECT.GETSTATUS,
+    i3c_controller.set_ibi_max_data(2)
+    i3c_controller.set_ibi_chain_ccc(
+        CCC.DIRECT.GETSTATUS,
         ccc_data=[0x00, 0x00],
         ccc_addr=TARGET_ADDRESS,
     )
+
+    response = await i3c_controller.wait_for_ibi()
+    result = i3c_controller.last_ibi_result
     assert result["ack"] is True
     assert result["addr"] == TARGET_ADDRESS
     # Should have received MDB + 2 data bytes (truncated)
@@ -1258,7 +1261,9 @@ async def test_ibi_retry_ctr_fw_reset(dut):
     await send_ibi(tb, mdb, data)
 
     # NACK attempt 1 → counter becomes 1
-    result = await i3c_controller.handle_ibi_manual(ack=False)
+    i3c_controller.enable_ibi(False)
+
+    result = await i3c_controller.wait_for_ibi_event()
     assert result["ack"] is False
     await check_ibi_status(tb, 1, "NACK #1")
 
@@ -1270,12 +1275,14 @@ async def test_ibi_retry_ctr_fw_reset(dut):
     )
 
     # NACK attempt 2 → counter becomes 1 again (was reset to 0)
-    result = await i3c_controller.handle_ibi_manual(ack=False)
+    result = await i3c_controller.wait_for_ibi_event()
     assert result["ack"] is False
 
     # Without FW reset, this would have been attempt 3 (cnt=2 > retry_num=1)
     # and DUT would have flushed. Instead DUT retries (cnt=1 ≤ 1).
-    result = await i3c_controller.handle_ibi_manual(ack=True)
+    i3c_controller.enable_ibi(True)
+    response = await i3c_controller.wait_for_ibi()
+    result = i3c_controller.last_ibi_result
     assert result["ack"] is True
     await verify_ibi_response(
         dut, bytearray([result["addr"]]) + result["data"],
@@ -1309,8 +1316,9 @@ async def test_ibi_multiple_arb_losses(dut):
     await send_ibi(tb, mdb_dut, dut_data)
 
     # NACK 3 times to exhaust retry_num=2 (allows attempts 0, 1, 2)
+    i3c_controller.enable_ibi(False)
     for i in range(3):
-        result = await i3c_controller.handle_ibi_manual(ack=False)
+        result = await i3c_controller.wait_for_ibi_event()
         assert result["ack"] is False, f"NACK {i}: expected NACK"
         assert result["addr"] == TARGET_ADDRESS, (
             f"NACK {i}: expected addr {TARGET_ADDRESS:#x}, got {result['addr']:#x}"
@@ -1335,11 +1343,10 @@ async def test_ibi_multiple_arb_losses(dut):
     await send_ibi(tb, mdb_fresh, fresh_data)
 
     # DUT initiates IBI when bus_available fires (~1µs after last STOP).
-    # Use handle_ibi_manual to ACK since bus_available hasn't fired yet.
-    result = await with_timeout(
-        i3c_controller.handle_ibi_manual(ack=True), 20, "us",
+    i3c_controller.enable_ibi(True)
+    response = await with_timeout(
+        i3c_controller.wait_for_ibi(), 20, "us",
     )
-    response = bytearray([result["addr"]]) + result["data"]
     await verify_ibi_response(dut, response, TARGET_ADDRESS, mdb_fresh, fresh_data)
     await check_ibi_status(tb, 0, "fresh IBI after retry exhaustion")
 
