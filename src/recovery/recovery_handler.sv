@@ -530,7 +530,7 @@ module recovery_handler
   ) tti_conv_8toN (
       .clk_i,
       .rst_ni(rst_ni),
-      .soft_reset_ni(~bypass_i3c_core_i & ~recv_conv_soft_reset),
+      .soft_reset_ni(~bypass_i3c_core_i & ~recv_conv_soft_reset & ~tti_rx_data_queue_reg_rst),
 
       .sink_valid_i(tti_rx_data_queue_wvalid),
       .sink_ready_o(tti_rx_data_queue_wready),
