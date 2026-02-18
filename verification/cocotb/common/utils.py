@@ -298,9 +298,11 @@ async def get_interrupt_status(tb):
 
     intrs = {
         "RX_DESC_STAT": None,
+        "TX_DESC_STAT": None,
         "RX_DESC_THLD_STAT": None,
         "RX_DATA_THLD_STAT": None,
         "IBI_DONE": None,
+        "TX_DESC_COMPLETE": None,
     }
 
     csr = tb.reg_map.I3C_EC.TTI.INTERRUPT_STATUS
