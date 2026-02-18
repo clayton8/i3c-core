@@ -83,9 +83,9 @@ async def test_rx_desc_stat(dut):
     assert irq.value == 0
 
     # Send a private write to the target
+    tx_data = [random.randint(0, 255) for i in range(4)]
     async def i3c_task():
-        data = [random.randint(0, 255) for i in range(4)]
-        await i3c_controller.i3c_write(TARGET_ADDRESS, data)
+        await i3c_controller.i3c_write(TARGET_ADDRESS, tx_data)
 
     cocotb.start_soon(i3c_task())
 
@@ -93,8 +93,19 @@ async def test_rx_desc_stat(dut):
     while irq.value == 0:
         await RisingEdge(tb.clk)
 
-    # Read RX descriptor, the interrupt should go low
-    await tb.read_csr(tb.reg_map.I3C_EC.TTI.RX_DESC_QUEUE_PORT.base_addr, 4)
+    # R1: Explicitly assert irq went HIGH
+    assert irq.value == 1, "IRQ should be HIGH after RX descriptor ready"
+
+    # R2: Read RX descriptor and validate content
+    desc = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.TTI.RX_DESC_QUEUE_PORT.base_addr, 4)
+    )
+    desc_len = desc & 0xFFFF
+    err_stat = desc >> 28
+    assert err_stat == 0, f"Unexpected error in RX descriptor, err_stat={err_stat}"
+    assert desc_len == len(tx_data), (
+        f"RX descriptor length mismatch: expected {len(tx_data)}, got {desc_len}"
+    )
 
     # Ensure that irq is low
     await ClockCycles(tb.clk, 10)
@@ -137,6 +148,11 @@ async def test_tx_desc_stat(dut):
         # Wait for the interrupt
         while irq.value == 0:
             await RisingEdge(tb.clk)
+        # R3: Assert TX_DESC_STAT bit specifically
+        intrs = await get_interrupt_status(tb)
+        assert intrs["TX_DESC_STAT"] == 1, (
+            f"TX_DESC_STAT should be 1 when NACK triggers descriptor request, got {intrs['TX_DESC_STAT']}"
+        )
         # Write data and descriptor
         await tb.write_csr(tb.reg_map.I3C_EC.TTI.TX_DATA_PORT.base_addr, int2dword(0xDEADBEEF), 4)
         await tb.write_csr(tb.reg_map.I3C_EC.TTI.TX_DESC_QUEUE_PORT.base_addr, int2dword(4), 4)
@@ -155,6 +171,13 @@ async def test_tx_desc_stat(dut):
 
     # Wait for the bus task transfer to complete
     await done_bus.wait()
+
+    # R4: After the read completes, TX_DESC_COMPLETE should fire
+    await ClockCycles(tb.clk, 10)
+    intrs = await get_interrupt_status(tb)
+    assert intrs["TX_DESC_COMPLETE"] == 1, (
+        f"TX_DESC_COMPLETE should be 1 after private read completes, got {intrs['TX_DESC_COMPLETE']}"
+    )
 
     # Clear the interrupt
     csr = tb.reg_map.I3C_EC.TTI.INTERRUPT_STATUS
@@ -201,7 +224,14 @@ async def test_ibi_done(dut):
         await tb.write_csr(tb.reg_map.I3C_EC.TTI.IBI_PORT.base_addr, int2dword(word), 4)
 
     # Wait for the IBI to be serviced
-    await i3c_controller.wait_for_ibi()
+    response = await i3c_controller.wait_for_ibi()
+
+    # R5: Verify IBI response data correctness
+    expected_ibi = bytearray([TARGET_ADDRESS, mdb])
+    assert response == expected_ibi, (
+        f"IBI data mismatch: expected [{' '.join(f'0x{b:02X}' for b in expected_ibi)}], "
+        f"got [{' '.join(f'0x{b:02X}' for b in response)}]"
+    )
 
     # Ensure interrupt status
     await ClockCycles(tb.clk, 10)

@@ -241,8 +241,9 @@ async def test_i3c_target_read(dut):
     dut._log.info("N consecutive transfers, one at a time")
     for i in range(2):
         tx_data = await make_transfer()
-        rx_data = await i3c_controller.i3c_read(TARGET_ADDRESS, len(tx_data))
-        rx_data = list(rx_data.data)
+        rx_resp = await i3c_controller.i3c_read(TARGET_ADDRESS, len(tx_data))
+        assert not rx_resp.nack, "Unexpected NACK on private read (one-at-a-time)"
+        rx_data = list(rx_resp.data)
         compare(tx_data, rx_data)
 
 
@@ -253,8 +254,9 @@ async def test_i3c_target_read(dut):
         tx_data.append(await make_transfer())
 
     for i in range(3):
-        rx_data = await i3c_controller.i3c_read(TARGET_ADDRESS, len(tx_data[i]))
-        rx_data = list(rx_data.data)
+        rx_resp = await i3c_controller.i3c_read(TARGET_ADDRESS, len(tx_data[i]))
+        assert not rx_resp.nack, f"Unexpected NACK on private read (batch, index {i})"
+        rx_data = list(rx_resp.data)
         compare(tx_data[i], rx_data)
 
 
@@ -272,8 +274,9 @@ async def test_i3c_target_read(dut):
         if i in short:
             lnt -= random.randint(1, 3)
 
-        rx_data = await i3c_controller.i3c_read(TARGET_ADDRESS, lnt)
-        rx_data = list(rx_data.data)
+        rx_resp = await i3c_controller.i3c_read(TARGET_ADDRESS, lnt)
+        assert not rx_resp.nack, f"Unexpected NACK on private read (short, index {i})"
+        rx_data = list(rx_resp.data)
         compare(tx_data[i], rx_data, lnt)
 
 
@@ -281,8 +284,9 @@ async def test_i3c_target_read(dut):
     dut._log.info("N consecutive transfers, one at a time (again)")
     for i in range(2):
         tx_data = await make_transfer()
-        rx_data = await i3c_controller.i3c_read(TARGET_ADDRESS, len(tx_data))
-        rx_data = list(rx_data.data)
+        rx_resp = await i3c_controller.i3c_read(TARGET_ADDRESS, len(tx_data))
+        assert not rx_resp.nack, "Unexpected NACK on private read (repeat)"
+        rx_data = list(rx_resp.data)
         compare(tx_data, rx_data)
 
     # Dummy wait
@@ -431,8 +435,6 @@ async def test_i3c_target_ibi(dut):
     target = i3c_controller.add_target(TARGET_ADDRESS)
     target.set_bcr_fields(ibi_req_capable=True, ibi_payload=True)
 
-    result = True
-
     # Enable IBI ACK-ing
     i3c_controller.enable_ibi(True)
 
@@ -450,24 +452,15 @@ async def test_i3c_target_ibi(dut):
     # Wait for the IBI to be serviced, check data
     response = await i3c_controller.wait_for_ibi()
     expected = bytearray([TARGET_ADDRESS, mdb] + data)
-    if response != expected:
-        dut._log.critical(
-            "IBI MDB/data mismatch! tgt: [ {}] ctl: [ {}]".format(
-                "".join("".join(f"0x{d:02X}") + " " for d in expected),
-                "".join("".join(f"0x{d:02X}") + " " for d in response),
-            )
-        )
-        result = False
+    assert response == expected, (
+        f"IBI MDB/data mismatch: expected [{' '.join(f'0x{b:02X}' for b in expected)}], "
+        f"got [{' '.join(f'0x{b:02X}' for b in response)}]"
+    )
 
     # Check LAST_IBI_STATUS
     last_ibi_status = await tb.read_csr_field(tb.reg_map.I3C_EC.TTI.STATUS.base_addr,
                                               tb.reg_map.I3C_EC.TTI.STATUS.LAST_IBI_STATUS)
-    expected_status = 0
-    if last_ibi_status != expected_status:
-        dut._log.critical(
-            f"Incorrect IBI status, expected {expected_status}, got {last_ibi_status}"
-        )
-        result = False
+    assert last_ibi_status == 0, f"LAST_IBI_STATUS: expected 0, got {last_ibi_status}"
 
     await ClockCycles(tb.clk, 50)
 
@@ -488,29 +481,20 @@ async def test_i3c_target_ibi(dut):
         # Wait for the IBI to be serviced, check data
         response = await i3c_controller.wait_for_ibi()
         expected = bytearray([TARGET_ADDRESS, mdb] + data)
-        if response != expected:
-            dut._log.critical(
-                "IBI MDB/data mismatch! tgt: [ {}] ctl: [ {}]".format(
-                    "".join("".join(f"0x{d:02X}") + " " for d in expected),
-                    "".join("".join(f"0x{d:02X}") + " " for d in response),
-                )
-            )
-            result = False
+        assert response == expected, (
+            f"IBI MDB/data mismatch (len={lnt}): "
+            f"expected [{' '.join(f'0x{b:02X}' for b in expected)}], "
+            f"got [{' '.join(f'0x{b:02X}' for b in response)}]"
+        )
 
         # Check LAST_IBI_STATUS
         last_ibi_status = await tb.read_csr_field(tb.reg_map.I3C_EC.TTI.STATUS.base_addr,
                                                   tb.reg_map.I3C_EC.TTI.STATUS.LAST_IBI_STATUS)
-        expected_status = 0
-        if last_ibi_status != expected_status:
-            dut._log.critical(
-                f"Incorrect IBI status, expected {expected_status}, got {last_ibi_status}"
-            )
-            result = False
+        assert last_ibi_status == 0, (
+            f"LAST_IBI_STATUS (len={lnt}): expected 0, got {last_ibi_status}"
+        )
 
         await ClockCycles(tb.clk, 50)
-
-    # Report the test result
-    assert result
 
 
 @cocotb.test()
@@ -532,8 +516,6 @@ async def test_i3c_target_ibi_retry(dut):
     target = i3c_controller.add_target(TARGET_ADDRESS)
     target.set_bcr_fields(ibi_req_capable=True, ibi_payload=True)
 
-    result = True
-
     # Send a broadcast CCC to initialize bus timers (need STOP to start counting)
     await i3c_controller.i3c_ccc_write(ccc=CCC.BCAST.RSTDAA)
 
@@ -548,19 +530,16 @@ async def test_i3c_target_ibi_retry(dut):
     for word in ibi_data:
         await tb.write_csr(tb.reg_map.I3C_EC.TTI.IBI_PORT.base_addr, int2dword(word), 4)
 
-    # Wait for some time so that the target gets a change to retry IBI
+    # Wait for some time so that the target gets a chance to retry IBI
     # transmission
     await Timer(10, "us")
 
-    # Check LAST_IBI_STATUS
+    # T7: Verify the IBI was actually attempted and NACKed (not stale status)
     last_ibi_status = await tb.read_csr_field(tb.reg_map.I3C_EC.TTI.STATUS.base_addr,
                                               tb.reg_map.I3C_EC.TTI.STATUS.LAST_IBI_STATUS)
-    expected_status = 1
-    if last_ibi_status != expected_status:
-        dut._log.critical(
-            f"Incorrect IBI status, expected {expected_status}, got {last_ibi_status}"
-        )
-        result = False
+    assert last_ibi_status == 1, (
+        f"LAST_IBI_STATUS after NACK: expected 1 (IbiFailureNack), got {last_ibi_status}"
+    )
 
     # Re-enable IBI ACK-ing
     i3c_controller.enable_ibi(True)
@@ -568,30 +547,20 @@ async def test_i3c_target_ibi_retry(dut):
     # Wait for the IBI to be serviced, check data
     response = await i3c_controller.wait_for_ibi()
     expected = bytearray([TARGET_ADDRESS, mdb] + data)
-    if response != expected:
-        dut._log.critical(
-            "IBI MDB/data mismatch! tgt: [ {}] ctl: [ {}]".format(
-                "".join("".join(f"0x{d:02X}") + " " for d in expected),
-                "".join("".join(f"0x{d:02X}") + " " for d in response),
-            )
-        )
-        result = False
+    assert response == expected, (
+        f"IBI MDB/data mismatch: expected [{' '.join(f'0x{b:02X}' for b in expected)}], "
+        f"got [{' '.join(f'0x{b:02X}' for b in response)}]"
+    )
 
     # Check LAST_IBI_STATUS
     last_ibi_status = await tb.read_csr_field(tb.reg_map.I3C_EC.TTI.STATUS.base_addr,
                                               tb.reg_map.I3C_EC.TTI.STATUS.LAST_IBI_STATUS)
-    expected_status = 0
-    if last_ibi_status != expected_status:
-        dut._log.critical(
-            f"Incorrect IBI status, expected {expected_status}, got {last_ibi_status}"
-        )
-        result = False
+    assert last_ibi_status == 0, (
+        f"LAST_IBI_STATUS after success: expected 0, got {last_ibi_status}"
+    )
 
     # Dummy wait
     await ClockCycles(tb.clk, 10)
-
-    # Report the test result
-    assert result
 
 
 @cocotb.test()
@@ -609,8 +578,6 @@ async def test_i3c_target_ibi_data(dut):
     target = i3c_controller.add_target(TARGET_ADDRESS)
     target.set_bcr_fields(ibi_req_capable=True, ibi_payload=True)
 
-    result = True
-
     # Send a broadcast CCC to initialize bus timers (need STOP to start counting)
     await i3c_controller.i3c_ccc_write(ccc=CCC.BCAST.RSTDAA)
 
@@ -625,17 +592,21 @@ async def test_i3c_target_ibi_data(dut):
     for word in ibi_data:
         await tb.write_csr(tb.reg_map.I3C_EC.TTI.IBI_PORT.base_addr, int2dword(word), 4)
 
-    # Wait for the IBI to be serviced, check data
+    # Wait for the IBI to be serviced, check data (truncated to 6 bytes)
     response = await i3c_controller.wait_for_ibi()
     expected = bytearray([TARGET_ADDRESS, mdb] + data[:6])
-    if response != expected:
-        dut._log.critical(
-            "IBI MDB/data mismatch! tgt: [ {}] ctl: [ {}]".format(
-                "".join("".join(f"0x{d:02X}") + " " for d in expected),
-                "".join("".join(f"0x{d:02X}") + " " for d in response),
-            )
-        )
-        result = False
+    assert response == expected, (
+        f"Truncated IBI mismatch: expected [{' '.join(f'0x{b:02X}' for b in expected)}], "
+        f"got [{' '.join(f'0x{b:02X}' for b in response)}]"
+    )
+
+    # T8: Controller truncated data — RTL should report IbiFailurePartialData(2)
+    await ClockCycles(tb.clk, 10)
+    last_ibi_status = await tb.read_csr_field(tb.reg_map.I3C_EC.TTI.STATUS.base_addr,
+                                              tb.reg_map.I3C_EC.TTI.STATUS.LAST_IBI_STATUS)
+    assert last_ibi_status == 2, (
+        f"LAST_IBI_STATUS after truncation: expected 2 (IbiFailurePartialData), got {last_ibi_status}"
+    )
 
     # Wait
     await ClockCycles(tb.clk, 50)
@@ -652,20 +623,20 @@ async def test_i3c_target_ibi_data(dut):
     # Wait for the IBI to be serviced, check data
     response = await i3c_controller.wait_for_ibi()
     expected = bytearray([TARGET_ADDRESS, mdb] + data)
-    if response != expected:
-        dut._log.critical(
-            "IBI MDB/data mismatch! tgt: [ {}] ctl: [ {}]".format(
-                "".join("".join(f"0x{d:02X}") + " " for d in expected),
-                "".join("".join(f"0x{d:02X}") + " " for d in response),
-            )
-        )
-        result = False
+    assert response == expected, (
+        f"IBI after flush mismatch: expected [{' '.join(f'0x{b:02X}' for b in expected)}], "
+        f"got [{' '.join(f'0x{b:02X}' for b in response)}]"
+    )
+
+    # Second IBI should succeed
+    last_ibi_status = await tb.read_csr_field(tb.reg_map.I3C_EC.TTI.STATUS.base_addr,
+                                              tb.reg_map.I3C_EC.TTI.STATUS.LAST_IBI_STATUS)
+    assert last_ibi_status == 0, (
+        f"LAST_IBI_STATUS after second IBI: expected 0, got {last_ibi_status}"
+    )
 
     # Dummy wait
     await ClockCycles(tb.clk, 10)
-
-    # Report the test result
-    assert result
 
 
 @cocotb.test()
@@ -887,6 +858,17 @@ async def test_i3c_target_pwrite_overflow_detection(dut):
 
         desc_len = data & 0xFFFF
         assert desc_len == 260
+
+        # T12: Read and verify surviving bytes match the first 260 bytes sent
+        rx_data = []
+        for _ in range(ceil(desc_len / 4)):
+            word = dword2int(await tb.read_csr(tb.reg_map.I3C_EC.TTI.RX_DATA_PORT.base_addr, 4))
+            for k in range(4):
+                rx_data.append((word >> (k * 8)) & 0xFF)
+        rx_data = rx_data[:desc_len]
+        assert rx_data == test_data[:desc_len], (
+            f"Overflow: first {desc_len} bytes do not match sent data"
+        )
 
         # Clear RX data FIFO
         await tb.write_csr_field(

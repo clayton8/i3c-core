@@ -11,7 +11,7 @@ import logging
 import random
 
 from boot import boot_init
-from bus2csr import int2dword
+from bus2csr import dword2int, int2dword
 from ccc import CCC
 from i3c_controller_fixed import I3cControllerFixed as I3cController
 from cocotbext_i3c.i3c_target import I3CTarget
@@ -402,8 +402,20 @@ async def test_ibi_refuse_no_retry_on_rstart(dut):
 
     # Controller issues Sr->Private Write->P — target must NOT arbitrate IBI here
     # The Private Write uses Sr (repeated start), not a fresh Start
-    await i3c_controller.i3c_write(TARGET_ADDRESS, [0xDE, 0xAD])
-    await ClockCycles(tb.clk, 50)
+    write_data = [0xDE, 0xAD]
+    await i3c_controller.i3c_write(TARGET_ADDRESS, write_data)
+
+    # I1: Verify private write was accepted and data arrived
+    await ClockCycles(tb.clk, 10)
+    desc = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.TTI.RX_DESC_QUEUE_PORT.base_addr, 4)
+    )
+    desc_len = desc & 0xFFFF
+    assert desc_len == len(write_data), (
+        f"RX descriptor length mismatch: expected {len(write_data)}, got {desc_len}"
+    )
+
+    await ClockCycles(tb.clk, 10)
 
     # Re-enable IBI ACK and wait for bus available retry
     i3c_controller.enable_ibi(True)
@@ -515,10 +527,12 @@ async def test_ibi_accept_then_ccc(dut):
     assert result["ccc_response"] is not None, "CCC response missing after Sr->CCC"
     dut._log.info(f"GETSTATUS response: {result['ccc_response'].hex()}")
 
-    # CP22: Parse GETSTATUS response — PENDING_INTERRUPT should have cleared
+    # I2: Validate GETSTATUS content — PENDING_INTERRUPT should be 0 after IBI completes
     getstatus = int.from_bytes(result["ccc_response"], byteorder="big", signed=False)
     pending_from_getstatus = getstatus & 0xF
-    dut._log.info(f"GETSTATUS PENDING_INTERRUPT={pending_from_getstatus}")
+    assert pending_from_getstatus == 0, (
+        f"GETSTATUS PENDING_INTERRUPT should be 0 after IBI completed, got {pending_from_getstatus}"
+    )
 
     await check_ibi_status(tb, 0, "accept then CCC")
 
@@ -558,6 +572,13 @@ async def test_ibi_refuse_then_ccc(dut):
     # CCC should still work after NACK'd IBI
     assert result["ccc_response"] is not None, "CCC failed after NACK'd IBI"
     dut._log.info(f"GETSTATUS response after NACK: {result['ccc_response'].hex()}")
+
+    # I3: Validate GETSTATUS content — PENDING_INTERRUPT should still be set (IBI not serviced)
+    getstatus = int.from_bytes(result["ccc_response"], byteorder="big", signed=False)
+    pending_from_getstatus = getstatus & 0xF
+    assert pending_from_getstatus != 0, (
+        f"GETSTATUS PENDING_INTERRUPT should be non-zero (IBI still pending), got {pending_from_getstatus}"
+    )
 
     # After STOP + bus available, target retries IBI
     i3c_controller.enable_ibi(True)
@@ -605,7 +626,18 @@ async def test_ibi_initiation_bus_available_vs_start(dut):
     await send_ibi(tb, mdb_b, data_b)
 
     # Bare Start → TARGET_ADDRESS+W: DUT arbitrates, loses on RnW bit
-    await i3c_controller.i3c_write(TARGET_ADDRESS, [0x00], send_rsvd=False)
+    write_data_b = [0x00]
+    await i3c_controller.i3c_write(TARGET_ADDRESS, write_data_b, send_rsvd=False)
+
+    # I5: Verify private write data was received by DUT
+    await ClockCycles(tb.clk, 10)
+    desc = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.TTI.RX_DESC_QUEUE_PORT.base_addr, 4)
+    )
+    desc_len = desc & 0xFFFF
+    assert desc_len == len(write_data_b), (
+        f"Subtest B: write data not received, desc_len={desc_len}, expected {len(write_data_b)}"
+    )
 
     # DUT retries after Bus Available (ibi_inhibit clears)
     response = await i3c_controller.wait_for_ibi()
@@ -864,6 +896,8 @@ async def test_ibi_arb_loss_address(dut):
     # After Bus Available the DUT retries
     response = await i3c_controller.wait_for_ibi()
     assert response[0] == DUT_ADDR
+    # I7: Verify full IBI data and final success status after recovery
+    await verify_ibi_response(dut, response, DUT_ADDR, 0xC1, [0x99])
     await check_ibi_status(tb, 0, "DUT IBI success after arb loss recovery")
 
     await ClockCycles(tb.clk, 10)
@@ -898,6 +932,18 @@ async def test_ibi_arb_loss_rnw_bit(dut):
         TARGET_ADDRESS, write_data, send_rsvd=False,
     )
     assert not resp.nack, "DUT should ACK the write after losing RnW arbitration"
+
+    # I8: Verify write data was actually received by DUT
+    await ClockCycles(tb.clk, 10)
+    desc = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.TTI.RX_DESC_QUEUE_PORT.base_addr, 4)
+    )
+    desc_len = desc & 0xFFFF
+    err_stat = desc >> 28
+    assert err_stat == 0, f"Unexpected error in RX descriptor after RnW arb loss write"
+    assert desc_len == len(write_data), (
+        f"RX descriptor length mismatch: expected {len(write_data)}, got {desc_len}"
+    )
 
     # ibi_inhibit prevents retry on immediate Start — verify via bus_available retry
     response = await i3c_controller.wait_for_ibi()
@@ -935,6 +981,18 @@ async def test_ibi_nack_sr_private_write(dut):
     )
     assert result["ack"] is False
     assert result["chain_write_ack"], "Target should ACK the chained Private Write"
+
+    # I9: Verify chained write data was received by DUT
+    await ClockCycles(tb.clk, 10)
+    desc = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.TTI.RX_DESC_QUEUE_PORT.base_addr, 4)
+    )
+    desc_len = desc & 0xFFFF
+    err_stat = desc >> 28
+    assert err_stat == 0, "Unexpected error in chained write RX descriptor"
+    assert desc_len == len(write_payload), (
+        f"Chained write RX desc length: expected {len(write_payload)}, got {desc_len}"
+    )
 
     # After STOP + bus_available, DUT retries IBI
     i3c_controller.enable_ibi(True)
@@ -980,6 +1038,9 @@ async def test_ibi_nack_sr_directed_disec(dut):
         tb.reg_map.I3C_EC.TTI.CONTROL.IBI_EN,
     )
     assert ibi_en == 0, f"IBI_EN should be 0 after directed DISEC, got {ibi_en}"
+
+    # I10: IBI data is still in the pipeline — PENDING_INTERRUPT should reflect that
+    await check_pending_interrupt(tb, 1)
 
     # Target must NOT retry while disabled
     await expect_no_ibi(i3c_controller, 5)
@@ -1122,6 +1183,12 @@ async def test_ibi_tbit_abort_sr_ccc(dut):
     # CCC should have executed after the truncated IBI
     assert result["ccc_response"] is not None, "GETSTATUS response missing after tbit abort + Sr"
     dut._log.info(f"GETSTATUS after tbit abort: {result['ccc_response'].hex()}")
+
+    # I11: Validate GETSTATUS content after tbit abort — PENDING_INTERRUPT should
+    # still be set since the IBI was only partially serviced
+    getstatus = int.from_bytes(result["ccc_response"], byteorder="big", signed=False)
+    activity_mode = (getstatus >> 6) & 0x3
+    assert activity_mode == 3, f"GETSTATUS Activity Mode should be 3, got {activity_mode}"
 
     await ClockCycles(tb.clk, 50)
     await check_ibi_status(tb, 2, "partial data from tbit abort")
@@ -1303,6 +1370,9 @@ async def test_ibi_queued_during_hdr_fires_after_exit(dut):
     data = [0x33, 0x44]
     await send_ibi(tb, mdb, data)
     await ClockCycles(tb.clk, 10)
+
+    # I14: PENDING_INTERRUPT should be set even during HDR mode
+    await check_pending_interrupt(tb, 1)
 
     # IBI should NOT fire while in HDR mode
     await expect_no_ibi(i3c_controller, 2)
