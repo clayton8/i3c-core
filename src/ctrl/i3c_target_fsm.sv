@@ -130,7 +130,9 @@ module i3c_target_fsm import i3c_pkg::*; #(
 
   // Target specific variables
   logic nack_transaction_q, nack_transaction_d;
-  logic rx_overflow_err_q, rx_overflow_err_r;
+  logic rx_overflow_err_q, rx_overflow_err_d;
+  logic rx_fifo_wvalid_raw;
+
 
   i3c_byte_t last_byte;
 
@@ -308,24 +310,36 @@ module i3c_target_fsm import i3c_pkg::*; #(
     end
   end
 
+
+  // RX FIFO valid before overflow gating: byte complete with no protocol error.
+  assign rx_fifo_wvalid_raw = (state_q == RxPWriteTbit) && (state_d != RxPWriteTbit) &&
+                              !(te2_err_priv_wr || parity_err);
+
+  // Overflow detection using rx_fifo_wvalid_raw to detect overflow on the same
+  // cycle the byte completes, avoiding a combo loop (raw does not depend on
+  // rx_overflow_err_d).
+  always_comb begin
+    rx_overflow_err_d = rx_overflow_err_q;
+
+    if (rx_fifo_wvalid_raw & ~rx_fifo_wready_i) begin
+      rx_overflow_err_d = 1'b1;
+    end else if (target_idle_o | state_d inside {RxFByte, Idle}) begin
+      rx_overflow_err_d = 1'b0;
+    end 
+  end 
   always_ff @(posedge clk_i or negedge rst_ni) begin : latch_rx_overflow_error
     if (~rst_ni) begin
-      rx_overflow_err_r <= 1'b0;
       rx_overflow_err_q <= 1'b0;
     end else begin
-      rx_overflow_err_q <= rx_overflow_err_r;
-      if (state_d == RxPWriteData & ~rx_fifo_wready_i & rx_fifo_wvalid_o) rx_overflow_err_r <= 1'b1;
-      else if (target_idle_o | state_d inside {RxFByte, Idle}) rx_overflow_err_r <= 1'b0;
-    end
-  end
+      rx_overflow_err_q <= rx_overflow_err_d;
+    end 
+  end 
 
-  assign rx_overflow_err_o = ~rx_overflow_err_q & rx_overflow_err_r;
+  assign rx_overflow_err_o = ~rx_overflow_err_q & rx_overflow_err_d;
 
-  // RX FIFO valid when we finish reading byte (leave RxPWriteTbit) and there was no protocol error.
-  // Use te2_err_priv_wr (combinational) so that errored byte is blocked in the same cycle the 
-  // mismatch is detected.
-  assign rx_fifo_wvalid = (state_q == RxPWriteTbit) && (state_d != RxPWriteTbit) &&
-                          !(te2_err_priv_wr || parity_err || rx_overflow_err_o);
+  // Final gated valid: block the push if overflow is detected this cycle.
+  assign rx_fifo_wvalid = rx_fifo_wvalid_raw & ~rx_overflow_err_d;
+
 
   always_ff @(posedge clk_i or negedge rst_ni) begin : latch_rx_fifo_wvalid
     if (~rst_ni) begin
