@@ -2224,8 +2224,6 @@ async def test_ccc_entdaa_te3_te4(dut):
 
     TE3: Parity error on assigned address → target NACKs, retries on next Sr+7E/R.
     TE4: Invalid reserved byte (not 7E/R) → target NACKs, waits for STOP.
-
-    BLOCKED BY DESIGN BUG: see verification/bugs/ccc_entdaa_te3_parity_bypass.md
     """
     log = logging.getLogger("test_ccc_entdaa_te3_te4")
 
@@ -2286,8 +2284,6 @@ async def test_ccc_entdaa_te3_te4(dut):
     # Correct spec behavior: target must NACK the address with bad parity
     assert results[0]["ack"] == False, (
         f"TE3: Target should NACK address with bad parity, but ACKed. "
-        f"DESIGN BUG: ccc_entdaa.sv:166 — parity_ok bypass polarity is inverted "
-        f"(`|| te3_err_det_en_i` should be `|| !te3_err_det_en_i`). "
         f"Result: {results[0]}")
 
     # TE3 error status and counter should be set
@@ -2379,16 +2375,16 @@ async def test_ccc_entdaa_arb_lost(dut):
     assigned = [r for r in results if r["ack"]]
     log.info(f"Successfully assigned: {len(assigned)} targets")
 
-    # Verify at least the main target got an address
+    # Verify the main target got an address after arb-lost recovery
     da_reg_addr = tb.reg_map.I3C_EC.STDBYCTRLMODE.STBY_CR_DEVICE_ADDR.base_addr
     da_valid_field = tb.reg_map.I3C_EC.STDBYCTRLMODE.STBY_CR_DEVICE_ADDR.DYNAMIC_ADDR_VALID
     main_da_valid = await tb.read_csr_field(da_reg_addr, da_valid_field)
 
-    if main_da_valid == 1:
-        log.info("Main target successfully assigned DA after arb-lost recovery")
-        # Verify target responds
-        responses = await i3c_controller.i3c_ccc_read(
-            ccc=CCC.DIRECT.GETBCR, addr=DYNAMIC_ADDR, count=1)
-        assert responses[0][0] == True, "Main target should respond at assigned DA"
-    else:
-        log.warning("Main target did not get DA — arb-lost timing may have caused full failure")
+    assert main_da_valid == 1, (
+        f"Main target should have DA after arb-lost recovery, "
+        f"DA_VALID={main_da_valid}, results={results}")
+
+    # Verify target responds at assigned address
+    responses = await i3c_controller.i3c_ccc_read(
+        ccc=CCC.DIRECT.GETBCR, addr=DYNAMIC_ADDR, count=1)
+    assert responses[0][0] == True, "Main target should respond at assigned DA"
