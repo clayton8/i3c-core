@@ -99,7 +99,19 @@ module descriptor_ibi import i3c_pkg::i3c_byte_t; #(
         ibi_byte_valid_o = 1'b1;
         ibi_byte_last_o  = (data_len == 8'hFF); // No payload data
 
-        if (ibi_byte_ready_i) begin
+        if (ibi_byte_flush_i) begin
+          // Flush before MDB was consumed (e.g., IBI NACKed before data phase).
+          // Drain remaining payload words from the queue.
+          if (data_len == 8'hFF || data_words == 0) begin
+            // No payload to drain
+            state_d = Idle;
+          end else begin
+            // Pop first data word and enter Flush to drain the rest
+            ibi_queue_rready_o = 1'b1;
+            data_cnt_d = 8'd4;
+            state_d = Flush;
+          end
+        end else if (ibi_byte_ready_i) begin
           // Back to Idle on no payload data
           state_d = (data_len == 8'hFF) ? Idle : WriteData;
         end
