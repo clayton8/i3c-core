@@ -701,6 +701,16 @@ async def test_ccc_setmwl_direct(dut):
     mwl = (mwl_msb << 8) | mwl_lsb
     assert mwl == int(sig)
 
+    # CP19: Verify FW-readable STBY_CR_MWL register reflects the CCC value
+    await ClockCycles(tb.clk, 10)
+    mwl_csr = await tb.read_csr_field(
+        tb.reg_map.I3C_EC.STDBYCTRLMODE.STBY_CR_MWL.base_addr,
+        tb.reg_map.I3C_EC.STDBYCTRLMODE.STBY_CR_MWL.MWL,
+    )
+    assert mwl_csr == mwl, (
+        f"STBY_CR_MWL.MWL mismatch: expected 0x{mwl:04X}, got 0x{mwl_csr:04X}"
+    )
+
 
 @cocotb.test()
 async def test_ccc_setmrl_direct(dut):
@@ -710,15 +720,35 @@ async def test_ccc_setmrl_direct(dut):
     i3c_controller, _, tb = await test_setup(dut)
     await ClockCycles(tb.clk, 50)
 
-    # Send direct SETMRL
+    # Send direct SETMRL with optional 3rd byte (IBIL)
     mrl_msb = 0xAB
     mrl_lsb = 0xCD
-    await i3c_controller.i3c_ccc_write(ccc=command, directed_data=[(TGT_ADR, [mrl_msb, mrl_lsb])])
+    ibil = 0x08
+    await i3c_controller.i3c_ccc_write(ccc=command, directed_data=[(TGT_ADR, [mrl_msb, mrl_lsb, ibil])])
 
     # Check if MRL got written
     sig = dut.xi3c_wrapper.i3c.xcontroller.xconfiguration.get_mrl_o.value
     mrl = (mrl_msb << 8) | mrl_lsb
     assert mrl == int(sig)
+
+    # CP20: Verify FW-readable STBY_CR_MRL.MRL register
+    await ClockCycles(tb.clk, 10)
+    mrl_csr = await tb.read_csr_field(
+        tb.reg_map.I3C_EC.STDBYCTRLMODE.STBY_CR_MRL.base_addr,
+        tb.reg_map.I3C_EC.STDBYCTRLMODE.STBY_CR_MRL.MRL,
+    )
+    assert mrl_csr == mrl, (
+        f"STBY_CR_MRL.MRL mismatch: expected 0x{mrl:04X}, got 0x{mrl_csr:04X}"
+    )
+
+    # CP21: Verify FW-readable STBY_CR_MRL.IBIL register
+    ibil_csr = await tb.read_csr_field(
+        tb.reg_map.I3C_EC.STDBYCTRLMODE.STBY_CR_MRL.base_addr,
+        tb.reg_map.I3C_EC.STDBYCTRLMODE.STBY_CR_MRL.IBIL,
+    )
+    assert ibil_csr == ibil, (
+        f"STBY_CR_MRL.IBIL mismatch: expected 0x{ibil:02X}, got 0x{ibil_csr:02X}"
+    )
 
 
 @cocotb.test()
@@ -739,6 +769,16 @@ async def test_ccc_setmwl_bcast(dut):
     mwl = (mwl_msb << 8) | mwl_lsb
     assert mwl == int(sig)
 
+    # CP19: Verify FW-readable STBY_CR_MWL register (broadcast path)
+    await ClockCycles(tb.clk, 10)
+    mwl_csr = await tb.read_csr_field(
+        tb.reg_map.I3C_EC.STDBYCTRLMODE.STBY_CR_MWL.base_addr,
+        tb.reg_map.I3C_EC.STDBYCTRLMODE.STBY_CR_MWL.MWL,
+    )
+    assert mwl_csr == mwl, (
+        f"STBY_CR_MWL.MWL mismatch: expected 0x{mwl:04X}, got 0x{mwl_csr:04X}"
+    )
+
 
 @cocotb.test()
 async def test_ccc_setmrl_bcast(dut):
@@ -748,15 +788,35 @@ async def test_ccc_setmrl_bcast(dut):
     i3c_controller, _, tb = await test_setup(dut)
     await ClockCycles(tb.clk, 50)
 
-    # Send direct SETMRL
+    # Send broadcast SETMRL with optional 3rd byte (IBIL)
     mrl_msb = 0xAB
     mrl_lsb = 0xCD
-    await i3c_controller.i3c_ccc_write(ccc=command, broadcast_data=[mrl_msb, mrl_lsb])
+    ibil = 0x10
+    await i3c_controller.i3c_ccc_write(ccc=command, broadcast_data=[mrl_msb, mrl_lsb, ibil])
 
     # Check if MRL got written
     sig = dut.xi3c_wrapper.i3c.xcontroller.xconfiguration.get_mrl_o.value
     mrl = (mrl_msb << 8) | mrl_lsb
     assert mrl == int(sig)
+
+    # CP20: Verify FW-readable STBY_CR_MRL.MRL register (broadcast path)
+    await ClockCycles(tb.clk, 10)
+    mrl_csr = await tb.read_csr_field(
+        tb.reg_map.I3C_EC.STDBYCTRLMODE.STBY_CR_MRL.base_addr,
+        tb.reg_map.I3C_EC.STDBYCTRLMODE.STBY_CR_MRL.MRL,
+    )
+    assert mrl_csr == mrl, (
+        f"STBY_CR_MRL.MRL mismatch: expected 0x{mrl:04X}, got 0x{mrl_csr:04X}"
+    )
+
+    # CP21: Verify FW-readable STBY_CR_MRL.IBIL register (broadcast path)
+    ibil_csr = await tb.read_csr_field(
+        tb.reg_map.I3C_EC.STDBYCTRLMODE.STBY_CR_MRL.base_addr,
+        tb.reg_map.I3C_EC.STDBYCTRLMODE.STBY_CR_MRL.IBIL,
+    )
+    assert ibil_csr == ibil, (
+        f"STBY_CR_MRL.IBIL mismatch: expected 0x{ibil:02X}, got 0x{ibil_csr:02X}"
+    )
 
 
 SUPPORTED_RESET_ACTIONS = [

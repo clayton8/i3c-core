@@ -228,7 +228,10 @@ async def test_ibi_accept_partial_no_repeat(dut):
     i3c_controller.set_max_ibi_data_len(2)
 
     mdb = 0xAA
-    full_data = [0xCA, 0xFE, 0xBA, 0xCA, 0xAA, 0xBB, 0xCC, 0xDD]
+    # 20 bytes (5 words) to exercise descriptor_ibi multi-word Flush state (CP18)
+    full_data = [0xCA, 0xFE, 0xBA, 0xCA, 0xAA, 0xBB, 0xCC, 0xDD,
+                 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
+                 0x99, 0xAB, 0xCD, 0xEF]
     await send_ibi(tb, mdb, full_data)
 
     response = await i3c_controller.wait_for_ibi()
@@ -323,6 +326,22 @@ async def _test_ibi_refuse_retry(dut, retry_num):
         await check_ibi_status(tb, 0, "infinite retry success")
 
         dut._log.info(f"retry_num=7: >8 NACKs confirmed ({attempts}), then ACK")
+
+        # CP7: Verify retry counter auto-reset on success — queue 2nd IBI
+        # and confirm full retry budget is available again
+        mdb2 = 0xBB
+        data2 = [0xCA, 0xFE]
+        await send_ibi(tb, mdb2, data2)
+        for _ in range(5):
+            result = await with_timeout(
+                i3c_controller.handle_ibi_manual(ack=False), 20, "us",
+            )
+            assert result["ack"] is False
+        result = await with_timeout(
+            i3c_controller.handle_ibi_manual(ack=True), 20, "us",
+        )
+        assert result["ack"] is True
+        await check_ibi_status(tb, 0, "2nd IBI success after counter reset")
     else:
         # Finite retries: expect exactly retry_num + 1 attempts
         while True:
@@ -461,13 +480,21 @@ async def test_ibi_accept_then_ccc(dut):
     """
     Sec 5.1.6.2 item 1: After accepting IBI and reading data, controller
     issues Sr->CCC. Verify CCC executes correctly.
+    Also CP22: Verify PENDING_INTERRUPT reflects ibi_pending_o.
     """
     i3c_controller, _, tb = await test_setup(dut)
     await init_ibi(i3c_controller, tb)
 
+    # CP22: PENDING_INTERRUPT should be 0 before queueing IBI
+    await check_pending_interrupt(tb, 0)
+
     mdb = 0xAA
     data = [0x11, 0x22]
     await send_ibi(tb, mdb, data)
+
+    # CP22: PENDING_INTERRUPT should be set while IBI is pending
+    await ClockCycles(tb.clk, 5)
+    await check_pending_interrupt(tb, 1)
 
     # Manual IBI handling: ACK + read data + Sr->CCC(GETSTATUS)
     result = await i3c_controller.handle_ibi_manual(
@@ -488,8 +515,16 @@ async def test_ibi_accept_then_ccc(dut):
     assert result["ccc_response"] is not None, "CCC response missing after Sr->CCC"
     dut._log.info(f"GETSTATUS response: {result['ccc_response'].hex()}")
 
+    # CP22: Parse GETSTATUS response — PENDING_INTERRUPT should have cleared
+    getstatus = int.from_bytes(result["ccc_response"], byteorder="big", signed=False)
+    pending_from_getstatus = getstatus & 0xF
+    dut._log.info(f"GETSTATUS PENDING_INTERRUPT={pending_from_getstatus}")
+
     await check_ibi_status(tb, 0, "accept then CCC")
+
+    # CP22: CSR PENDING_INTERRUPT should also be 0 after IBI completes
     await ClockCycles(tb.clk, 10)
+    await check_pending_interrupt(tb, 0)
 
 
 # =============================================================================
@@ -817,6 +852,9 @@ async def test_ibi_arb_loss_address(dut):
         f"Expected VIP ({VIP_ADDR:#x}) to win arbitration, got {response[0]:#x}"
     )
 
+    # CP5: Verify intermediate IbiFailureAddressArb (4) status immediately after arb loss
+    await check_ibi_status(tb, 4, "arb loss intermediate (IbiFailureAddressArb)")
+
     # DUT has ibi_inhibit=1 — immediate Start must NOT trigger DUT IBI
     await i3c_controller.i3c_write(VIP_ADDR, [0x5A], send_rsvd=False)
 
@@ -1130,5 +1168,152 @@ async def test_ibi_queue_while_disabled_then_enable(dut):
     # Pending should clear after IBI completes
     await ClockCycles(tb.clk, 10)
     await check_pending_interrupt(tb, 0)
+
+    await ClockCycles(tb.clk, 10)
+
+
+# =============================================================================
+# Test 21: FW-initiated IBI retry counter reset (CP6)
+# =============================================================================
+
+@cocotb.test()
+async def test_ibi_retry_ctr_fw_reset(dut):
+    """
+    CP6: Verify IBI_RETRY_CTR_RST singlepulse resets the retry counter
+    mid-sequence. Without the FW reset, 2 NACKs would exhaust retry_num=1.
+    """
+    i3c_controller, _, tb = await test_setup(dut)
+    # retry_num=1 allows 2 attempts (cnt 0 and cnt 1)
+    await init_ibi(i3c_controller, tb, retry_num=1)
+
+    mdb = 0xDD
+    data = [0xAA, 0xBB]
+    await send_ibi(tb, mdb, data)
+
+    # NACK attempt 1 → counter becomes 1
+    result = await i3c_controller.handle_ibi_manual(ack=False)
+    assert result["ack"] is False
+    await check_ibi_status(tb, 1, "NACK #1")
+
+    # FW resets retry counter before DUT retries
+    await tb.write_csr_field(
+        tb.reg_map.I3C_EC.TTI.RESET_CONTROL.base_addr,
+        tb.reg_map.I3C_EC.TTI.RESET_CONTROL.IBI_RETRY_CTR_RST,
+        1,
+    )
+
+    # NACK attempt 2 → counter becomes 1 again (was reset to 0)
+    result = await i3c_controller.handle_ibi_manual(ack=False)
+    assert result["ack"] is False
+
+    # Without FW reset, this would have been attempt 3 (cnt=2 > retry_num=1)
+    # and DUT would have flushed. Instead DUT retries (cnt=1 ≤ 1).
+    result = await i3c_controller.handle_ibi_manual(ack=True)
+    assert result["ack"] is True
+    await verify_ibi_response(
+        dut, bytearray([result["addr"]]) + result["data"],
+        TARGET_ADDRESS, mdb, data,
+    )
+    await check_ibi_status(tb, 0, "success after FW counter reset")
+
+    await ClockCycles(tb.clk, 10)
+
+
+# =============================================================================
+# Test 24: Multiple consecutive arbitration losses (CP25, CP4, CP10)
+# =============================================================================
+
+@cocotb.test()
+async def test_ibi_multiple_arb_losses(dut):
+    """
+    CP25/CP4/CP10: Force multiple consecutive arb losses to exhaust the
+    retry counter via the IbiFailureAddressArb path. retry_num=2 allows
+    3 attempts; 3 VIP wins should exhaust retries.
+    """
+    DUT_ADDR = 0x60
+    VIP_ADDR = 0x20
+
+    i3c_controller, i3c_target_vip, tb = await test_setup(
+        dut, static_addr=DUT_ADDR,
+    )
+    i3c_target_vip.address = VIP_ADDR
+
+    await init_ibi(i3c_controller, tb, addr=DUT_ADDR, retry_num=2)
+    vip_target = i3c_controller.add_target(VIP_ADDR)
+    vip_target.set_bcr_fields(ibi_req_capable=True, ibi_payload=True)
+
+    mdb_dut = 0xEE
+    dut_data = [0x77]
+    await send_ibi(tb, mdb_dut, dut_data)
+
+    # Force 3 arb losses: VIP wins each time with lower address
+    for i in range(3):
+        peer_task = cocotb.start_soon(
+            i3c_target_vip.send_ibi(mdb=0xD0 + i, data=bytearray([0x80 + i]))
+        )
+        response = await i3c_controller.wait_for_ibi()
+        await peer_task
+        assert response[0] == VIP_ADDR, (
+            f"Arb loss {i}: Expected VIP ({VIP_ADDR:#x}), got {response[0]:#x}"
+        )
+        # After arb loss, ibi_inhibit prevents retry until Bus Available
+        # Wait for Bus Available so DUT can attempt again (or exhaust)
+        await Timer(2, "us")
+
+    # After 3 arb losses with retry_num=2, counter (3) > retry_num (2)
+    # → IbiFailureRetry + flush
+    await ClockCycles(tb.clk, 50)
+    await check_ibi_status(tb, 3, "retry exhausted via arb losses")
+
+    # Verify IBI data was flushed — a fresh IBI should work cleanly
+    mdb_fresh = 0xFF
+    fresh_data = [0x11, 0x22]
+    await send_ibi(tb, mdb_fresh, fresh_data)
+    response = await i3c_controller.wait_for_ibi()
+    assert response[0] == DUT_ADDR
+    await verify_ibi_response(dut, response, DUT_ADDR, mdb_fresh, fresh_data)
+    await check_ibi_status(tb, 0, "fresh IBI after arb loss exhaustion")
+
+    await ClockCycles(tb.clk, 10)
+
+
+# =============================================================================
+# Test 30: IBI queued during HDR mode fires after exit (CP24)
+# =============================================================================
+
+@cocotb.test()
+async def test_ibi_queued_during_hdr_fires_after_exit(dut):
+    """
+    CP24: Verify IBI queued while DUT is in HDR mode fires correctly
+    after the HDR exit pattern is detected and Bus Available occurs.
+    """
+    ENTHDR0 = 0x20
+
+    i3c_controller, _, tb = await test_setup(dut)
+    await init_ibi(i3c_controller, tb)
+
+    # Enter HDR mode via ENTHDR0 CCC
+    await i3c_controller.i3c_ccc_write(
+        ccc=ENTHDR0, broadcast_data=[], stop=False, pull_scl_low=True,
+    )
+    await ClockCycles(tb.clk, 50)
+
+    # Queue IBI while in HDR mode — DUT is in InHDRMode state
+    mdb = 0xCC
+    data = [0x33, 0x44]
+    await send_ibi(tb, mdb, data)
+    await ClockCycles(tb.clk, 10)
+
+    # IBI should NOT fire while in HDR mode
+    await expect_no_ibi(i3c_controller, 2)
+
+    # Exit HDR mode
+    await i3c_controller.send_hdr_exit()
+    await ClockCycles(tb.clk, 50)
+
+    # After HDR exit + Bus Available, DUT should initiate IBI
+    response = await i3c_controller.wait_for_ibi()
+    await verify_ibi_response(dut, response, TARGET_ADDRESS, mdb, data)
+    await check_ibi_status(tb, 0, "IBI success after HDR exit")
 
     await ClockCycles(tb.clk, 10)
