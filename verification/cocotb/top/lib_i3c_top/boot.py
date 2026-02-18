@@ -117,6 +117,9 @@ async def boot_init(
     dut_addr = dynamic_addr if dynamic_addr is not None else static_addr
     if hasattr(tb, 'bus_monitor') and tb.bus_monitor is not None:
         tb.bus_monitor.set_dut_dynamic_addr(dut_addr)
+        virt_addr = virtual_dynamic_addr if virtual_dynamic_addr is not None else virtual_static_addr
+        if virt_addr is not None:
+            tb.bus_monitor.set_virt_dynamic_addr(virt_addr)
 
 
 async def check_version(tb):

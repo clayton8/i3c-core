@@ -59,6 +59,29 @@ class I3cBusMonitor:
 
     I3C_BROADCAST_ADDR = 0x7E
 
+    # Direct GET CCC codes and their expected byte counts
+    _GET_CCC_BYTE_COUNTS = {
+        0x8B: 2,   # GETMWL
+        0x8C: 3,   # GETMRL
+        0x8D: 6,   # GETPID
+        0x8E: 1,   # GETBCR
+        0x8F: 1,   # GETDCR
+        0x90: 2,   # GETSTATUS
+        0x95: None, # GETCAPS — depends on defining byte
+        0x9A: 1,   # RSTACT read
+    }
+
+    # Direct SET CCC codes that modify DUT CSRs
+    _SET_CCC_CODES = {0x89, 0x8A, 0x80, 0x81}  # SETMWL, SETMRL, ENEC, DISEC
+
+    # Address-changing CCC codes
+    _ADDR_CCC_CODES = {
+        0x06,  # RSTDAA (broadcast)
+        0x29,  # SETAASA (broadcast)
+        0x87,  # SETDASA (direct)
+        0x88,  # SETNEWDA (direct)
+    }
+
     def __init__(self, dut, log=None):
         self.dut = dut
         self.log = log or dut._log
@@ -90,9 +113,11 @@ class I3cBusMonitor:
         self._rnw = 0
         self._is_broadcast = False
         self._is_addressed_to_dut = False
+        self._is_addr_virt = False
         self._is_ibi = False
         self._is_repeated_start = False
-        self._dut_dynamic_addr = None  # Will be set after DAA
+        self._dut_dynamic_addr = None   # Will be set after DAA
+        self._virt_dynamic_addr = None  # Virtual target address
         self._data_accum = 0
         self._byte_in_msg = 0         # Which byte in the current message
         self._is_ccc = False
@@ -101,6 +126,21 @@ class I3cBusMonitor:
         self._prev_scl = 1
         self._prev_sda = 1
         self._bus_active = False       # True between START and STOP
+
+        # --- M1: CCC Response Data Monitor state ---
+        self._active_ccc_code = None   # CCC code that persists across Sr
+        self._ccc_defining_byte = None # Defining byte for CCCs that use one
+        self._ccc_direct_addr = None   # Target addr in direct CCC phase
+        self._ccc_read_bytes = []      # Accumulated read bytes during direct GET
+        self._in_ccc_read_phase = False # True when reading GET CCC response data
+
+        # --- M2: Address Tracking Monitor state ---
+        self._ccc_write_bytes = []     # Data bytes captured during CCC write phase
+        self._in_ccc_write_phase = False # True when writing direct CCC data
+
+        # --- M4: Abort Recovery Monitor state ---
+        self._ccc_was_aborted = False   # Set when CCC terminated abnormally
+        self._abort_count = 0           # Total CCC aborts observed
 
         # Resolve signal handles
         self._resolve_signals()
@@ -137,6 +177,11 @@ class I3cBusMonitor:
         """Set the DUT's dynamic address so the monitor can track addressing."""
         self._dut_dynamic_addr = addr
         self.log.info(f"I3cBusMonitor: DUT dynamic address set to 0x{addr:02X}")
+
+    def set_virt_dynamic_addr(self, addr):
+        """Set the virtual target's dynamic address for CCC monitor tracking."""
+        self._virt_dynamic_addr = addr
+        self.log.info(f"I3cBusMonitor: Virtual target dynamic address set to 0x{addr:02X}")
 
     async def start(self):
         if not self._available:
@@ -297,11 +342,14 @@ class I3cBusMonitor:
         elif self._phase == BusPhase.IBI_ADDR_ACK:
             self._on_ibi_ack_rise(bus_sda)
         elif self._phase == BusPhase.WRITE_DATA:
-            pass  # Controller drives, DUT should be silent
+            # Accumulate write data for CCC tracking
+            self._data_accum = (self._data_accum << 1) | bus_sda
         elif self._phase == BusPhase.WRITE_TBIT:
             pass  # Controller drives parity
         elif self._phase == BusPhase.READ_DATA:
             self._on_read_data_rise()
+            # Accumulate read data for CCC tracking
+            self._data_accum = (self._data_accum << 1) | bus_sda
         elif self._phase == BusPhase.READ_TBIT:
             self._on_read_tbit_rise(bus_sda)
         elif self._phase == BusPhase.IBI_MDB:
@@ -360,10 +408,14 @@ class I3cBusMonitor:
         self._rnw = 0
         self._is_broadcast = False
         self._is_addressed_to_dut = False
+        self._is_addr_virt = False
         self._is_ibi = False
-        self._is_ccc = False
         self._byte_in_msg = 0
         self._data_accum = 0
+
+        # Preserve _active_ccc_code across Sr boundaries for direct CCC tracking.
+        # Only clear _is_ccc — it will be re-evaluated after the address phase.
+        self._is_ccc = False
 
         # IBI: target-initiated START (not Sr) can be an IBI attempt
         # We'll detect this during address bits based on DUT driving behavior
@@ -411,8 +463,14 @@ class I3cBusMonitor:
             addr = self._addr_accum
             self._is_broadcast = (addr == self.I3C_BROADCAST_ADDR)
             self._is_addressed_to_dut = (
-                self._dut_dynamic_addr is not None and
-                addr == self._dut_dynamic_addr
+                (self._dut_dynamic_addr is not None and
+                 addr == self._dut_dynamic_addr) or
+                (self._virt_dynamic_addr is not None and
+                 addr == self._virt_dynamic_addr)
+            )
+            self._is_addr_virt = (
+                self._virt_dynamic_addr is not None and
+                addr == self._virt_dynamic_addr
             )
 
             # Detect IBI: target-initiated, addr matches DUT, RnW=1,
@@ -458,15 +516,32 @@ class I3cBusMonitor:
             self._bit_count = 0
             self._data_accum = 0
             self._byte_in_msg = 0
+            # Clear any previous CCC context on new broadcast
+            self._active_ccc_code = None
+            self._ccc_defining_byte = None
+            self._ccc_read_bytes = []
+            self._ccc_write_bytes = []
+            self._in_ccc_read_phase = False
+            self._in_ccc_write_phase = False
             return
 
         if self._is_addressed_to_dut or self._is_broadcast:
             if self._rnw == 0:
-                # Private write to DUT
+                # Check if this is a direct CCC write phase (Sr + target_addr/W)
+                if self._active_ccc_code is not None and self._is_repeated_start:
+                    self._in_ccc_write_phase = True
+                    self._ccc_write_bytes = []
+                    self._ccc_direct_addr = self._addr_accum
+                # Private write to DUT (or direct CCC write)
                 self._phase = BusPhase.WRITE_DATA
                 self._bit_count = 0
                 self._data_accum = 0
             else:
+                # Check if this is a direct CCC read phase (Sr + target_addr/R)
+                if self._active_ccc_code is not None and self._is_repeated_start:
+                    self._in_ccc_read_phase = True
+                    self._ccc_read_bytes = []
+                    self._ccc_direct_addr = self._addr_accum
                 # Private read from DUT -- target will transmit in PP
                 self._phase = BusPhase.READ_DATA
                 self._bit_count = 0
@@ -487,11 +562,15 @@ class I3cBusMonitor:
             self._bit_count = 0
 
     def _on_write_tbit_fall(self):
-        """After T-bit (parity), next byte or wait for Sr/P."""
+        """After T-bit (parity), capture byte for CCC tracking, then next byte."""
         self.stats['write_bytes'] += 1
+        # Capture complete write byte for CCC SET tracking
+        if self._in_ccc_write_phase:
+            self._ccc_write_bytes.append(self._data_accum & 0xFF)
         self._byte_in_msg += 1
         self._phase = BusPhase.WRITE_DATA
         self._bit_count = 0
+        self._data_accum = 0
 
     # --------------------------------------------------------------
     # Read data (Target --> Controller)
@@ -540,6 +619,9 @@ class I3cBusMonitor:
         At this falling edge, the DUT should be back in OD mode after releasing.
         """
         self.stats['read_bytes'] += 1
+        # Capture complete read byte for CCC GET tracking
+        if self._in_ccc_read_phase:
+            self._ccc_read_bytes.append(self._data_accum & 0xFF)
         self._byte_in_msg += 1
 
         # After T-bit, if SDA went low during SCL high, controller aborted (Repeated START)
@@ -550,6 +632,7 @@ class I3cBusMonitor:
         # If no START/STOP happened, we continue reading.
         self._phase = BusPhase.READ_DATA
         self._bit_count = 0
+        self._data_accum = 0
 
     # --------------------------------------------------------------
     # IBI phases
@@ -614,10 +697,13 @@ class I3cBusMonitor:
             self._bit_count = 0
 
     def _on_ccc_tbit_fall(self):
-        """After CCC T-bit, check for ENTHDR and await next byte or Sr/P."""
-        # First CCC byte is the command code
+        """After CCC T-bit, check for ENTHDR, track CCC code, and await next byte or Sr/P."""
         if self._byte_in_msg == 0:
+            # First CCC byte is the command code
             self._ccc_code = self._data_accum & 0xFF
+            self._active_ccc_code = self._ccc_code
+            self._ccc_defining_byte = None
+
             # ENTHDR0-ENTHDR7 (0x20-0x27): bus enters HDR mode after this frame
             if 0x20 <= self._ccc_code <= 0x27:
                 self.log.debug(
@@ -626,11 +712,222 @@ class I3cBusMonitor:
                 )
                 self._phase = BusPhase.HDR_MODE
                 self._bus_active = False
+                self._active_ccc_code = None
                 return
+        elif self._byte_in_msg == 1 and self._active_ccc_code is not None:
+            # Second byte may be a defining byte (for RSTACT, GETCAPS, etc.)
+            self._ccc_defining_byte = self._data_accum & 0xFF
+
         self._byte_in_msg += 1
         self._phase = BusPhase.CCC_BYTE
         self._bit_count = 0
         self._data_accum = 0
+
+    # --------------------------------------------------------------
+    # CCC Completion Checks (M1, M2, M3, M4)
+    # --------------------------------------------------------------
+
+    def _get_ccc_signal_path(self):
+        """Return the CCC module's hierarchical path in the DUT."""
+        try:
+            return self.dut.xi3c_wrapper.i3c.xcontroller.xcontroller_standby.xcontroller_standby_i3c.xccc
+        except AttributeError:
+            return None
+
+    def _get_config_path(self):
+        """Return the configuration module's hierarchical path."""
+        try:
+            return self.dut.xi3c_wrapper.i3c.xcontroller.xconfiguration
+        except AttributeError:
+            return None
+
+    def _read_sig_int(self, sig, width=None):
+        """Read a signal value as int, return None on X/Z."""
+        try:
+            return int(sig.value)
+        except (ValueError, AttributeError):
+            return None
+
+    def _is_virt_target(self):
+        """Check if the direct CCC target is the virtual target."""
+        return (self._ccc_direct_addr is not None and
+                self._virt_dynamic_addr is not None and
+                self._ccc_direct_addr == self._virt_dynamic_addr)
+
+    def _get_expected_ccc_read_count(self):
+        """Return expected byte count for the active GET CCC, or None."""
+        if self._active_ccc_code is None:
+            return None
+        count = self._GET_CCC_BYTE_COUNTS.get(self._active_ccc_code)
+        if count is not None:
+            return count
+        # GETCAPS byte count depends on defining byte
+        if self._active_ccc_code == 0x95:
+            if self._ccc_defining_byte in (None, 0x00):
+                return 3
+            elif self._ccc_defining_byte == 0x93:
+                return 1
+            else:
+                return None  # Unknown defining byte — skip check
+        return None
+
+    def _check_ccc_completion(self):
+        """On STOP, verify CCC response/CSR consistency."""
+        if self._active_ccc_code is None:
+            return
+
+        ccc = self._active_ccc_code
+
+        # M1: Check GET CCC response data
+        if self._in_ccc_read_phase and self._ccc_read_bytes:
+            self._check_get_ccc_response(ccc)
+
+        # M3: Check SET CCC CSR consistency
+        if self._in_ccc_write_phase and self._ccc_write_bytes:
+            self._check_set_ccc_csr(ccc)
+
+        # M2: Check address CCC CSR consistency
+        if ccc in self._ADDR_CCC_CODES:
+            self._check_addr_ccc_csr(ccc)
+
+    def _check_get_ccc_response(self, ccc):
+        """M1: Verify GET CCC response data matches DUT CSR values."""
+        ccc_mod = self._get_ccc_signal_path()
+        config = self._get_config_path()
+        if ccc_mod is None:
+            return
+
+        is_virt = self._is_virt_target()
+        got = self._ccc_read_bytes
+        expected = []
+
+        try:
+            if ccc == 0x8E:  # GETBCR
+                if is_virt:
+                    expected = [self._read_sig_int(ccc_mod.virtual_get_bcr_i)]
+                else:
+                    expected = [self._read_sig_int(ccc_mod.get_bcr_i)]
+
+            elif ccc == 0x8F:  # GETDCR
+                if is_virt:
+                    expected = [self._read_sig_int(ccc_mod.virtual_get_dcr_i)]
+                else:
+                    expected = [self._read_sig_int(ccc_mod.get_dcr_i)]
+
+            elif ccc == 0x90:  # GETSTATUS
+                status = self._read_sig_int(ccc_mod.get_status_fmt1_i)
+                if status is not None:
+                    byte0 = (status >> 8) & 0xFF
+                    byte1 = status & 0xFF
+                    if is_virt:
+                        # Activity state = 3, PENDING_INTERRUPT = 0
+                        byte1 = (0b11 << 6) | (byte1 & 0x20) | 0
+                    expected = [byte0, byte1]
+
+            elif ccc == 0x8B:  # GETMWL
+                mwl = self._read_sig_int(ccc_mod.get_mwl_i)
+                if mwl is not None:
+                    expected = [(mwl >> 8) & 0xFF, mwl & 0xFF]
+
+            elif ccc == 0x8C:  # GETMRL
+                mrl = self._read_sig_int(ccc_mod.get_mrl_i)
+                if mrl is not None:
+                    ibil_byte = 0x00 if is_virt else self._read_sig_int(ccc_mod.get_ibil_i)
+                    if ibil_byte is None:
+                        ibil_byte = 0
+                    expected = [(mrl >> 8) & 0xFF, mrl & 0xFF, ibil_byte]
+
+            elif ccc == 0x8D:  # GETPID
+                if is_virt:
+                    pid = self._read_sig_int(ccc_mod.virtual_get_pid_i)
+                else:
+                    pid = self._read_sig_int(ccc_mod.get_pid_i)
+                if pid is not None:
+                    expected = [(pid >> (40 - 8*i)) & 0xFF for i in range(6)]
+
+            elif ccc == 0x95:  # GETCAPS
+                db = self._ccc_defining_byte
+                if db in (None, 0x00):
+                    # 3 bytes: capabilities
+                    byte2 = 0x00 if is_virt else 0x48
+                    expected = [0x00, 0x01, byte2]
+                elif db == 0x93:
+                    expected = [0x35]
+
+        except Exception:
+            return  # Signal access failure — skip check
+
+        if not expected or None in expected:
+            return  # Can't determine expected — skip
+
+        # Compare only the bytes we received (may be truncated by abort)
+        for i, (g, e) in enumerate(zip(got, expected)):
+            if g != e:
+                self._record_violation(
+                    "CCC_RESPONSE_DATA",
+                    f"CCC 0x{ccc:02X} byte[{i}]: got 0x{g:02X}, "
+                    f"expected 0x{e:02X} (virt={is_virt}, "
+                    f"db={self._ccc_defining_byte})"
+                )
+
+    def _check_set_ccc_csr(self, ccc):
+        """M3: After SET CCC, verify DUT CSR matches written data."""
+        config = self._get_config_path()
+        if config is None:
+            return
+
+        data = self._ccc_write_bytes
+
+        try:
+            if ccc == 0x89 and len(data) >= 2:  # SETMWL (direct)
+                csr_val = self._read_sig_int(config.get_mwl_o)
+                if csr_val is not None:
+                    written = (data[0] << 8) | data[1]
+                    if csr_val != written:
+                        self._record_violation(
+                            "SET_CSR_CONSISTENCY",
+                            f"SETMWL: CSR=0x{csr_val:04X}, "
+                            f"written=0x{written:04X}"
+                        )
+
+            elif ccc == 0x8A and len(data) >= 2:  # SETMRL (direct)
+                csr_val = self._read_sig_int(config.get_mrl_o)
+                if csr_val is not None:
+                    written = (data[0] << 8) | data[1]
+                    if csr_val != written:
+                        self._record_violation(
+                            "SET_CSR_CONSISTENCY",
+                            f"SETMRL: CSR=0x{csr_val:04X}, "
+                            f"written=0x{written:04X}"
+                        )
+
+        except Exception:
+            return  # Signal access failure — skip check
+
+    def _check_addr_ccc_csr(self, ccc):
+        """M2: After address CCC, verify DUT address CSRs match expected state."""
+        # Address CSR checking is best done at the test level since the monitor
+        # doesn't have full context of what addresses should be assigned.
+        # The monitor tracks the CCC and provides the data for test-level checks.
+        # For now, log the address CCC completion for debug visibility.
+        if ccc == 0x06:  # RSTDAA
+            self.log.debug("I3cBusMonitor: RSTDAA completed")
+        elif ccc == 0x29:  # SETAASA
+            self.log.debug("I3cBusMonitor: SETAASA completed")
+        elif ccc == 0x87:  # SETDASA
+            data = self._ccc_write_bytes
+            if data:
+                self.log.debug(
+                    f"I3cBusMonitor: SETDASA to 0x{self._ccc_direct_addr:02X} "
+                    f"data={[hex(b) for b in data]}"
+                )
+        elif ccc == 0x88:  # SETNEWDA
+            data = self._ccc_write_bytes
+            if data:
+                self.log.debug(
+                    f"I3cBusMonitor: SETNEWDA to 0x{self._ccc_direct_addr:02X} "
+                    f"data={[hex(b) for b in data]}"
+                )
 
     # --------------------------------------------------------------
     # START / STOP detection
@@ -643,9 +940,25 @@ class I3cBusMonitor:
 
         if is_sr:
             self.log.debug(f"I3cBusMonitor: Repeated START detected, was in {self._phase.name}")
+            # M4: Detect Sr abort during CCC read phase
+            if self._in_ccc_read_phase and self._phase in (BusPhase.READ_DATA, BusPhase.READ_TBIT):
+                expected = self._get_expected_ccc_read_count()
+                if expected is not None and len(self._ccc_read_bytes) < expected:
+                    self._ccc_was_aborted = True
+                    self._abort_count += 1
+                    self.log.debug(
+                        f"I3cBusMonitor: CCC 0x{self._active_ccc_code:02X} Sr-aborted "
+                        f"after {len(self._ccc_read_bytes)}/{expected} bytes"
+                    )
+                self._in_ccc_read_phase = False
         else:
             self.log.debug(f"I3cBusMonitor: START detected")
             self.stats['starts_detected'] += 1
+            # New START clears CCC context entirely
+            self._active_ccc_code = None
+            self._ccc_defining_byte = None
+            self._in_ccc_read_phase = False
+            self._in_ccc_write_phase = False
 
         self._enter_addr_phase(is_repeated_start=is_sr)
 
@@ -653,10 +966,18 @@ class I3cBusMonitor:
         """SDA rising while SCL high --> STOP."""
         self.log.debug(f"I3cBusMonitor: STOP detected")
         self.stats['stops_detected'] += 1
+
+        # M1/M2/M3: Check CCC completion on STOP
+        self._check_ccc_completion()
+
         self._bus_active = False
         self._phase = BusPhase.IDLE
         self._is_ccc = False
         self._is_entdaa = False
+        self._active_ccc_code = None
+        self._ccc_defining_byte = None
+        self._in_ccc_read_phase = False
+        self._in_ccc_write_phase = False
 
     # --------------------------------------------------------------
     # Main monitoring loop
@@ -730,6 +1051,7 @@ class I3cBusMonitor:
         self.log.info(f"  OD mode samples:         {self.stats['od_samples']}")
         self.log.info(f"  PP mode samples:         {self.stats['pp_samples']}")
         self.log.info(f"  Contention checks:       {self.stats['contention_checks']}")
+        self.log.info(f"  CCC aborts detected:     {self._abort_count}")
         self.log.info(f"  Total violations:        {self.violation_count}")
         if self.violations:
             self.log.error("  VIOLATIONS:")

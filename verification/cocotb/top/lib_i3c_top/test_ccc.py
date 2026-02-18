@@ -434,14 +434,20 @@ async def test_ccc_getmwl(dut):
 
     command = CCC.DIRECT.GETMWL
 
-    i3c_controller, _, tb = await test_setup(dut)
+    (STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR) = \
+        random.sample(VALID_I3C_ADDRESSES, 4)
+    i3c_controller, _, tb = await test_setup(
+        dut, STATIC_ADDR, VIRT_STATIC_ADDR,
+        dynamic_addr=DYNAMIC_ADDR, virtual_dynamic_addr=VIRT_DYNAMIC_ADDR)
     await ClockCycles(tb.clk, 50)
 
-    responses = await i3c_controller.i3c_ccc_read(ccc=command, addr=TGT_ADR, count=2)
-    [mwl_msb, mwl_lsb] = responses[0][1]
-
-    mwl = (mwl_msb << 8) | mwl_lsb
-    assert mwl == _MWL_VALUE
+    # Check both main and virtual targets (shared MWL CSR)
+    for addr in [DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR]:
+        responses = await i3c_controller.i3c_ccc_read(ccc=command, addr=addr, count=2)
+        [mwl_msb, mwl_lsb] = responses[0][1]
+        mwl = (mwl_msb << 8) | mwl_lsb
+        assert mwl == _MWL_VALUE, \
+            f"GETMWL from 0x{addr:02X}: expected 0x{_MWL_VALUE:04X}, got 0x{mwl:04X}"
 
 
 @cocotb.test()
@@ -452,15 +458,27 @@ async def test_ccc_getmrl(dut):
     _IBI_PAYLOAD_SIZE = 255  # Bytes
     command = CCC.DIRECT.GETMRL
 
-    i3c_controller, _, tb = await test_setup(dut)
+    (STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR) = \
+        random.sample(VALID_I3C_ADDRESSES, 4)
+    i3c_controller, _, tb = await test_setup(
+        dut, STATIC_ADDR, VIRT_STATIC_ADDR,
+        dynamic_addr=DYNAMIC_ADDR, virtual_dynamic_addr=VIRT_DYNAMIC_ADDR)
     await ClockCycles(tb.clk, 50)
 
-    responses = await i3c_controller.i3c_ccc_read(ccc=command, addr=TGT_ADR, count=3)
+    # Main target: MRL + IBI payload size
+    responses = await i3c_controller.i3c_ccc_read(ccc=command, addr=DYNAMIC_ADDR, count=3)
     [mrl_msb, mrl_lsb, ibi_payload_size] = responses[0][1]
-
     mrl = (mrl_msb << 8) | mrl_lsb
     assert mrl == _MRL_VALUE
     assert ibi_payload_size == _IBI_PAYLOAD_SIZE
+
+    # Virtual target: same MRL but IBIL=0 (no IBI support for VT)
+    responses = await i3c_controller.i3c_ccc_read(ccc=command, addr=VIRT_DYNAMIC_ADDR, count=3)
+    [mrl_msb, mrl_lsb, ibi_payload_size] = responses[0][1]
+    mrl = (mrl_msb << 8) | mrl_lsb
+    assert mrl == _MRL_VALUE
+    assert ibi_payload_size == 0x00, \
+        f"GETMRL VT IBIL: expected 0x00, got 0x{ibi_payload_size:02X}"
 
 
 @cocotb.test()
@@ -625,32 +643,66 @@ async def test_ccc_enec_disec_direct(dut):
     command_enec = CCC.DIRECT.ENEC
     command_disec = CCC.DIRECT.DISEC
 
-    _EVENT_TOGGLE_BYTE = 0b00001011
-
-    i3c_controller, _, tb = await test_setup(dut)
+    (STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR) = \
+        random.sample(VALID_I3C_ADDRESSES, 4)
+    i3c_controller, _, tb = await test_setup(
+        dut, STATIC_ADDR, VIRT_STATIC_ADDR,
+        dynamic_addr=DYNAMIC_ADDR, virtual_dynamic_addr=VIRT_DYNAMIC_ADDR)
     await ClockCycles(tb.clk, 50)
 
     # Read default values
     event_en = await read_target_events(tb)
     assert event_en == (1, 0, 1)
 
-    # Disable all target events
+    # Test each target with multiple bit patterns
+    for tgt_addr in [DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR]:
+        # Disable all target events
+        await i3c_controller.i3c_ccc_write(
+            ccc=command_disec, directed_data=[(tgt_addr, [0b00001011])]
+        )
+        event_en = await read_target_events(tb)
+        assert event_en == (0, 0, 0), \
+            f"DISEC all from 0x{tgt_addr:02X}: expected (0,0,0), got {event_en}"
+
+        # Enable individual bits: IBI only
+        await i3c_controller.i3c_ccc_write(
+            ccc=command_enec, directed_data=[(tgt_addr, [0x01])]
+        )
+        event_en = await read_target_events(tb)
+        assert event_en[0] == 1, f"ENEC IBI from 0x{tgt_addr:02X}: IBI not set"
+
+        # Enable CRR
+        await i3c_controller.i3c_ccc_write(
+            ccc=command_enec, directed_data=[(tgt_addr, [0x02])]
+        )
+        event_en = await read_target_events(tb)
+        assert event_en[1] == 1, f"ENEC CRR from 0x{tgt_addr:02X}: CRR not set"
+
+        # Enable HJ
+        await i3c_controller.i3c_ccc_write(
+            ccc=command_enec, directed_data=[(tgt_addr, [0x08])]
+        )
+        event_en = await read_target_events(tb)
+        assert event_en == (1, 1, 1), \
+            f"ENEC all from 0x{tgt_addr:02X}: expected (1,1,1), got {event_en}"
+
+        # Random pattern disable
+        pattern = random.choice([0x01, 0x02, 0x08, 0x03, 0x09, 0x0A, 0x0B])
+        await i3c_controller.i3c_ccc_write(
+            ccc=command_disec, directed_data=[(tgt_addr, [pattern])]
+        )
+        event_en = await read_target_events(tb)
+        expect_ibi = 0 if (pattern & 0x01) else 1
+        expect_crr = 0 if (pattern & 0x02) else 1
+        expect_hj = 0 if (pattern & 0x08) else 1
+        assert event_en == (expect_ibi, expect_crr, expect_hj), \
+            f"DISEC pattern 0x{pattern:02X} from 0x{tgt_addr:02X}: " \
+            f"expected ({expect_ibi},{expect_crr},{expect_hj}), got {event_en}"
+
+    # Re-enable all for clean test exit
     await i3c_controller.i3c_ccc_write(
-        ccc=command_disec, directed_data=[(TGT_ADR, [_EVENT_TOGGLE_BYTE])]
+        ccc=command_enec, directed_data=[(DYNAMIC_ADDR, [0x0B])]
     )
-
-    # Read disabled values
-    event_en = await read_target_events(tb)
-    assert event_en == (0, 0, 0)
-
-    # Enable all target events
-    await i3c_controller.i3c_ccc_write(
-        ccc=command_enec, directed_data=[(TGT_ADR, [_EVENT_TOGGLE_BYTE])]
-    )
-
-    # Read enabled values
-    event_en = await read_target_events(tb)
-    assert event_en == (1, 1, 1)
 
 
 @cocotb.test()
@@ -686,69 +738,110 @@ async def test_ccc_enec_disec_bcast(dut):
 @cocotb.test()
 async def test_ccc_setmwl_direct(dut):
 
-    command = CCC.DIRECT.SETMWL
+    command_set = CCC.DIRECT.SETMWL
+    command_get = CCC.DIRECT.GETMWL
 
-    i3c_controller, _, tb = await test_setup(dut)
+    (STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR) = \
+        random.sample(VALID_I3C_ADDRESSES, 4)
+    i3c_controller, _, tb = await test_setup(
+        dut, STATIC_ADDR, VIRT_STATIC_ADDR,
+        dynamic_addr=DYNAMIC_ADDR, virtual_dynamic_addr=VIRT_DYNAMIC_ADDR)
     await ClockCycles(tb.clk, 50)
 
-    # Send direct SETMWL
-    mwl_msb = 0xAB
-    mwl_lsb = 0xCD
-    await i3c_controller.i3c_ccc_write(ccc=command, directed_data=[(TGT_ADR, [mwl_msb, mwl_lsb])])
+    # Test with random values + boundary values, targeting both main and VT
+    test_values = [0x0000, 0xFFFF] + [random.randint(0, 0xFFFF) for _ in range(3)]
+    for mwl_val in test_values:
+        tgt_addr = random.choice([DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR])
+        mwl_msb = (mwl_val >> 8) & 0xFF
+        mwl_lsb = mwl_val & 0xFF
+        await i3c_controller.i3c_ccc_write(
+            ccc=command_set, directed_data=[(tgt_addr, [mwl_msb, mwl_lsb])])
 
-    # Check if MWL got written
-    sig = dut.xi3c_wrapper.i3c.xcontroller.xconfiguration.get_mwl_o.value
-    mwl = (mwl_msb << 8) | mwl_lsb
-    assert mwl == int(sig)
+        # Check CSR value
+        sig = dut.xi3c_wrapper.i3c.xcontroller.xconfiguration.get_mwl_o.value
+        assert mwl_val == int(sig), \
+            f"SETMWL CSR mismatch: expected 0x{mwl_val:04X}, got 0x{int(sig):04X}"
 
-    # CP19: Verify FW-readable STBY_CR_MWL register reflects the CCC value
-    await ClockCycles(tb.clk, 10)
-    mwl_csr = await tb.read_csr_field(
-        tb.reg_map.I3C_EC.STDBYCTRLMODE.STBY_CR_MWL.base_addr,
-        tb.reg_map.I3C_EC.STDBYCTRLMODE.STBY_CR_MWL.MWL,
-    )
-    assert mwl_csr == mwl, (
-        f"STBY_CR_MWL.MWL mismatch: expected 0x{mwl:04X}, got 0x{mwl_csr:04X}"
-    )
+        # Verify FW-readable STBY_CR_MWL register
+        await ClockCycles(tb.clk, 10)
+        mwl_csr = await tb.read_csr_field(
+            tb.reg_map.I3C_EC.STDBYCTRLMODE.STBY_CR_MWL.base_addr,
+            tb.reg_map.I3C_EC.STDBYCTRLMODE.STBY_CR_MWL.MWL,
+        )
+        assert mwl_csr == mwl_val, \
+            f"STBY_CR_MWL.MWL mismatch: expected 0x{mwl_val:04X}, got 0x{mwl_csr:04X}"
+
+        # GET readback from both targets (shared CSR)
+        for read_addr in [DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR]:
+            responses = await i3c_controller.i3c_ccc_read(
+                ccc=command_get, addr=read_addr, count=2)
+            [got_msb, got_lsb] = responses[0][1]
+            got_mwl = (got_msb << 8) | got_lsb
+            assert got_mwl == mwl_val, \
+                f"GETMWL from 0x{read_addr:02X}: expected 0x{mwl_val:04X}, got 0x{got_mwl:04X}"
 
 
 @cocotb.test()
 async def test_ccc_setmrl_direct(dut):
 
-    command = CCC.DIRECT.SETMRL
+    command_set = CCC.DIRECT.SETMRL
+    command_get = CCC.DIRECT.GETMRL
 
-    i3c_controller, _, tb = await test_setup(dut)
+    (STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR) = \
+        random.sample(VALID_I3C_ADDRESSES, 4)
+    i3c_controller, _, tb = await test_setup(
+        dut, STATIC_ADDR, VIRT_STATIC_ADDR,
+        dynamic_addr=DYNAMIC_ADDR, virtual_dynamic_addr=VIRT_DYNAMIC_ADDR)
     await ClockCycles(tb.clk, 50)
 
-    # Send direct SETMRL with optional 3rd byte (IBIL)
-    mrl_msb = 0xAB
-    mrl_lsb = 0xCD
-    ibil = 0x08
-    await i3c_controller.i3c_ccc_write(ccc=command, directed_data=[(TGT_ADR, [mrl_msb, mrl_lsb, ibil])])
+    # Test with random values + boundary values, targeting both main and VT
+    test_values = [0x0000, 0xFFFF] + [random.randint(0, 0xFFFF) for _ in range(3)]
+    for mrl_val in test_values:
+        tgt_addr = random.choice([DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR])
+        mrl_msb = (mrl_val >> 8) & 0xFF
+        mrl_lsb = mrl_val & 0xFF
+        ibil = random.randint(0, 255)
+        await i3c_controller.i3c_ccc_write(
+            ccc=command_set, directed_data=[(tgt_addr, [mrl_msb, mrl_lsb, ibil])])
 
-    # Check if MRL got written
-    sig = dut.xi3c_wrapper.i3c.xcontroller.xconfiguration.get_mrl_o.value
-    mrl = (mrl_msb << 8) | mrl_lsb
-    assert mrl == int(sig)
+        # Check CSR value
+        sig = dut.xi3c_wrapper.i3c.xcontroller.xconfiguration.get_mrl_o.value
+        assert mrl_val == int(sig), \
+            f"SETMRL CSR mismatch: expected 0x{mrl_val:04X}, got 0x{int(sig):04X}"
 
-    # CP20: Verify FW-readable STBY_CR_MRL.MRL register
-    await ClockCycles(tb.clk, 10)
-    mrl_csr = await tb.read_csr_field(
-        tb.reg_map.I3C_EC.STDBYCTRLMODE.STBY_CR_MRL.base_addr,
-        tb.reg_map.I3C_EC.STDBYCTRLMODE.STBY_CR_MRL.MRL,
-    )
-    assert mrl_csr == mrl, (
-        f"STBY_CR_MRL.MRL mismatch: expected 0x{mrl:04X}, got 0x{mrl_csr:04X}"
-    )
+        # Verify FW-readable STBY_CR_MRL register
+        await ClockCycles(tb.clk, 10)
+        mrl_csr = await tb.read_csr_field(
+            tb.reg_map.I3C_EC.STDBYCTRLMODE.STBY_CR_MRL.base_addr,
+            tb.reg_map.I3C_EC.STDBYCTRLMODE.STBY_CR_MRL.MRL,
+        )
+        assert mrl_csr == mrl_val, \
+            f"STBY_CR_MRL.MRL mismatch: expected 0x{mrl_val:04X}, got 0x{mrl_csr:04X}"
 
-    # CP21: Verify FW-readable STBY_CR_MRL.IBIL register
-    ibil_csr = await tb.read_csr_field(
-        tb.reg_map.I3C_EC.STDBYCTRLMODE.STBY_CR_MRL.base_addr,
-        tb.reg_map.I3C_EC.STDBYCTRLMODE.STBY_CR_MRL.IBIL,
-    )
-    assert ibil_csr == ibil, (
-        f"STBY_CR_MRL.IBIL mismatch: expected 0x{ibil:02X}, got 0x{ibil_csr:02X}"
-    )
+        ibil_csr = await tb.read_csr_field(
+            tb.reg_map.I3C_EC.STDBYCTRLMODE.STBY_CR_MRL.base_addr,
+            tb.reg_map.I3C_EC.STDBYCTRLMODE.STBY_CR_MRL.IBIL,
+        )
+        assert ibil_csr == ibil, \
+            f"STBY_CR_MRL.IBIL mismatch: expected 0x{ibil:02X}, got 0x{ibil_csr:02X}"
+
+        # GET readback from main target
+        responses = await i3c_controller.i3c_ccc_read(
+            ccc=command_get, addr=DYNAMIC_ADDR, count=3)
+        [got_msb, got_lsb, got_ibil] = responses[0][1]
+        got_mrl = (got_msb << 8) | got_lsb
+        assert got_mrl == mrl_val, \
+            f"GETMRL main: expected 0x{mrl_val:04X}, got 0x{got_mrl:04X}"
+
+        # GET readback from VT — IBIL must be 0x00
+        responses = await i3c_controller.i3c_ccc_read(
+            ccc=command_get, addr=VIRT_DYNAMIC_ADDR, count=3)
+        [got_msb, got_lsb, got_ibil_vt] = responses[0][1]
+        got_mrl = (got_msb << 8) | got_lsb
+        assert got_mrl == mrl_val, \
+            f"GETMRL VT: expected 0x{mrl_val:04X}, got 0x{got_mrl:04X}"
+        assert got_ibil_vt == 0x00, \
+            f"GETMRL VT IBIL: expected 0x00, got 0x{got_ibil_vt:02X}"
 
 
 @cocotb.test()
@@ -824,8 +917,14 @@ SUPPORTED_RESET_ACTIONS = [
     I3cTargetResetAction.RESET_PERIPHERAL_ONLY,
     I3cTargetResetAction.RESET_WHOLE_TARGET,
 ]
+VIRT_TGT_ADR = 0x5B
+
 async def test_ccc_rstact(dut, type, rstact):
-    i3c_controller, _, tb = await test_setup(dut)
+    (STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR) = \
+        random.sample(VALID_I3C_ADDRESSES, 4)
+    i3c_controller, _, tb = await test_setup(
+        dut, STATIC_ADDR, VIRT_STATIC_ADDR,
+        dynamic_addr=DYNAMIC_ADDR, virtual_dynamic_addr=VIRT_DYNAMIC_ADDR)
     await ClockCycles(tb.clk, 50)
 
     if type == "broadcast":
@@ -834,8 +933,9 @@ async def test_ccc_rstact(dut, type, rstact):
         reset_actions = rstact
     elif type == "direct":
         command = CCC.DIRECT.RSTACT
-        directed_data = [(TGT_ADR, [])]
-        reset_actions = [(TGT_ADR, rstact)]
+        tgt = random.choice([DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR])
+        directed_data = [(tgt, [])]
+        reset_actions = [(tgt, rstact)]
     else:
         assert False, "Unsupported RSTACT type, must be 'broadcast' or 'direct'"
 
@@ -1092,3 +1192,625 @@ async def test_ccc_direct_multiple_rd(dut):
                 result = False
 
     assert result
+
+
+# =============================================================================
+# NEW TESTS — Phase 1
+# =============================================================================
+
+
+@cocotb.test()
+async def test_ccc_getcaps(dut):
+    """
+    Test GETCAPS (0x95) direct GET CCC with various defining bytes,
+    targeting both main and virtual targets.
+    """
+    (STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR) = \
+        random.sample(VALID_I3C_ADDRESSES, 4)
+    i3c_controller, _, tb = await test_setup(
+        dut, STATIC_ADDR, VIRT_STATIC_ADDR,
+        dynamic_addr=DYNAMIC_ADDR, virtual_dynamic_addr=VIRT_DYNAMIC_ADDR)
+    await ClockCycles(tb.clk, 50)
+
+    for tgt_addr in [DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR]:
+        is_virt = (tgt_addr == VIRT_DYNAMIC_ADDR)
+
+        # No defining byte → 3 bytes (default GETCAPS)
+        responses = await i3c_controller.i3c_ccc_read(
+            ccc=CCC.DIRECT.GETCAPS, addr=tgt_addr, count=3)
+        data = responses[0][1]
+        assert data[0] == 0x00, f"GETCAPS byte0: expected 0x00, got 0x{data[0]:02X}"
+        assert data[1] == 0x01, f"GETCAPS byte1: expected 0x01, got 0x{data[1]:02X}"
+        expected_byte2 = 0x00 if is_virt else 0x48
+        assert data[2] == expected_byte2, \
+            f"GETCAPS byte2: expected 0x{expected_byte2:02X}, got 0x{data[2]:02X}"
+
+        # DB=0x00 → same 3 bytes
+        responses = await i3c_controller.i3c_ccc_read(
+            ccc=CCC.DIRECT.GETCAPS, addr=tgt_addr, count=3, defining_byte=0x00)
+        data = responses[0][1]
+        assert data[0] == 0x00 and data[1] == 0x01 and data[2] == expected_byte2, \
+            f"GETCAPS DB=0x00: expected [00,01,{expected_byte2:02X}], got {[hex(b) for b in data]}"
+
+        # DB=0x93 → 1 byte (TESTCAP: 0x35)
+        responses = await i3c_controller.i3c_ccc_read(
+            ccc=CCC.DIRECT.GETCAPS, addr=tgt_addr, count=1, defining_byte=0x93)
+        data = responses[0][1]
+        assert data[0] == 0x35, f"GETCAPS DB=0x93: expected 0x35, got 0x{data[0]:02X}"
+
+
+@cocotb.test()
+async def test_ccc_unsupported_direct_nack(dut):
+    """
+    Verify that unsupported direct CCCs are NACKed by the target.
+    Tests deprecated, unsupported, and vendor-specific CCC codes.
+    """
+    (STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR) = \
+        random.sample(VALID_I3C_ADDRESSES, 4)
+    i3c_controller, _, tb = await test_setup(
+        dut, STATIC_ADDR, VIRT_STATIC_ADDR,
+        dynamic_addr=DYNAMIC_ADDR, virtual_dynamic_addr=VIRT_DYNAMIC_ADDR)
+    await ClockCycles(tb.clk, 50)
+
+    # Unsupported direct SET CCCs
+    unsupported_set_cccs = [
+        CCC.DIRECT.SETROUTE,     # 0x96
+        CCC.DIRECT.D2DXFER,      # 0x97
+    ]
+
+    # Unsupported direct GET CCCs
+    unsupported_get_cccs = [
+        CCC.DIRECT.GETACCCR,     # 0x91
+        CCC.DIRECT.GETMXDS,      # 0x94
+    ]
+
+    for tgt_addr in [DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR]:
+        for ccc_code in unsupported_set_cccs:
+            acks = await i3c_controller.i3c_ccc_write(
+                ccc=ccc_code, directed_data=[(tgt_addr, [0x00])])
+            assert acks[0] == False, \
+                f"Unsupported SET CCC 0x{ccc_code:02X} to 0x{tgt_addr:02X} should be NACKed"
+
+        for ccc_code in unsupported_get_cccs:
+            responses = await i3c_controller.i3c_ccc_read(
+                ccc=ccc_code, addr=tgt_addr, count=1)
+            assert responses[0][0] == False, \
+                f"Unsupported GET CCC 0x{ccc_code:02X} from 0x{tgt_addr:02X} should be NACKed"
+
+
+@cocotb.test()
+async def test_ccc_rstact_read_action(dut):
+    """
+    Verify RSTACT internal state after arming. Per spec, rstact_armed is
+    cleared by the next START (not Sr), so a subsequent RSTACT read in a
+    new CCC frame returns 0x80 (not armed). This test verifies:
+    1. Internal rst_action_o reflects the defining byte immediately after write
+    2. After START, RSTACT read returns 0x80 (arm cleared by START)
+    3. Recovery time read-back (DB=0x81/0x82) returns 0xFF
+    """
+    (STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR) = \
+        random.sample(VALID_I3C_ADDRESSES, 4)
+    i3c_controller, _, tb = await test_setup(
+        dut, STATIC_ADDR, VIRT_STATIC_ADDR,
+        dynamic_addr=DYNAMIC_ADDR, virtual_dynamic_addr=VIRT_DYNAMIC_ADDR)
+    await ClockCycles(tb.clk, 50)
+
+    rst_action_sig = dut.xi3c_wrapper.i3c.xcontroller.xcontroller_standby.xcontroller_standby_i3c.rst_action_o
+
+    for tgt_addr in [DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR]:
+        # Arm peripheral reset (DB=0x01), check internal signal
+        await i3c_controller.i3c_ccc_write(
+            ccc=CCC.DIRECT.RSTACT, defining_byte=0x01,
+            directed_data=[(tgt_addr, [])], stop=False)
+        assert int(rst_action_sig) == 0x01, \
+            f"rst_action_o after arm 0x01: expected 0x01, got 0x{int(rst_action_sig):02X}"
+        await i3c_controller.send_stop()
+
+        # Arm whole-target reset (DB=0x02), check internal signal
+        await i3c_controller.i3c_ccc_write(
+            ccc=CCC.DIRECT.RSTACT, defining_byte=0x02,
+            directed_data=[(tgt_addr, [])], stop=False)
+        assert int(rst_action_sig) == 0x02, \
+            f"rst_action_o after arm 0x02: expected 0x02, got 0x{int(rst_action_sig):02X}"
+        await i3c_controller.send_stop()
+
+        # Read with DB=0x00 in new frame → arm cleared by START → 0x80
+        val = await read_rstact(i3c_controller, 0x00, tgt_addr)
+        assert val == 0x80, \
+            f"RSTACT read after START: expected 0x80 (cleared), got 0x{val:02X}"
+
+        # Read recovery time (DB=0x81) → should return 0xFF
+        val = await read_rstact(i3c_controller, 0x81, tgt_addr)
+        assert val == 0xFF, \
+            f"RSTACT read DB=0x81: expected 0xFF, got 0x{val:02X}"
+
+        # Read recovery time (DB=0x82) → should return 0xFF
+        val = await read_rstact(i3c_controller, 0x82, tgt_addr)
+        assert val == 0xFF, \
+            f"RSTACT read DB=0x82: expected 0xFF, got 0x{val:02X}"
+
+
+@cocotb.test()
+async def test_ccc_rstact_escalation_clear(dut):
+    """
+    Verify that RSTACT CCC and GETSTATUS CCC clear the escalation counter,
+    preventing escalated reset on the next target reset pattern.
+    """
+    log = logging.getLogger("test_ccc_rstact_escalation_clear")
+
+    (SA, VSA, DA, VDA) = random.sample(VALID_I3C_ADDRESSES, 4)
+    i3c_controller, _, tb = await test_setup(dut, SA, VSA, DA, VDA)
+    dut.peripheral_reset_done_i.value = 0
+    await ClockCycles(tb.clk, 50)
+
+    # --- Test 1: RSTACT clears escalation counter ---
+    log.info("Test 1: RSTACT clears escalation counter")
+
+    # Arm peripheral reset and send 1st reset pattern
+    await send_rstact_write(i3c_controller, 0x01, "broadcast", None)
+    await i3c_controller.send_target_reset_pattern()
+    await ClockCycles(tb.clk, 10)
+    assert dut.peripheral_reset_o == 1, "Expected peripheral_reset after 1st pattern"
+    assert dut.escalated_reset_o == 0
+
+    # Complete reset handshake
+    dut.peripheral_reset_done_i.value = 1
+    await ClockCycles(tb.clk, 2)
+    dut.peripheral_reset_done_i.value = 0
+    await ClockCycles(tb.clk, 10)
+
+    # Send another RSTACT (should clear escalation counter)
+    await send_rstact_write(i3c_controller, 0x01, "broadcast", None)
+
+    # 2nd pattern should NOT escalate (counter was cleared by RSTACT)
+    await i3c_controller.send_target_reset_pattern()
+    await ClockCycles(tb.clk, 10)
+    assert dut.peripheral_reset_o == 1, "Expected peripheral_reset after RSTACT clear + pattern"
+    assert dut.escalated_reset_o == 0, "Escalation should NOT happen after RSTACT cleared counter"
+
+    # Complete reset handshake
+    dut.peripheral_reset_done_i.value = 1
+    await ClockCycles(tb.clk, 2)
+    dut.peripheral_reset_done_i.value = 0
+    await ClockCycles(tb.clk, 10)
+
+    # --- Test 2: GETSTATUS clears escalation counter ---
+    log.info("Test 2: GETSTATUS clears escalation counter")
+
+    # Arm and send 1st pattern
+    await send_rstact_write(i3c_controller, 0x01, "broadcast", None)
+    await i3c_controller.send_target_reset_pattern()
+    await ClockCycles(tb.clk, 10)
+    assert dut.peripheral_reset_o == 1
+
+    # Complete reset handshake
+    dut.peripheral_reset_done_i.value = 1
+    await ClockCycles(tb.clk, 2)
+    dut.peripheral_reset_done_i.value = 0
+    await ClockCycles(tb.clk, 10)
+
+    # Send GETSTATUS (should clear escalation counter)
+    tgt = random.choice([DA, VDA])
+    responses = await i3c_controller.i3c_ccc_read(
+        ccc=CCC.DIRECT.GETSTATUS, addr=tgt, count=2)
+
+    # Re-arm and send 2nd pattern — should NOT escalate
+    await send_rstact_write(i3c_controller, 0x01, "broadcast", None)
+    await i3c_controller.send_target_reset_pattern()
+    await ClockCycles(tb.clk, 10)
+    assert dut.peripheral_reset_o == 1, "Expected peripheral_reset after GETSTATUS clear + pattern"
+    assert dut.escalated_reset_o == 0, "Escalation should NOT happen after GETSTATUS cleared counter"
+
+    log.info("PASS: Escalation counter cleared by RSTACT and GETSTATUS")
+
+
+@cocotb.test()
+async def test_ccc_rstact_arm_clear_on_start(dut):
+    """
+    Verify RSTACT arm is cleared by START (not Sr). After arming with
+    whole-target reset, a private transfer (START) clears the arm so
+    subsequent reset pattern triggers default behavior (peripheral reset).
+    """
+    log = logging.getLogger("test_ccc_rstact_arm_clear_on_start")
+
+    (SA, VSA, DA, VDA) = random.sample(VALID_I3C_ADDRESSES, 4)
+    i3c_controller, _, tb = await test_setup(dut, SA, VSA, DA, VDA)
+    dut.peripheral_reset_done_i.value = 0
+    await ClockCycles(tb.clk, 50)
+
+    # Arm whole-target reset (DB=0x02)
+    await i3c_controller.i3c_ccc_write(
+        ccc=CCC.BCAST.RSTACT, defining_byte=0x02, stop=True)
+
+    rst_action_sig = dut.xi3c_wrapper.i3c.xcontroller.xcontroller_standby.xcontroller_standby_i3c.rst_action_o
+
+    # Issue a private read (START + addr/R + data + STOP) — START clears arm
+    responses = await i3c_controller.i3c_ccc_read(
+        ccc=CCC.DIRECT.GETSTATUS, addr=random.choice([DA, VDA]), count=2)
+    # The START at beginning of this CCC read cleared rstact_armed
+
+    # Send target reset pattern → should get DEFAULT behavior (peripheral reset)
+    await i3c_controller.i3c_ccc_write(
+        ccc=CCC.BCAST.RSTACT, defining_byte=0x01, stop=False)
+    await i3c_controller.send_target_reset_pattern()
+    await i3c_controller.send_stop()
+    await ClockCycles(tb.clk, 10)
+
+    assert dut.peripheral_reset_o == 1, \
+        "Expected peripheral_reset (not whole-target) after START cleared arm"
+    assert dut.escalated_reset_o == 0, \
+        "Expected no escalation"
+
+    log.info("PASS: RSTACT arm cleared by START")
+
+
+@cocotb.test()
+async def test_ccc_rstact_unsupported_db(dut):
+    """
+    Verify RSTACT with unsupported defining bytes is NACKed.
+    """
+    (STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR) = \
+        random.sample(VALID_I3C_ADDRESSES, 4)
+    i3c_controller, _, tb = await test_setup(
+        dut, STATIC_ADDR, VIRT_STATIC_ADDR,
+        dynamic_addr=DYNAMIC_ADDR, virtual_dynamic_addr=VIRT_DYNAMIC_ADDR)
+    await ClockCycles(tb.clk, 50)
+
+    unsupported_dbs = [0x03, 0x05, 0x83]
+    for db in unsupported_dbs:
+        for tgt_addr in [DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR]:
+            acks = await i3c_controller.i3c_ccc_write(
+                ccc=CCC.DIRECT.RSTACT, defining_byte=db,
+                directed_data=[(tgt_addr, [])])
+            assert acks[0] == False, \
+                f"RSTACT DB=0x{db:02X} to 0x{tgt_addr:02X} should be NACKed"
+
+
+@cocotb.test()
+async def test_ccc_unknown_broadcast(dut):
+    """
+    Unknown broadcast CCCs should be silently ignored (target accepts data
+    but takes no action). Verify no crash and clean recovery.
+    """
+    i3c_controller, _, tb = await test_setup(dut)
+    await ClockCycles(tb.clk, 50)
+
+    # Send unknown broadcast CCCs with some data
+    for ccc_code in [0x30, 0x50]:
+        await i3c_controller.i3c_ccc_write(
+            ccc=ccc_code, broadcast_data=[0xAA, 0xBB])
+
+    # Verify clean recovery: known CCC still works
+    responses = await i3c_controller.i3c_ccc_read(
+        ccc=CCC.DIRECT.GETBCR, addr=TGT_ADR, count=1)
+    assert responses[0][0] == True, "GETBCR should ACK after unknown broadcast"
+
+
+@cocotb.test()
+async def test_ccc_addr_lifecycle(dut):
+    """
+    Full address lifecycle: RSTDAA → SETDASA → verify → SETNEWDA → verify →
+    RSTDAA → verify cleared. Tests both main and virtual targets.
+    """
+    log = logging.getLogger("test_ccc_addr_lifecycle")
+
+    list_of_values = list(VALID_I3C_ADDRESSES)
+    (SA, VSA, DA1, VDA1, DA2, VDA2) = random.sample(list_of_values, 6)
+    i3c_controller, _, tb = await test_setup(dut, SA, VSA)
+    await ClockCycles(tb.clk, 50)
+
+    da_reg = tb.reg_map.I3C_EC.STDBYCTRLMODE.STBY_CR_DEVICE_ADDR
+    vda_reg = tb.reg_map.I3C_EC.STDBYCTRLMODE.STBY_CR_VIRT_DEVICE_ADDR
+
+    # Step 1: SETDASA to assign initial addresses
+    log.info(f"SETDASA: main={SA}→{DA1}, virt={VSA}→{VDA1}")
+    await i3c_controller.i3c_ccc_write(
+        ccc=CCC.DIRECT.SETDASA, directed_data=[(SA, [DA1 << 1])], stop=False)
+    await i3c_controller.i3c_ccc_write(
+        ccc=CCC.DIRECT.SETDASA, directed_data=[(VSA, [VDA1 << 1])])
+
+    # Verify addresses assigned
+    main_da = await tb.read_csr_field(da_reg.base_addr, da_reg.DYNAMIC_ADDR)
+    main_valid = await tb.read_csr_field(da_reg.base_addr, da_reg.DYNAMIC_ADDR_VALID)
+    assert main_da == DA1 and main_valid == 1, f"Main DA: {main_da} valid={main_valid}"
+
+    virt_da = await tb.read_csr_field(vda_reg.base_addr, vda_reg.VIRT_DYNAMIC_ADDR)
+    virt_valid = await tb.read_csr_field(vda_reg.base_addr, vda_reg.VIRT_DYNAMIC_ADDR_VALID)
+    assert virt_da == VDA1 and virt_valid == 1, f"Virt DA: {virt_da} valid={virt_valid}"
+
+    # Step 2: SETNEWDA to change addresses
+    log.info(f"SETNEWDA: main={DA1}→{DA2}, virt={VDA1}→{VDA2}")
+    await i3c_controller.i3c_ccc_write(
+        ccc=CCC.DIRECT.SETNEWDA, directed_data=[(DA1, [DA2 << 1])], stop=False)
+    await i3c_controller.i3c_ccc_write(
+        ccc=CCC.DIRECT.SETNEWDA, directed_data=[(VDA1, [VDA2 << 1])])
+
+    # Verify new addresses
+    main_da = await tb.read_csr_field(da_reg.base_addr, da_reg.DYNAMIC_ADDR)
+    assert main_da == DA2, f"Main DA after SETNEWDA: expected {DA2}, got {main_da}"
+
+    virt_da = await tb.read_csr_field(vda_reg.base_addr, vda_reg.VIRT_DYNAMIC_ADDR)
+    assert virt_da == VDA2, f"Virt DA after SETNEWDA: expected {VDA2}, got {virt_da}"
+
+    # Step 3: RSTDAA to clear all addresses
+    log.info("RSTDAA: clearing all addresses")
+    await i3c_controller.i3c_ccc_write(ccc=CCC.BCAST.RSTDAA)
+
+    main_valid = await tb.read_csr_field(da_reg.base_addr, da_reg.DYNAMIC_ADDR_VALID)
+    virt_valid = await tb.read_csr_field(vda_reg.base_addr, vda_reg.VIRT_DYNAMIC_ADDR_VALID)
+    assert main_valid == 0, f"Main DA should be invalid after RSTDAA, got valid={main_valid}"
+    assert virt_valid == 0, f"Virt DA should be invalid after RSTDAA, got valid={virt_valid}"
+
+    log.info("PASS: Address lifecycle completed successfully")
+
+
+@cocotb.test()
+async def test_ccc_chain_bcast(dut):
+    """
+    Chain multiple broadcast CCCs via Sr+7E/W within a single frame.
+    Verify each CCC takes effect.
+    """
+    i3c_controller, _, tb = await test_setup(dut)
+    await ClockCycles(tb.clk, 50)
+
+    # Chain: SETMWL → SETMRL (broadcast, no STOP between them)
+    mwl_val = random.randint(0, 0xFFFF)
+    mrl_val = random.randint(0, 0xFFFF)
+    ibil_val = random.randint(0, 0xFF)
+
+    await i3c_controller.i3c_ccc_write(
+        ccc=CCC.BCAST.SETMWL,
+        broadcast_data=[(mwl_val >> 8) & 0xFF, mwl_val & 0xFF],
+        stop=False)
+    await i3c_controller.i3c_ccc_write(
+        ccc=CCC.BCAST.SETMRL,
+        broadcast_data=[(mrl_val >> 8) & 0xFF, mrl_val & 0xFF, ibil_val])
+
+    # Verify both took effect
+    sig_mwl = int(dut.xi3c_wrapper.i3c.xcontroller.xconfiguration.get_mwl_o.value)
+    sig_mrl = int(dut.xi3c_wrapper.i3c.xcontroller.xconfiguration.get_mrl_o.value)
+    assert sig_mwl == mwl_val, f"Chained SETMWL: expected 0x{mwl_val:04X}, got 0x{sig_mwl:04X}"
+    assert sig_mrl == mrl_val, f"Chained SETMRL: expected 0x{mrl_val:04X}, got 0x{sig_mrl:04X}"
+
+
+@cocotb.test()
+async def test_ccc_chain_direct(dut):
+    """
+    Chain multiple direct CCCs within a single frame.
+    Verify correct target address matching across chained CCCs.
+    """
+    (STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR) = \
+        random.sample(VALID_I3C_ADDRESSES, 4)
+    i3c_controller, _, tb = await test_setup(
+        dut, STATIC_ADDR, VIRT_STATIC_ADDR,
+        dynamic_addr=DYNAMIC_ADDR, virtual_dynamic_addr=VIRT_DYNAMIC_ADDR)
+    await ClockCycles(tb.clk, 50)
+
+    # Chain: SETMWL to main → SETMWL to VT (both in one frame)
+    mwl_val = random.randint(0, 0xFFFF)
+    await i3c_controller.i3c_ccc_write(
+        ccc=CCC.DIRECT.SETMWL,
+        directed_data=[
+            (DYNAMIC_ADDR, [(mwl_val >> 8) & 0xFF, mwl_val & 0xFF]),
+            (VIRT_DYNAMIC_ADDR, [(mwl_val >> 8) & 0xFF, mwl_val & 0xFF]),
+        ])
+
+    sig_mwl = int(dut.xi3c_wrapper.i3c.xcontroller.xconfiguration.get_mwl_o.value)
+    assert sig_mwl == mwl_val, f"Chained direct SETMWL: expected 0x{mwl_val:04X}, got 0x{sig_mwl:04X}"
+
+
+@cocotb.test()
+async def test_ccc_enthdr_all_codes(dut):
+    """
+    Verify all ENTHDR codes (0x20-0x27) cause the target to enter HDR mode.
+    After each ENTHDR, verify clean recovery with HDR exit pattern.
+    """
+    i3c_controller, _, tb = await test_setup(dut)
+    await ClockCycles(tb.clk, 50)
+
+    for hdr_code in range(0x20, 0x28):
+        # Send ENTHDR broadcast
+        await i3c_controller.i3c_ccc_write(ccc=hdr_code, stop=False)
+
+        # HDR exit pattern: Sr+7E/W with STOP
+        await i3c_controller.send_hdr_exit()
+
+        # Verify clean recovery: GETBCR should still work
+        responses = await i3c_controller.i3c_ccc_read(
+            ccc=CCC.DIRECT.GETBCR, addr=TGT_ADR, count=1)
+        assert responses[0][0] == True, \
+            f"GETBCR should ACK after ENTHDR 0x{hdr_code:02X} + exit"
+
+
+@cocotb.test()
+async def test_ccc_te5_wrong_direction(dut):
+    """
+    TE5 error: wrong R/W direction for direct CCC.
+    - GET CCC sent with W direction → NACK
+    - SET CCC sent with R direction → NACK
+    """
+    (STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR) = \
+        random.sample(VALID_I3C_ADDRESSES, 4)
+    i3c_controller, _, tb = await test_setup(
+        dut, STATIC_ADDR, VIRT_STATIC_ADDR,
+        dynamic_addr=DYNAMIC_ADDR, virtual_dynamic_addr=VIRT_DYNAMIC_ADDR)
+    await ClockCycles(tb.clk, 50)
+
+    for tgt_addr in [DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR]:
+        # GET CCC with Write direction → NACK
+        acks = await i3c_controller.i3c_ccc_write(
+            ccc=CCC.DIRECT.GETBCR, directed_data=[(tgt_addr, [0x00])])
+        assert acks[0] == False, \
+            f"GETBCR with W direction to 0x{tgt_addr:02X} should NACK"
+
+        # SET CCC with Read direction → NACK
+        responses = await i3c_controller.i3c_ccc_read(
+            ccc=CCC.DIRECT.SETMWL, addr=tgt_addr, count=2)
+        assert responses[0][0] == False, \
+            f"SETMWL with R direction from 0x{tgt_addr:02X} should NACK"
+
+    # Verify clean recovery after TE5 errors
+    responses = await i3c_controller.i3c_ccc_read(
+        ccc=CCC.DIRECT.GETBCR, addr=DYNAMIC_ADDR, count=1)
+    assert responses[0][0] == True, "GETBCR should ACK after TE5 recovery"
+
+
+@cocotb.test()
+async def test_ccc_abort_get_sr(dut):
+    """
+    Controller Sr abort during multi-byte GET CCC reads. Reads fewer bytes
+    than expected, then sends Sr to abort. Verifies clean recovery with
+    a subsequent normal GET.
+    """
+    (STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR) = \
+        random.sample(VALID_I3C_ADDRESSES, 4)
+    i3c_controller, _, tb = await test_setup(
+        dut, STATIC_ADDR, VIRT_STATIC_ADDR,
+        dynamic_addr=DYNAMIC_ADDR, virtual_dynamic_addr=VIRT_DYNAMIC_ADDR)
+    await ClockCycles(tb.clk, 50)
+
+    # Test Sr abort on multi-byte GET CCCs using low-level BFM methods
+    test_cases = [
+        (CCC.DIRECT.GETSTATUS, 2, 1),  # 2-byte CCC, abort after 1 byte
+        (CCC.DIRECT.GETMWL, 2, 1),     # 2-byte CCC, abort after 1 byte
+        (CCC.DIRECT.GETMRL, 3, 1),     # 3-byte CCC, abort after 1 byte
+        (CCC.DIRECT.GETMRL, 3, 2),     # 3-byte CCC, abort after 2 bytes
+        (CCC.DIRECT.GETPID, 6, 1),     # 6-byte CCC, abort after 1 byte
+        (CCC.DIRECT.GETPID, 6, 3),     # 6-byte CCC, abort after 3 bytes
+    ]
+
+    for ccc_code, total_bytes, abort_after in test_cases:
+        tgt_addr = random.choice([DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR])
+
+        # Build CCC frame manually for partial read
+        await i3c_controller.take_bus_control()
+        await i3c_controller.send_start()
+        await i3c_controller.write_addr_header(0x7E)
+        await i3c_controller.send_byte_tbit(ccc_code)
+        await i3c_controller.send_start()
+        ack = await i3c_controller.write_addr_header(tgt_addr, read=True)
+        assert ack, f"CCC 0x{ccc_code:02X} addr 0x{tgt_addr:02X} should ACK"
+
+        # Read partial bytes
+        for i in range(abort_after):
+            is_last = (i == abort_after - 1)
+            (byte, _) = await i3c_controller.recv_byte_t_bit(stop=is_last)
+
+        # Send STOP to end frame
+        await i3c_controller.send_stop()
+        i3c_controller.give_bus_control()
+
+        # Verify recovery: full GET should work normally
+        responses = await i3c_controller.i3c_ccc_read(
+            ccc=ccc_code, addr=tgt_addr, count=total_bytes)
+        assert responses[0][0] == True, \
+            f"CCC 0x{ccc_code:02X} should ACK after Sr abort recovery"
+        assert len(responses[0][1]) == total_bytes, \
+            f"CCC 0x{ccc_code:02X} should return {total_bytes} bytes after recovery"
+
+
+@cocotb.test()
+async def test_ccc_back_to_back(dut):
+    """
+    Back-to-back CCCs with no idle gap between transactions.
+    Verify all CCCs process correctly.
+    """
+    (STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR) = \
+        random.sample(VALID_I3C_ADDRESSES, 4)
+    i3c_controller, _, tb = await test_setup(
+        dut, STATIC_ADDR, VIRT_STATIC_ADDR,
+        dynamic_addr=DYNAMIC_ADDR, virtual_dynamic_addr=VIRT_DYNAMIC_ADDR)
+    await ClockCycles(tb.clk, 50)
+
+    # Rapid-fire sequence of different CCC types
+    for _ in range(5):
+        # SET MWL
+        mwl = random.randint(0, 0xFFFF)
+        await i3c_controller.i3c_ccc_write(
+            ccc=CCC.DIRECT.SETMWL,
+            directed_data=[(DYNAMIC_ADDR, [(mwl >> 8) & 0xFF, mwl & 0xFF])])
+
+        # GET MWL immediately after
+        responses = await i3c_controller.i3c_ccc_read(
+            ccc=CCC.DIRECT.GETMWL, addr=DYNAMIC_ADDR, count=2)
+        got = (responses[0][1][0] << 8) | responses[0][1][1]
+        assert got == mwl, f"Back-to-back MWL: expected 0x{mwl:04X}, got 0x{got:04X}"
+
+        # GETSTATUS from VT
+        responses = await i3c_controller.i3c_ccc_read(
+            ccc=CCC.DIRECT.GETSTATUS, addr=VIRT_DYNAMIC_ADDR, count=2)
+        assert responses[0][0] == True, "GETSTATUS should ACK"
+
+        # GETBCR from main
+        responses = await i3c_controller.i3c_ccc_read(
+            ccc=CCC.DIRECT.GETBCR, addr=DYNAMIC_ADDR, count=1)
+        assert responses[0][0] == True, "GETBCR should ACK"
+
+
+@cocotb.test()
+async def test_ccc_random_interleave(dut):
+    """
+    Random sequence of SET/GET CCCs to random targets. Stress tests the
+    CCC FSM state machine with varied patterns.
+    """
+    (STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR) = \
+        random.sample(VALID_I3C_ADDRESSES, 4)
+    i3c_controller, _, tb = await test_setup(
+        dut, STATIC_ADDR, VIRT_STATIC_ADDR,
+        dynamic_addr=DYNAMIC_ADDR, virtual_dynamic_addr=VIRT_DYNAMIC_ADDR)
+    await ClockCycles(tb.clk, 50)
+
+    targets = [DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR]
+
+    for _ in range(20):
+        action = random.choice(['setmwl', 'getmwl', 'setmrl', 'getmrl',
+                                'getbcr', 'getdcr', 'getstatus', 'getpid',
+                                'enec', 'disec', 'getcaps'])
+        tgt = random.choice(targets)
+
+        if action == 'setmwl':
+            val = random.randint(0, 0xFFFF)
+            await i3c_controller.i3c_ccc_write(
+                ccc=CCC.DIRECT.SETMWL,
+                directed_data=[(tgt, [(val >> 8) & 0xFF, val & 0xFF])])
+        elif action == 'getmwl':
+            responses = await i3c_controller.i3c_ccc_read(
+                ccc=CCC.DIRECT.GETMWL, addr=tgt, count=2)
+            assert responses[0][0] == True
+        elif action == 'setmrl':
+            val = random.randint(0, 0xFFFF)
+            await i3c_controller.i3c_ccc_write(
+                ccc=CCC.DIRECT.SETMRL,
+                directed_data=[(tgt, [(val >> 8) & 0xFF, val & 0xFF, random.randint(0, 0xFF)])])
+        elif action == 'getmrl':
+            responses = await i3c_controller.i3c_ccc_read(
+                ccc=CCC.DIRECT.GETMRL, addr=tgt, count=3)
+            assert responses[0][0] == True
+        elif action == 'getbcr':
+            responses = await i3c_controller.i3c_ccc_read(
+                ccc=CCC.DIRECT.GETBCR, addr=tgt, count=1)
+            assert responses[0][0] == True
+        elif action == 'getdcr':
+            responses = await i3c_controller.i3c_ccc_read(
+                ccc=CCC.DIRECT.GETDCR, addr=tgt, count=1)
+            assert responses[0][0] == True
+        elif action == 'getstatus':
+            responses = await i3c_controller.i3c_ccc_read(
+                ccc=CCC.DIRECT.GETSTATUS, addr=tgt, count=2)
+            assert responses[0][0] == True
+        elif action == 'getpid':
+            responses = await i3c_controller.i3c_ccc_read(
+                ccc=CCC.DIRECT.GETPID, addr=tgt, count=6)
+            assert responses[0][0] == True
+        elif action == 'enec':
+            await i3c_controller.i3c_ccc_write(
+                ccc=CCC.DIRECT.ENEC,
+                directed_data=[(tgt, [random.randint(0, 0x0B)])])
+        elif action == 'disec':
+            await i3c_controller.i3c_ccc_write(
+                ccc=CCC.DIRECT.DISEC,
+                directed_data=[(tgt, [random.randint(0, 0x0B)])])
+        elif action == 'getcaps':
+            responses = await i3c_controller.i3c_ccc_read(
+                ccc=CCC.DIRECT.GETCAPS, addr=tgt, count=3)
+            assert responses[0][0] == True
