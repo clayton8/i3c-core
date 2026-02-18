@@ -2223,10 +2223,13 @@ async def test_ccc_entdaa_te3_te4(dut):
     Verify TE3 and TE4 error handling during ENTDAA.
 
     TE3: Parity error on assigned address → target NACKs, retries on next Sr+7E/R.
-         NOTE: Known RTL bug (ccc_entdaa.sv:166) — parity_ok bypassed when
-         te3_err_det_en_i=1. This test documents expected vs actual behavior.
-
     TE4: Invalid reserved byte (not 7E/R) → target NACKs, waits for STOP.
+
+    DESIGN BUG (ccc_entdaa.sv:166):
+      parity_ok = (~^bus_rx_rsp_i.data[7:1] == bus_rx_rsp_i.data[0]) || te3_err_det_en_i;
+      When te3_err_det_en_i=1 (enabled), parity_ok is ALWAYS True → TE3 never fires.
+      Should be: || !te3_err_det_en_i  (per the TE4 pattern at line 229).
+      RTL fix: ccc_entdaa.sv:166: change `|| te3_err_det_en_i` to `|| !te3_err_det_en_i`
     """
     log = logging.getLogger("test_ccc_entdaa_te3_te4")
 
@@ -2267,13 +2270,15 @@ async def test_ccc_entdaa_te3_te4(dut):
     assert te4_cnt >= 1, f"TE4 count should be >=1, got {te4_cnt}"
 
     # ---- TE3: Bad parity on address byte during ENTDAA ----
-    # NOTE: Known RTL bug at ccc_entdaa.sv:166 — when te3_err_det_en_i=1 (enabled),
-    # parity_ok is always True due to `|| te3_err_det_en_i`. This means TE3 errors
-    # are NEVER detected when detection is enabled. The test below documents this:
-    # - With the bug: target ACKs despite bad parity (parity check bypassed)
-    # - Correct behavior: target should NACK and retry
-    log.info("Testing TE3: bad parity on ENTDAA address (known RTL bug — parity bypassed)")
+    # Per I3C spec §5.1.10.1.4: if parity is wrong on the assigned address,
+    # the target shall NACK and wait for the next Sr+7E/R to retry.
+    log.info("Testing TE3: bad parity on ENTDAA address")
     te3_stat_field = tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.TE3_ERR_STAT
+    te3_en_field = tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_ENABLE.TE3_ERR_EN
+    te3_cnt_addr = tb.reg_map.I3C_EC.TTI.TARGET_ERR_CNT_TE3.base_addr
+    te3_cnt_field = tb.reg_map.I3C_EC.TTI.TARGET_ERR_CNT_TE3.CNT
+
+    await tb.write_csr_field(err_en_addr, te3_en_field, 1)
     await tb.write_csr_field(err_intr_addr, te3_stat_field, 1)
     await ClockCycles(tb.clk, 5)
 
@@ -2282,13 +2287,19 @@ async def test_ccc_entdaa_te3_te4(dut):
         inject_te3_parity=True)
     await ClockCycles(tb.clk, 30)
 
-    # Due to RTL bug: parity check is bypassed, target will ACK.
-    # When the bug is fixed, this should be updated to expect NACK + TE3 error.
-    if results[0]["ack"]:
-        log.warning("TE3 parity error NOT detected — confirms known RTL bug "
-                     "(ccc_entdaa.sv:166: parity_ok bypassed when te3_err_det_en_i=1)")
-    else:
-        log.info("TE3 parity error correctly detected — RTL bug may have been fixed")
+    # Correct spec behavior: target must NACK the address with bad parity
+    assert results[0]["ack"] == False, (
+        f"TE3: Target should NACK address with bad parity, but ACKed. "
+        f"DESIGN BUG: ccc_entdaa.sv:166 — parity_ok bypass polarity is inverted "
+        f"(`|| te3_err_det_en_i` should be `|| !te3_err_det_en_i`). "
+        f"Result: {results[0]}")
+
+    # TE3 error status and counter should be set
+    te3_stat = await tb.read_csr_field(err_intr_addr, te3_stat_field)
+    assert te3_stat == 1, f"TE3_ERR_STAT should be 1 after parity error, got {te3_stat}"
+
+    te3_cnt = await tb.read_csr_field(te3_cnt_addr, te3_cnt_field)
+    assert te3_cnt >= 1, f"TE3 count should be >=1, got {te3_cnt}"
 
 
 @cocotb.test()
