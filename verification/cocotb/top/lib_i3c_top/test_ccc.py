@@ -2070,6 +2070,9 @@ async def test_ccc_te2_parity(dut):
     await tb.write_csr_field(err_intr_addr, te2_stat_field, 1)
     await ClockCycles(tb.clk, 5)
 
+    # Tell the TE error monitor that TE2 errors are expected in this test
+    tb.te_error_monitor.expect_error(2)
+
     # ---- Test 1: Bad T-bit on RSTACT defining byte ----
     # RSTACT (0x9A) has a defining byte. Corrupt the defining byte T-bit.
     log.info("Sending RSTACT with bad defining byte T-bit parity (TE2)")
@@ -2388,3 +2391,296 @@ async def test_ccc_entdaa_arb_lost(dut):
     responses = await i3c_controller.i3c_ccc_read(
         ccc=CCC.DIRECT.GETBCR, addr=DYNAMIC_ADDR, count=1)
     assert responses[0][0] == True, "Main target should respond at assigned DA"
+
+
+# =============================================================================
+# GETSTATUS Sr Abort: Protocol Error cleared prematurely
+# BLOCKED BY DESIGN BUG: see verification/bugs/getstatus_sr_abort.md
+# =============================================================================
+@cocotb.test()
+async def test_ccc_getstatus_sr_abort_clears_protocol_err(dut):
+    """
+    BLOCKED BY DESIGN BUG: see verification/bugs/getstatus_sr_abort.md
+
+    Per spec (§5.1.9.2.1): A Target shall only clear its Protocol Error status
+    after a successful GETSTATUS where the Controller reads ALL bytes. If the
+    Controller aborts GETSTATUS after byte 0, the error must NOT be cleared.
+
+    RTL bug (ccc.sv:1153): set_tx_data_complete fires on Sr abort in TxDataTbit,
+    setting tx_data_complete even though not all bytes were sent. If STOP follows
+    before TxTargetAddrAck clears it, get_status_done_o fires (ccc.sv:1271-1272),
+    and controller_standby.sv:286 clears err_o prematurely.
+    """
+    log = logging.getLogger("test_ccc_getstatus_sr_abort")
+
+    (STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR) = \
+        random.sample(VALID_I3C_ADDRESSES, 4)
+    i3c_controller, _, tb = await test_setup(
+        dut, STATIC_ADDR, VIRT_STATIC_ADDR,
+        dynamic_addr=DYNAMIC_ADDR, virtual_dynamic_addr=VIRT_DYNAMIC_ADDR)
+    await ClockCycles(tb.clk, 50)
+
+    err_o_sig = dut.xi3c_wrapper.i3c.xcontroller.xcontroller_standby.err_o
+
+    # Step 1: Trigger a Protocol Error via TE2 (bad T-bit on CCC defining byte)
+    log.info("Step 1: Triggering TE2 error to set Protocol Error")
+    tb.te_error_monitor.expect_error(2)
+    await i3c_controller.send_te2_error(ccc=0x9A, defining_byte=0x01,
+                                         corrupt_defining_byte=True)
+    await i3c_controller.send_stop()
+    i3c_controller.give_bus_control()
+    await ClockCycles(tb.clk, 20)
+
+    # Verify err_o is set
+    assert int(err_o_sig.value) == 1, \
+        f"err_o should be 1 after TE2 error, got {int(err_o_sig.value)}"
+    log.info("Step 1 OK: err_o = 1 (Protocol Error set)")
+
+    # Step 2: Send GETSTATUS, abort after byte 0 with Sr + STOP
+    log.info("Step 2: Sending GETSTATUS with Sr abort after byte 0")
+    await i3c_controller.take_bus_control()
+    await i3c_controller.send_start()
+    await i3c_controller.write_addr_header(0x7E)
+    await i3c_controller.send_byte_tbit(CCC.DIRECT.GETSTATUS)
+    await i3c_controller.send_start()
+    ack = await i3c_controller.write_addr_header(DYNAMIC_ADDR, read=True)
+    assert ack, "Target should ACK GETSTATUS"
+
+    # Read 1 byte (byte 0 = status MSB). stop=True triggers Sr abort during T-bit.
+    (byte0, _) = await i3c_controller.recv_byte_t_bit(stop=True)
+    log.info(f"Step 2: Read GETSTATUS byte 0 = 0x{byte0:02X} (Controller aborts here)")
+
+    # STOP to end the frame (before any new address completes)
+    await i3c_controller.send_stop()
+    i3c_controller.give_bus_control()
+    await ClockCycles(tb.clk, 50)
+
+    # Step 3: Verify err_o is NOT cleared
+    # Per spec, the Controller never received byte 1 (which contains the Protocol
+    # Error bit), so the Target must NOT clear its error status.
+    err_after = int(err_o_sig.value)
+    assert err_after == 1, (
+        f"err_o should still be 1 after aborted GETSTATUS (Controller never read byte 1), "
+        f"got err_o={err_after}")
+    log.info("Step 3 OK: err_o still 1 after aborted GETSTATUS")
+
+    # Step 4: Verify a full GETSTATUS reads correctly and clears the error
+    responses = await i3c_controller.i3c_ccc_read(
+        ccc=CCC.DIRECT.GETSTATUS, addr=DYNAMIC_ADDR, count=2)
+    assert responses[0][0] == True, "Target should ACK full GETSTATUS"
+    status = int.from_bytes(responses[0][1], byteorder="big", signed=False)
+    log.info(f"Step 4: Full GETSTATUS returned 0x{status:04X}")
+
+    await ClockCycles(tb.clk, 20)
+
+    # After a FULL GETSTATUS, err_o should be cleared
+    err_final = int(err_o_sig.value)
+    assert err_final == 0, (
+        f"err_o should be 0 after full GETSTATUS clears it, got err_o={err_final}")
+    log.info("Step 4 OK: err_o = 0 after full GETSTATUS")
+
+
+# =============================================================================
+# SETMWL Sr Abort: CCC FSM misinterprets post-Sr data
+# BLOCKED BY DESIGN BUG: see verification/bugs/setmwl_sr_abort.md
+# =============================================================================
+@cocotb.test()
+async def test_ccc_setmwl_sr_abort_during_data(dut):
+    """
+    BLOCKED BY DESIGN BUG: see verification/bugs/setmwl_sr_abort.md
+
+    Per spec (§5.1.9.2.1): If a Controller aborts a SET CCC mid-data, the Target
+    shall handle the termination gracefully. Partial data should NOT corrupt CSRs.
+
+    RTL bug (ccc.sv:1096-1101): The CCC FSM has no bus_rstart_det_i handling in
+    RxData or RxDataTbit states. When Sr fires during RxData, the request drops
+    for 1 cycle then re-asserts, causing the bus_rx_flow to read post-Sr address
+    bytes as CCC data. This can write garbled values to MWL/MRL CSRs.
+    """
+    log = logging.getLogger("test_ccc_setmwl_sr_abort")
+
+    (STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR) = \
+        random.sample(VALID_I3C_ADDRESSES, 4)
+    i3c_controller, _, tb = await test_setup(
+        dut, STATIC_ADDR, VIRT_STATIC_ADDR,
+        dynamic_addr=DYNAMIC_ADDR, virtual_dynamic_addr=VIRT_DYNAMIC_ADDR)
+    await ClockCycles(tb.clk, 50)
+
+    mwl_sig = dut.xi3c_wrapper.i3c.xcontroller.xconfiguration.get_mwl_o
+
+    # Step 1: Set MWL to a known value via normal SETMWL
+    known_mwl = 0x0100
+    log.info(f"Step 1: Setting MWL to known value 0x{known_mwl:04X}")
+    await i3c_controller.i3c_ccc_write(
+        ccc=CCC.DIRECT.SETMWL,
+        directed_data=[(DYNAMIC_ADDR, [(known_mwl >> 8) & 0xFF, known_mwl & 0xFF])])
+    await ClockCycles(tb.clk, 20)
+
+    mwl_val = int(mwl_sig.value)
+    assert mwl_val == known_mwl, \
+        f"MWL should be 0x{known_mwl:04X} after setup, got 0x{mwl_val:04X}"
+    log.info(f"Step 1 OK: MWL = 0x{mwl_val:04X}")
+
+    # Step 2: Send SETMWL, deliver byte 0, abort with Sr during byte 1
+    # SETMWL is 2-byte direct SET: byte 0 = MSB, byte 1 = LSB
+    # We send byte 0 then abort with Sr before byte 1 completes.
+    garbled_msb = 0xAA
+    log.info(f"Step 2: Sending partial SETMWL (byte 0 = 0x{garbled_msb:02X}), then Sr abort")
+
+    await i3c_controller.take_bus_control()
+    await i3c_controller.send_start()
+    await i3c_controller.write_addr_header(0x7E)
+    await i3c_controller.send_byte_tbit(CCC.DIRECT.SETMWL)
+    await i3c_controller.send_start()
+    ack = await i3c_controller.write_addr_header(DYNAMIC_ADDR)
+    assert ack, "Target should ACK directed SETMWL"
+
+    # Send byte 0 of SETMWL data
+    await i3c_controller.send_byte_tbit(garbled_msb)
+
+    # Send 4 bits of byte 1, then abort with Sr
+    for i in range(4):
+        await i3c_controller.send_bit(bool(0x55 & (1 << (7 - i))))
+
+    # Sr (abort) + STOP
+    await i3c_controller.send_start()
+    await i3c_controller.send_stop()
+    i3c_controller.give_bus_control()
+    await ClockCycles(tb.clk, 50)
+
+    # Step 3: Verify MWL was NOT corrupted
+    # The SETMWL was incomplete (only byte 0 received, byte 1 aborted).
+    # Per spec, set_mwl should NOT fire without both bytes.
+    mwl_after = int(mwl_sig.value)
+    assert mwl_after == known_mwl, (
+        f"MWL should still be 0x{known_mwl:04X} after aborted SETMWL, "
+        f"got 0x{mwl_after:04X}")
+    log.info(f"Step 3 OK: MWL unchanged at 0x{mwl_after:04X}")
+
+    # Step 4: Verify recovery — a normal SETMWL still works
+    new_mwl = 0x0200
+    log.info(f"Step 4: Recovery SETMWL to 0x{new_mwl:04X}")
+    await i3c_controller.i3c_ccc_write(
+        ccc=CCC.DIRECT.SETMWL,
+        directed_data=[(DYNAMIC_ADDR, [(new_mwl >> 8) & 0xFF, new_mwl & 0xFF])])
+    await ClockCycles(tb.clk, 20)
+
+    mwl_recovery = int(mwl_sig.value)
+    assert mwl_recovery == new_mwl, (
+        f"Recovery SETMWL: expected 0x{new_mwl:04X}, got 0x{mwl_recovery:04X}")
+    log.info(f"Step 4 OK: MWL = 0x{mwl_recovery:04X} after recovery")
+
+    # Step 5: Verify target still responds to GET CCCs (CCC FSM not stuck)
+    responses = await i3c_controller.i3c_ccc_read(
+        ccc=CCC.DIRECT.GETBCR, addr=DYNAMIC_ADDR, count=1)
+    assert responses[0][0] == True, "Target should ACK GETBCR after SETMWL abort recovery"
+    log.info("Step 5 OK: Target responds to GETBCR after recovery")
+
+
+# =============================================================================
+# GETSTATUS Abort then Immediate CCC Chain (no STOP between)
+# =============================================================================
+@cocotb.test()
+async def test_ccc_getstatus_abort_then_chain_setmwl(dut):
+    """
+    Verifies that aborting GETSTATUS mid-read and immediately chaining into
+    another CCC (SETMWL) in the same bus frame does NOT clear err_o.
+
+    Per spec (§5.1.9.2.1): The Protocol Error status shall only be cleared
+    after a SUCCESSFUL (complete) GETSTATUS read. An aborted GETSTATUS
+    followed by a different CCC must NOT clear the error.
+
+    Bus sequence (no STOP between abort and new CCC):
+      S → 0x7E/W → GETSTATUS → Sr → ADDR/R → byte0 → Sr(abort)
+        → 0x7E/W → SETMWL → Sr → ADDR/W → byte0 → byte1 → STOP
+
+    RTL path exercised:
+      ccc.sv TxDataTbit → Sr → RxTargetAddr → TxTargetAddrAck (0x7E/W)
+        → NextCCC → WaitCCC → new SETMWL processing → DoneCCC
+      get_status_done_o must NOT fire because command_code changed to SETMWL.
+    """
+    log = logging.getLogger("test_ccc_getstatus_abort_chain")
+
+    (STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR) = \
+        random.sample(VALID_I3C_ADDRESSES, 4)
+    i3c_controller, _, tb = await test_setup(
+        dut, STATIC_ADDR, VIRT_STATIC_ADDR,
+        dynamic_addr=DYNAMIC_ADDR, virtual_dynamic_addr=VIRT_DYNAMIC_ADDR)
+    await ClockCycles(tb.clk, 50)
+
+    err_o_sig = dut.xi3c_wrapper.i3c.xcontroller.xcontroller_standby.err_o
+    mwl_sig = dut.xi3c_wrapper.i3c.xcontroller.xconfiguration.get_mwl_o
+
+    # Step 1: Trigger a Protocol Error via TE2
+    log.info("Step 1: Triggering TE2 error to set Protocol Error")
+    tb.te_error_monitor.expect_error(2)
+    await i3c_controller.send_te2_error(ccc=0x9A, defining_byte=0x01,
+                                         corrupt_defining_byte=True)
+    await i3c_controller.send_stop()
+    i3c_controller.give_bus_control()
+    await ClockCycles(tb.clk, 20)
+
+    assert int(err_o_sig.value) == 1, \
+        f"err_o should be 1 after TE2 error, got {int(err_o_sig.value)}"
+    log.info("Step 1 OK: err_o = 1")
+
+    # Capture MWL baseline
+    mwl_before = int(mwl_sig.value)
+    log.info(f"MWL baseline: 0x{mwl_before:04X}")
+
+    # Step 2: Start GETSTATUS, read byte 0, abort with Sr
+    log.info("Step 2: GETSTATUS byte 0 then Sr abort")
+    await i3c_controller.take_bus_control()
+    await i3c_controller.send_start()
+    await i3c_controller.write_addr_header(0x7E)
+    await i3c_controller.send_byte_tbit(CCC.DIRECT.GETSTATUS)
+    await i3c_controller.send_start()
+    ack = await i3c_controller.write_addr_header(DYNAMIC_ADDR, read=True)
+    assert ack, "Target should ACK GETSTATUS"
+
+    # Read byte 0; stop=True sends Sr during T-bit (Controller abort)
+    (byte0, _) = await i3c_controller.recv_byte_t_bit(stop=True)
+    log.info(f"Step 2: GETSTATUS byte 0 = 0x{byte0:02X}, Sr abort sent")
+
+    # Step 3: Chain directly into SETMWL (no STOP)
+    # After recv_byte_t_bit(stop=True), Sr was already sent by tbit_eod.
+    # Bus state: SCL=1, SDA=0. Directly send 0x7E/W to start new CCC.
+    new_mwl = 0x0180
+    log.info(f"Step 3: Chaining SETMWL (MWL=0x{new_mwl:04X}) in same frame")
+    ack = await i3c_controller.write_addr_header(0x7E)
+    assert ack, "Target should ACK 0x7E/W for new CCC"
+    await i3c_controller.send_byte_tbit(CCC.DIRECT.SETMWL)
+    await i3c_controller.send_start()
+    ack = await i3c_controller.write_addr_header(DYNAMIC_ADDR)
+    assert ack, "Target should ACK directed SETMWL"
+    await i3c_controller.send_byte_tbit((new_mwl >> 8) & 0xFF)
+    await i3c_controller.send_byte_tbit(new_mwl & 0xFF)
+    await i3c_controller.send_stop()
+    i3c_controller.give_bus_control()
+    await ClockCycles(tb.clk, 50)
+
+    # Step 4: Verify err_o is still 1 (GETSTATUS was incomplete)
+    err_after = int(err_o_sig.value)
+    assert err_after == 1, (
+        f"err_o should still be 1 after aborted GETSTATUS + chained SETMWL, "
+        f"got err_o={err_after}")
+    log.info("Step 4 OK: err_o still 1 (GETSTATUS was not completed)")
+
+    # Step 5: Verify SETMWL completed successfully
+    mwl_after = int(mwl_sig.value)
+    assert mwl_after == new_mwl, (
+        f"MWL should be 0x{new_mwl:04X} after chained SETMWL, got 0x{mwl_after:04X}")
+    log.info(f"Step 5 OK: MWL = 0x{mwl_after:04X} (SETMWL completed)")
+
+    # Step 6: Full GETSTATUS clears err_o
+    responses = await i3c_controller.i3c_ccc_read(
+        ccc=CCC.DIRECT.GETSTATUS, addr=DYNAMIC_ADDR, count=2)
+    assert responses[0][0] == True, "Target should ACK full GETSTATUS"
+    status = int.from_bytes(responses[0][1], byteorder="big", signed=False)
+    log.info(f"Step 6: Full GETSTATUS returned 0x{status:04X}")
+
+    await ClockCycles(tb.clk, 20)
+    err_final = int(err_o_sig.value)
+    assert err_final == 0, (
+        f"err_o should be 0 after full GETSTATUS, got err_o={err_final}")
+    log.info("Step 6 OK: err_o = 0 (recovery complete)")
