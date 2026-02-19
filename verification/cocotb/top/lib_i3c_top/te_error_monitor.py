@@ -27,8 +27,11 @@ class TeErrorEventMonitor:
     On any error pulse:
       - Logs the error type, simulation time, and FSM state
       - Increments per-type error counter
+      - If the error type is NOT in the expected set, raises an AssertionError
 
-    Tests can query self.error_counts to verify expected error tallies.
+    Tests that intentionally inject errors must call expect_error(n) first.
+    Tests that do not inject errors leave the expected set empty, so any
+    spurious TE error pulse will immediately fail the test.
     """
 
     _I3C = "xi3c_wrapper.i3c"
@@ -42,6 +45,8 @@ class TeErrorEventMonitor:
         self.error_counts = {n: 0 for n in range(7)}  # 0-5 = TE0-TE5, 6 = FRAMING
         self._running = False
         self._prev_te_vals = [0] * 7  # Track previous values for edge detection
+        self._expected_types = set()  # Error types the test expects to see
+        self._unexpected_errors = []  # Accumulated unexpected errors for check()
 
         i3c = getattr(dut, "xi3c_wrapper").i3c
         self._te_signals = [
@@ -67,6 +72,33 @@ class TeErrorEventMonitor:
         else:
             raise AttributeError("TeErrorEventMonitor: no clock signal found (aclk/hclk)")
 
+    def expect_error(self, *error_types):
+        """Declare which TE error types this test expects to see.
+
+        Call before injecting errors. E.g.: monitor.expect_error(0, 2)
+        to allow TE0 and TE2.  Any error type NOT in this set will cause
+        an immediate test failure.
+        """
+        for n in error_types:
+            self._expected_types.add(n)
+
+    def clear_expectations(self):
+        """Clear all expected error types (revert to fail-on-any-error)."""
+        self._expected_types.clear()
+
+    def check(self):
+        """Call at end of test. Raises if any unexpected errors were recorded.
+
+        Because cocotb may silently swallow exceptions from start_soon tasks,
+        this provides a reliable second line of defence.
+        """
+        if self._unexpected_errors:
+            msgs = "\n  ".join(self._unexpected_errors)
+            raise AssertionError(
+                f"TeErrorEventMonitor: {len(self._unexpected_errors)} "
+                f"unexpected error(s):\n  {msgs}"
+            )
+
     async def run(self):
         self._running = True
         while True:
@@ -76,7 +108,7 @@ class TeErrorEventMonitor:
                     val = int(sig.value)
                 except ValueError:
                     val = 0
-                # Only count rising edges (0→1 transitions)
+                # Only count rising edges (0->1 transitions)
                 if val and not self._prev_te_vals[n]:
                     fsm_state = int(self._state_d.value)
                     time_ns = cocotb.utils.get_sim_time('ns')
@@ -86,6 +118,17 @@ class TeErrorEventMonitor:
                         f"@ {time_ns}ns, FSM state={fsm_state}, "
                         f"total {self.TE_NAMES[n]} count={self.error_counts[n]}"
                     )
+                    # Fail if this error type was not expected
+                    if n not in self._expected_types:
+                        msg = (
+                            f"TeErrorEventMonitor: UNEXPECTED {self.TE_NAMES[n]} "
+                            f"error @ {time_ns}ns (FSM state={fsm_state}). "
+                            f"Test did not call expect_error({n}). "
+                            f"Expected types: {sorted(self._expected_types) or 'none'}"
+                        )
+                        self.dut._log.error(msg)
+                        self._unexpected_errors.append(msg)
+                        raise AssertionError(msg)
                 self._prev_te_vals[n] = val
 
     def reset_counts(self):

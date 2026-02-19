@@ -734,6 +734,7 @@ async def test_i3c_target_pwrite_err_detection(dut):
     i3c_controller, _, tb = await test_setup(dut,
         static_addr=STATIC_ADDR, virtual_static_addr=VIRT_STATIC_ADDR,
         dynamic_addr=DYNAMIC_ADDR, virtual_dynamic_addr=VIRT_DYNAMIC_ADDR)
+    tb.te_error_monitor.expect_error(2)
 
     # Enable TE2 interrupt and clear counters for register verification
     te2_en_field = tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_ENABLE.TE2_ERR_EN

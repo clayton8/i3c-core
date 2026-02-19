@@ -107,6 +107,11 @@ module i3c_test_wrapper #(
     output logic bus_sda,
     output logic bus_scl,
 
+    // I3C Core DUT SDA signals (exposed for bus monitor)
+    output logic i3c_sda_o,
+    output logic i3c_sda_oe,
+    output logic i3c_sel_od_pp,
+
     output logic peripheral_reset_o,
     input  logic peripheral_reset_done_i,
     output logic escalated_reset_o
@@ -154,12 +159,9 @@ assign sel_od_pp[1] = 1'b0;             // Target BFM always OD
 // Device 2: I3C Core DUT (has proper OE and OD/PP mode signals)
 // sda_data[2], scl_data[2], sda_oe[2], sel_od_pp[2] connected below from i3c_wrapper
 
-// I3C Core output signals
-logic i3c_sda_o;
+// I3C Core output signals (i3c_sda_o, i3c_sda_oe, i3c_sel_od_pp are module ports)
 logic i3c_scl_o;
-logic i3c_sda_oe;
 logic i3c_scl_oe;
-logic i3c_sel_od_pp;
 
 assign sda_data[2]  = i3c_sda_o;
 assign scl_data[2]  = i3c_scl_o;

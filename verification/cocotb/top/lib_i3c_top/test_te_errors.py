@@ -58,7 +58,7 @@ FSM_STATE_IN_HDR_MODE = 19
 
 FSM_STATE_PATH = (
     "xi3c_wrapper.i3c.xcontroller.xcontroller_standby"
-    ".xcontroller_standby_i3c.xi3c_target_fsm.state_d"
+    ".xcontroller_standby_i3c.xi3c_target_fsm.state_q"
 )
 
 # HDR timeout (small value so tests run fast)
@@ -272,6 +272,7 @@ async def test_te0_errors(dut):
     i3c_controller, i3c_target, tb = await test_setup(
         dut, STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR,
         hdr_timeout_en=True, hdr_timeout_cycles=TEST_HDR_TIMEOUT_CYCLES)
+    tb.te_error_monitor.expect_error(0)
 
     await enable_all_te_interrupts(tb)
     await clear_all_te_status(tb)
@@ -368,6 +369,7 @@ async def test_te0_errors(dut):
     await verify_target_responsive(i3c_controller, DYNAMIC_ADDR)
 
     log.info("test_te0_errors PASSED")
+    tb.te_error_monitor.check()
 
 
 # =============================================================================
@@ -388,6 +390,7 @@ async def test_te1_errors(dut):
     i3c_controller, i3c_target, tb = await test_setup(
         dut, STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR,
         hdr_timeout_en=True, hdr_timeout_cycles=TEST_HDR_TIMEOUT_CYCLES)
+    tb.te_error_monitor.expect_error(1)
 
     await enable_all_te_interrupts(tb)
     await clear_all_te_status(tb)
@@ -479,6 +482,7 @@ async def test_te1_errors(dut):
     await verify_target_responsive(i3c_controller, DYNAMIC_ADDR)
 
     log.info("test_te1_errors PASSED")
+    tb.te_error_monitor.check()
 
 
 # =============================================================================
@@ -498,6 +502,7 @@ async def test_te2_private_write_parity(dut):
         random.sample(VALID_I3C_ADDRESSES, 4)
     i3c_controller, i3c_target, tb = await test_setup(
         dut, STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR)
+    tb.te_error_monitor.expect_error(2)
 
     await enable_all_te_interrupts(tb)
     await clear_all_te_status(tb)
@@ -623,6 +628,7 @@ async def test_te2_private_write_parity(dut):
 
     await verify_target_responsive(i3c_controller, DYNAMIC_ADDR)
     log.info("test_te2_private_write_parity PASSED")
+    tb.te_error_monitor.check()
 
 
 # =============================================================================
@@ -756,6 +762,7 @@ async def test_te_error_registers_sweep(dut):
         assert stat == 0, f"PHASE4: TE{n} STATUS should be 0 after W1C, got {stat}"
 
     log.info("test_te_error_registers_sweep PASSED")
+    tb.te_error_monitor.check()
 
 
 # =============================================================================
@@ -812,6 +819,7 @@ async def test_controller_abort_scenarios(dut):
     await verify_target_responsive(i3c_controller, DYNAMIC_ADDR)
 
     log.info("test_controller_abort_scenarios PASSED")
+    tb.te_error_monitor.check()
 
 
 # =============================================================================
@@ -832,6 +840,7 @@ async def test_te_error_sequence_mixing(dut):
     i3c_controller, i3c_target, tb = await test_setup(
         dut, STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR,
         hdr_timeout_en=True, hdr_timeout_cycles=TEST_HDR_TIMEOUT_CYCLES)
+    tb.te_error_monitor.expect_error(0, 1, 2)
 
     await enable_all_te_interrupts(tb)
     await clear_all_te_status(tb)
@@ -906,6 +915,7 @@ async def test_te_error_sequence_mixing(dut):
             f"Final TE{n} counter should be >= 1, got {cnt}"
 
     log.info("test_te_error_sequence_mixing PASSED")
+    tb.te_error_monitor.check()
 
 
 # =============================================================================
@@ -926,6 +936,7 @@ async def test_te_error_ri_isolation(dut):
     i3c_controller, i3c_target, tb = await test_setup(
         dut, STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR,
         hdr_timeout_en=True, hdr_timeout_cycles=TEST_HDR_TIMEOUT_CYCLES)
+    tb.te_error_monitor.expect_error(0, 2)
 
     await enable_all_te_interrupts(tb)
     await clear_all_te_status(tb)
@@ -994,3 +1005,89 @@ async def test_te_error_ri_isolation(dut):
 
     await verify_target_responsive(i3c_controller, DYNAMIC_ADDR)
     log.info("test_te_error_ri_isolation PASSED")
+    tb.te_error_monitor.check()
+
+
+# =============================================================================
+# Test: TE Counter Per-Event (BLOCKED BY DESIGN BUG)
+# =============================================================================
+
+@cocotb.test()
+async def test_te_counter_per_event(dut):
+    """Verify TE error counters increment exactly once per error event.
+
+    BLOCKED BY DESIGN BUG: see verification/bugs/te_counter_level_sensitive.md
+
+    The counter write-enable in tti.sv uses the raw level-sensitive error
+    signal instead of edge-detected.  A single TE0 error event holds
+    te0_err high for 2+ clock cycles, causing the counter to increment by
+    2+ instead of exactly 1.
+
+    This test asserts CORRECT spec behavior (counter == 1 after one event).
+    It MUST FAIL against the current RTL.  It will PASS once the RTL is
+    fixed to use edge detection on the counter write-enable.
+    """
+    log = logging.getLogger("test_te_counter_per_event")
+
+    (STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR) = \
+        random.sample(VALID_I3C_ADDRESSES, 4)
+    i3c_controller, i3c_target, tb = await test_setup(
+        dut, STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR,
+        hdr_timeout_en=True, hdr_timeout_cycles=TEST_HDR_TIMEOUT_CYCLES)
+    tb.te_error_monitor.expect_error(0, 1)
+
+    await enable_all_te_interrupts(tb)
+    await clear_all_te_status(tb)
+    await clear_all_te_counters(tb)
+    await ClockCycles(tb.clk, 50)
+
+    # Re-clear counters after any spurious TE during setup
+    await clear_all_te_counters(tb)
+    await clear_all_te_status(tb)
+    await ClockCycles(tb.clk, 10)
+
+    # --- TE0: Single error event, counter must be exactly 1 ---
+    log.info("=== TE0: inject one error event, expect counter == 1 ===")
+    cnt_reg = _get_reg(tb, "TARGET_ERR_CNT_TE0")
+    await tb.write_csr(cnt_reg.base_addr, int2dword(0), 4)
+    await ClockCycles(tb.clk, 5)
+
+    # Inject exactly one TE0 error (0x7E/R reserved address)
+    hdr_entries_before = tb.hdr_recovery_monitor.entry_count
+    await inject_te0_error(i3c_controller, dut, TE0_RSVD_ADDR_R)
+    assert tb.hdr_recovery_monitor.entry_count > hdr_entries_before, \
+        "TE0 error should have triggered HDR error mode entry"
+    await recover_from_hdr_error(i3c_controller, i3c_target, tb, 'hdr_exit')
+    await ClockCycles(tb.clk, 10)
+
+    te0_cnt = dword2int(await tb.read_csr(cnt_reg.base_addr, 4)) & 0xFF
+    log.info(f"  TE0 counter after single event: {te0_cnt}")
+    assert te0_cnt == 1, (
+        f"DESIGN BUG: TE0 counter should be exactly 1 after one error event, "
+        f"got {te0_cnt}. Counter write-enable is level-sensitive instead of "
+        f"edge-triggered. See verification/bugs/te_counter_level_sensitive.md"
+    )
+
+    # --- TE1: Single error event, counter must be exactly 1 ---
+    log.info("=== TE1: inject one error event, expect counter == 1 ===")
+    cnt_reg = _get_reg(tb, "TARGET_ERR_CNT_TE1")
+    await tb.write_csr(cnt_reg.base_addr, int2dword(0), 4)
+    await ClockCycles(tb.clk, 5)
+
+    ccc = random.choice(BROADCAST_CCCS)
+    await pause_cocotb_target(i3c_target)
+    await i3c_controller.send_te1_error(ccc=ccc)
+    await ClockCycles(tb.clk, 10)
+    await recover_from_hdr_error(i3c_controller, i3c_target, tb, 'hdr_exit')
+    await ClockCycles(tb.clk, 10)
+    i3c_target.monitor_enable.set()
+
+    te1_cnt = dword2int(await tb.read_csr(cnt_reg.base_addr, 4)) & 0xFF
+    log.info(f"  TE1 counter after single event: {te1_cnt}")
+    assert te1_cnt == 1, (
+        f"DESIGN BUG: TE1 counter should be exactly 1 after one error event, "
+        f"got {te1_cnt}. See verification/bugs/te_counter_level_sensitive.md"
+    )
+
+    log.info("test_te_counter_per_event PASSED")
+    tb.te_error_monitor.check()

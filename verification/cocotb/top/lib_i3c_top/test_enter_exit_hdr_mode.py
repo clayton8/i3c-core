@@ -45,7 +45,7 @@ FSM_STATE_IN_HDR_MODE = 19
 # DUT hierarchy path to FSM state register
 FSM_STATE_PATH = (
     "xi3c_wrapper.i3c.xcontroller.xcontroller_standby"
-    ".xcontroller_standby_i3c.xi3c_target_fsm.state_d"
+    ".xcontroller_standby_i3c.xi3c_target_fsm.state_q"
 )
 
 # HDR timeout test threshold (small value so tests run fast)
@@ -356,6 +356,7 @@ async def test_hdr_timeout_recovery_te0(dut):
     i3c_controller, i3c_target, tb = await test_setup(
         dut, STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR,
         hdr_timeout_en=True, hdr_timeout_cycles=TEST_HDR_TIMEOUT_CYCLES)
+    tb.te_error_monitor.expect_error(0)
 
     # Enable TE0 interrupt so STATUS bit is captured
     te0_en_field = tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_ENABLE.TE0_ERR_EN
@@ -396,6 +397,7 @@ async def test_hdr_timeout_recovery_te1(dut):
     i3c_controller, i3c_target, tb = await test_setup(
         dut, STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR,
         hdr_timeout_en=True, hdr_timeout_cycles=TEST_HDR_TIMEOUT_CYCLES)
+    tb.te_error_monitor.expect_error(1)
 
     # Enable TE1 interrupt so STATUS bit is captured
     te1_en_field = tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_ENABLE.TE1_ERR_EN
@@ -461,6 +463,7 @@ async def test_hdr_timeout_resets_on_line_low(dut):
     i3c_controller, i3c_target, tb = await test_setup(
         dut, STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR,
         hdr_timeout_en=True, hdr_timeout_cycles=TEST_HDR_TIMEOUT_CYCLES)
+    tb.te_error_monitor.expect_error(0)
 
     await trigger_te0_error(i3c_controller)
     await ClockCycles(tb.clk, 10)
@@ -497,6 +500,7 @@ async def test_hdr_timeout_disabled_by_default(dut):
     i3c_controller, i3c_target, tb = await test_setup(
         dut, STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR,
         hdr_timeout_cycles=TEST_HDR_TIMEOUT_CYCLES)
+    tb.te_error_monitor.expect_error(0)
 
     await trigger_te0_error(i3c_controller)
     await ClockCycles(tb.clk, 10)
@@ -518,6 +522,7 @@ async def test_hdr_timeout_configurable_threshold(dut):
     i3c_controller, i3c_target, tb = await test_setup(
         dut, STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR,
         hdr_timeout_en=True, hdr_timeout_cycles=SHORT_THRESHOLD)
+    tb.te_error_monitor.expect_error(0)
 
     await trigger_te0_error(i3c_controller)
     await ClockCycles(tb.clk, 10)
@@ -539,6 +544,7 @@ async def test_hdr_exit_pattern_works_alongside_timer(dut):
     i3c_controller, i3c_target, tb = await test_setup(
         dut, STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR,
         hdr_timeout_en=True, hdr_timeout_cycles=LARGE_THRESHOLD)
+    tb.te_error_monitor.expect_error(0)
 
     await trigger_te0_error(i3c_controller)
     await ClockCycles(tb.clk, 10)
