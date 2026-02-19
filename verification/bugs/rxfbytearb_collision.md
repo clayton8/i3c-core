@@ -69,24 +69,21 @@ lost), the Target shall wait for the Controller to issue the next START
 condition."
 
 ## Reproduction
-The RTL bug is confirmed by code inspection: `i3c_target_fsm.sv` RxFByteArb
-state still lacks the `!arbitration_lost_i` guard on the `bus_rx_rsp_i.done`
-path (lines ~591-600).
-
-The original reproducing test (`test_ibi_refuse_no_retry_on_rstart`) now
-**PASSES** because a testbench workaround was added: IBI is disabled via CSR
-before the private write to prevent the collision, then re-enabled after the
-write completes. This avoids triggering the bug but does NOT fix it.
-
 ```
 I3C_ROOT_DIR=$(pwd) CALIPTRA_ROOT=$(pwd)/third_party/caliptra-rtl SIM=vcs \
-  make -C verification/cocotb/top/i3c_axi MODULE=test_ibi TESTCASE=test_ibi_refuse_no_retry_on_rstart all
+  make -C verification/cocotb/top/i3c_axi MODULE=test_ibi TESTCASE=test_rxfbytearb_collision_blind_drive all
 ```
+Fails with: `DUT ACKed collision-garbled byte 0xB4 = {0x5A, W} during IBI
+arbitration loss at bit 0`.
 
-A direct reproduction requires the IBI workaround to be removed, allowing
-the DUT to re-arbitrate IBI during the controller's START + 0x7E/W phase.
+The test uses blind (non-arb-aware) byte driving to force the controller
+through all 8 bits of 0x7E/W without backing off when the DUT's IBI
+collides. This causes the DUT to lose arbitration at bit 0 (the last bit),
+where `arbitration_lost_i` and `bus_rx_rsp_i.done` fire simultaneously,
+triggering the priority bug in RxFByteArb.
 
 ## Workaround
-Testbench disables IBI in the DUT via CSR before the private write to prevent
-the collision, then re-enables after the write completes. This is applied in
-`test_ibi_refuse_no_retry_on_rstart`.
+Other tests that send private writes while an IBI is pending
+(`test_ibi_refuse_no_retry_on_rstart`) disable IBI in the DUT via CSR
+before the write to prevent the collision, then re-enable after the write
+completes.

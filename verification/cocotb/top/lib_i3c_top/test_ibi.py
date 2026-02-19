@@ -1416,3 +1416,82 @@ async def test_ibi_queued_during_hdr_fires_after_exit(dut):
     await check_ibi_status(tb, 0, "IBI success after HDR exit")
 
     await ClockCycles(tb.clk, 10)
+
+
+# =============================================================================
+# RxFByteArb collision reproduction test
+# =============================================================================
+
+@cocotb.test()
+async def test_rxfbytearb_collision_blind_drive(dut):
+    """Reproduce RxFByteArb collision: DUT processes garbled address byte
+    when arbitration_lost_i and bus_rx_rsp_i.done fire on the same cycle.
+
+    BLOCKED BY DESIGN BUG: see verification/bugs/rxfbytearb_collision.md
+
+    Uses blind (non-arb-aware) byte driving so the controller forces all 8
+    bits of 0x7E/W (0xFC) onto the bus.  The DUT simultaneously drives its
+    IBI address 0xB5 ({0x5A,1}).  Open-drain AND produces 0xB4 ({0x5A,0}).
+
+    DUT loses arbitration at bit 0 (drove 1, bus reads 0).  Because
+    bus_rx_rsp_i.done fires on the same cycle as arbitration_lost_i, the
+    RTL's RxFByteArb enters CheckFByte instead of RxFByte, processing the
+    collision byte 0xB4 as addr=0x5A + Write — matching the DUT's own
+    address and causing a phantom ACK.
+
+    Per I3C spec 5.1.6.2: on arbitration loss the Target shall discard
+    the garbled byte and wait for the next START condition.
+    """
+    log = logging.getLogger("test_rxfbytearb_collision")
+    i3c_controller, _, tb = await test_setup(dut)
+    await init_ibi(i3c_controller, tb)
+
+    # Step 1: Queue an IBI and let the controller NACK it
+    i3c_controller.enable_ibi(False)
+
+    mdb = 0xAA
+    data = [0x11, 0x22]
+    await send_ibi(tb, mdb, data)
+
+    # Wait for NACK + STOP
+    await Timer(3, "us")
+    await check_ibi_status(tb, 1, "initial NACK")
+
+    # Step 2: Wait long enough for bus-available so DUT clears ibi_inhibit
+    # and will retry IBI on the next START.
+    await Timer(5, "us")
+
+    # Step 3: Blind-drive START + 0x7E/W (0xFC) using base-class send_bit.
+    # This does NOT check for arb loss — the controller drives all 8 bits
+    # even though the DUT is simultaneously driving its IBI byte.
+    reserved_byte_w = 0xFC  # (0x7E << 1) | 0
+    log.info("Driving blind START + 0xFC (0x7E/W) — expecting collision")
+    await i3c_controller.send_start()
+
+    for i in range(8):
+        bit_val = bool(reserved_byte_w & (1 << (7 - i)))
+        await i3c_controller.send_bit(bit_val)
+
+    # Read ACK/NACK bit (open-drain)
+    nack = await i3c_controller.recv_bit_od()
+    log.info(f"ACK/NACK after blind 0xFC: {'NACK' if nack else 'ACK'}")
+
+    # Clean up: send STOP regardless
+    await i3c_controller.send_stop()
+    await Timer(2, "us")
+
+    # Step 4: Assert spec-correct behavior.
+    # The DUT should NOT have ACKed, because:
+    #   - The byte on the bus was garbled by the IBI collision
+    #   - The DUT lost arbitration at bit 0
+    #   - Per spec, the DUT should discard the byte and wait for next START
+    #
+    # If the DUT DID ACK, the RxFByteArb bug was triggered: the DUT
+    # processed collision byte 0xB4 = {0x5A, W} as a valid address match.
+    assert nack, (
+        "DESIGN BUG: DUT ACKed collision-garbled byte 0xB4 = {0x5A, W} "
+        "during IBI arbitration loss at bit 0. "
+        "RxFByteArb bus_rx_rsp_i.done path overrides arbitration_lost_i. "
+        "Per I3C spec 5.1.6.2, Target shall discard garbled byte on arb loss. "
+        "See verification/bugs/rxfbytearb_collision.md"
+    )
