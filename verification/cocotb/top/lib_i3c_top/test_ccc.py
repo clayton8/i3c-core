@@ -1635,6 +1635,7 @@ async def test_ccc_te5_wrong_direction(dut):
     i3c_controller, _, tb = await test_setup(
         dut, STATIC_ADDR, VIRT_STATIC_ADDR,
         dynamic_addr=DYNAMIC_ADDR, virtual_dynamic_addr=VIRT_DYNAMIC_ADDR)
+    tb.te_error_monitor.expect_error(5)
     await ClockCycles(tb.clk, 50)
 
     for tgt_addr in [DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR]:
@@ -1962,6 +1963,7 @@ async def test_ccc_setdasa_padding_err(dut):
 
     (STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR) = random.sample(VALID_I3C_ADDRESSES, 4)
     i3c_controller, i3c_target, tb = await test_setup(dut, STATIC_ADDR, VIRT_STATIC_ADDR)
+    tb.te_error_monitor.expect_error(6)
     await ClockCycles(tb.clk, 50)
 
     err_intr_addr = tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.base_addr
@@ -1997,9 +1999,12 @@ async def test_ccc_setdasa_padding_err(dut):
     framing_stat = await tb.read_csr_field(err_intr_addr, framing_stat_field)
     assert framing_stat == 1, f"FRAMING_ERR_STAT should be 1 after padding error, got {framing_stat}"
 
-    # Framing error counter should have incremented
+    # Framing error counter should have incremented exactly once
     framing_cnt = await tb.read_csr_field(framing_cnt_addr, framing_cnt_field)
-    assert framing_cnt >= 1, f"Framing error count should be >=1, got {framing_cnt}"
+    assert framing_cnt == 1, (
+        f"DESIGN BUG: Framing error count should be exactly 1 after one event, "
+        f"got {framing_cnt}. See verification/bugs/te_counter_level_sensitive.md"
+    )
 
     # Clear status
     await tb.write_csr_field(err_intr_addr, framing_stat_field, 1)
@@ -2087,7 +2092,10 @@ async def test_ccc_te2_parity(dut):
     assert te2_stat == 1, f"TE2_ERR_STAT should be 1 after bad defining byte parity, got {te2_stat}"
 
     te2_cnt = await tb.read_csr_field(te2_cnt_addr, te2_cnt_field)
-    assert te2_cnt >= 1, f"TE2 error count should be >=1, got {te2_cnt}"
+    assert te2_cnt == 1, (
+        f"DESIGN BUG: TE2 error count should be exactly 1 after one event, "
+        f"got {te2_cnt}. See verification/bugs/te_counter_level_sensitive.md"
+    )
 
     # Clear status
     await tb.write_csr_field(err_intr_addr, te2_stat_field, 1)
@@ -2228,11 +2236,16 @@ async def test_ccc_entdaa_te3_te4(dut):
 
     TE3: Parity error on assigned address → target NACKs, retries on next Sr+7E/R.
     TE4: Invalid reserved byte (not 7E/R) → target NACKs, waits for STOP.
+
+    BLOCKED BY DESIGN BUG: TE3 counter assertion (== 1) will fail due to
+    level-sensitive counter WE — te3_err stays high for 2+ cycles.
+    See verification/bugs/te_counter_level_sensitive.md
     """
     log = logging.getLogger("test_ccc_entdaa_te3_te4")
 
     (STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR) = random.sample(VALID_I3C_ADDRESSES, 4)
     i3c_controller, i3c_target, tb = await test_setup(dut, STATIC_ADDR, VIRT_STATIC_ADDR)
+    tb.te_error_monitor.expect_error(3, 4)
     await ClockCycles(tb.clk, 50)
 
     err_intr_addr = tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.base_addr
@@ -2265,7 +2278,10 @@ async def test_ccc_entdaa_te3_te4(dut):
     assert te4_stat == 1, f"TE4_ERR_STAT should be 1 after invalid reserved byte, got {te4_stat}"
 
     te4_cnt = await tb.read_csr_field(te4_cnt_addr, te4_cnt_field)
-    assert te4_cnt >= 1, f"TE4 count should be >=1, got {te4_cnt}"
+    assert te4_cnt == 1, (
+        f"DESIGN BUG: TE4 count should be exactly 1 after one event, "
+        f"got {te4_cnt}. See verification/bugs/te_counter_level_sensitive.md"
+    )
 
     # ---- TE3: Bad parity on address byte during ENTDAA ----
     # Per I3C spec §5.1.10.1.4: if parity is wrong on the assigned address,
@@ -2295,7 +2311,10 @@ async def test_ccc_entdaa_te3_te4(dut):
     assert te3_stat == 1, f"TE3_ERR_STAT should be 1 after parity error, got {te3_stat}"
 
     te3_cnt = await tb.read_csr_field(te3_cnt_addr, te3_cnt_field)
-    assert te3_cnt >= 1, f"TE3 count should be >=1, got {te3_cnt}"
+    assert te3_cnt == 1, (
+        f"DESIGN BUG: TE3 count should be exactly 1 after one event, "
+        f"got {te3_cnt}. See verification/bugs/te_counter_level_sensitive.md"
+    )
 
 
 @cocotb.test()

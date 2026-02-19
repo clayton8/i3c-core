@@ -495,6 +495,9 @@ async def test_te2_private_write_parity(dut):
 
     Verifies RX FIFO is empty after parity error, error registers update,
     and target remains functional after recovery.
+
+    BLOCKED BY DESIGN BUG: Counter assertion (== 1) will fail due to
+    level-sensitive counter WE. See verification/bugs/te_counter_level_sensitive.md
     """
     log = logging.getLogger("test_te2_private_write_parity")
 
@@ -564,8 +567,10 @@ async def test_te2_private_write_parity(dut):
         await clear_te_status_bit(tb, 2)
 
         cnt_after = await read_te_counter(tb, 2)
-        assert cnt_after >= 1, \
-            f"TE2 counter should be >= 1 after injection, got {cnt_after}"
+        assert cnt_after == 1, (
+            f"DESIGN BUG: TE2 counter should be exactly 1 after one injection, "
+            f"got {cnt_after}. See verification/bugs/te_counter_level_sensitive.md"
+        )
 
         # Clear RX data FIFO
         await tb.write_csr_field(
@@ -832,6 +837,9 @@ async def test_te_error_sequence_mixing(dut):
 
     Verifies that each error type is correctly detected and only the
     corresponding status bit and counter are affected.
+
+    BLOCKED BY DESIGN BUG: Counter assertions (== 1) will fail due to
+    level-sensitive counter WE. See verification/bugs/te_counter_level_sensitive.md
     """
     log = logging.getLogger("test_te_error_sequence_mixing")
 
@@ -908,11 +916,13 @@ async def test_te_error_sequence_mixing(dut):
         await clear_te_status_bit(tb, n)
         await verify_target_responsive(i3c_controller, DYNAMIC_ADDR)
 
-    # Final counter verification -- each type should have non-zero counter
+    # Final counter verification -- each type injected exactly once
     for n in range(3):
         cnt = await read_te_counter(tb, n)
-        assert cnt >= 1, \
-            f"Final TE{n} counter should be >= 1, got {cnt}"
+        assert cnt == 1, (
+            f"DESIGN BUG: Final TE{n} counter should be exactly 1 after one event, "
+            f"got {cnt}. See verification/bugs/te_counter_level_sensitive.md"
+        )
 
     log.info("test_te_error_sequence_mixing PASSED")
     tb.te_error_monitor.check()
