@@ -20,6 +20,7 @@ import logging
 import os
 from pathlib import Path
 
+from gen_axi_csr_tracker import generate_axi_csr_tracker
 from peakrdl_cheader.exporter import CHeaderExporter
 from peakrdl_cocotb.exporter import CocotbExporter
 from peakrdl_html import HTMLExporter
@@ -171,6 +172,17 @@ def main():
     output_file = i3c_root_dir / "verification" / "cocotb" / "common" / "reg_map.py"
     exporter.export(root, path=str(output_file))
     logging.info(f"Created: Python dictionary file {output_file}")
+
+    # Generate AXI CSR tracker bind module from the same reg_map data
+    # Re-import the freshly generated reg_map to get the dict
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("reg_map", str(output_file))
+    reg_map_mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(reg_map_mod)
+    tracker_output = (
+        i3c_root_dir / "verification" / "cocotb" / "top" / "lib_i3c_top" / "axi_csr_tracker.sv"
+    )
+    generate_axi_csr_tracker(reg_map_mod.reg_map, tracker_output)
 
 
 if __name__ == "__main__":

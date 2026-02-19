@@ -15,156 +15,60 @@ Usage:
 """
 
 import argparse
+import importlib.util
+import os
 import sys
 from collections import defaultdict
 from pathlib import Path
 
-# All known CSR names for coverage gap detection
-KNOWN_CSRS = [
-    "I3CBASE.HCI_VERSION",
-    "I3CBASE.HC_CONTROL",
-    "I3CBASE.CONTROLLER_DEVICE_ADDR",
-    "I3CBASE.HC_CAPABILITIES",
-    "I3CBASE.RESET_CONTROL",
-    "I3CBASE.PRESENT_STATE",
-    "I3CBASE.INTR_STATUS",
-    "I3CBASE.INTR_STATUS_ENABLE",
-    "I3CBASE.INTR_SIGNAL_ENABLE",
-    "I3CBASE.INTR_FORCE",
-    "I3CBASE.DAT_SECTION_OFFSET",
-    "I3CBASE.DCT_SECTION_OFFSET",
-    "I3CBASE.RING_HEADERS_SECTION_OFFSET",
-    "I3CBASE.PIO_SECTION_OFFSET",
-    "I3CBASE.EXT_CAPS_SECTION_OFFSET",
-    "I3CBASE.INT_CTRL_CMDS_EN",
-    "I3CBASE.IBI_NOTIFY_CTRL",
-    "I3CBASE.IBI_DATA_ABORT_CTRL",
-    "I3CBASE.DEV_CTX_BASE_LO",
-    "I3CBASE.DEV_CTX_BASE_HI",
-    "I3CBASE.DEV_CTX_SG",
-    "PIOCONTROL.COMMAND_PORT",
-    "PIOCONTROL.RESPONSE_PORT",
-    "PIOCONTROL.TX_DATA_PORT",
-    "PIOCONTROL.RX_DATA_PORT",
-    "PIOCONTROL.IBI_PORT",
-    "PIOCONTROL.QUEUE_THLD_CTRL",
-    "PIOCONTROL.DATA_BUFFER_THLD_CTRL",
-    "PIOCONTROL.QUEUE_SIZE",
-    "PIOCONTROL.ALT_QUEUE_SIZE",
-    "PIOCONTROL.PIO_INTR_STATUS",
-    "PIOCONTROL.PIO_INTR_STATUS_ENABLE",
-    "PIOCONTROL.PIO_INTR_SIGNAL_ENABLE",
-    "PIOCONTROL.PIO_INTR_FORCE",
-    "PIOCONTROL.PIO_CONTROL",
-    "SECFWRECOVERYIF.EXTCAP_HEADER",
-    "SECFWRECOVERYIF.PROT_CAP_0",
-    "SECFWRECOVERYIF.PROT_CAP_1",
-    "SECFWRECOVERYIF.PROT_CAP_2",
-    "SECFWRECOVERYIF.PROT_CAP_3",
-    "SECFWRECOVERYIF.DEVICE_ID_0",
-    "SECFWRECOVERYIF.DEVICE_ID_1",
-    "SECFWRECOVERYIF.DEVICE_ID_2",
-    "SECFWRECOVERYIF.DEVICE_ID_3",
-    "SECFWRECOVERYIF.DEVICE_ID_4",
-    "SECFWRECOVERYIF.DEVICE_ID_5",
-    "SECFWRECOVERYIF.DEVICE_ID_RESERVED",
-    "SECFWRECOVERYIF.DEVICE_STATUS_0",
-    "SECFWRECOVERYIF.DEVICE_STATUS_1",
-    "SECFWRECOVERYIF.DEVICE_RESET",
-    "SECFWRECOVERYIF.RECOVERY_CTRL",
-    "SECFWRECOVERYIF.RECOVERY_STATUS",
-    "SECFWRECOVERYIF.HW_STATUS",
-    "SECFWRECOVERYIF.INDIRECT_FIFO_CTRL_0",
-    "SECFWRECOVERYIF.INDIRECT_FIFO_CTRL_1",
-    "SECFWRECOVERYIF.INDIRECT_FIFO_STATUS_0",
-    "SECFWRECOVERYIF.INDIRECT_FIFO_STATUS_1",
-    "SECFWRECOVERYIF.INDIRECT_FIFO_STATUS_2",
-    "SECFWRECOVERYIF.INDIRECT_FIFO_STATUS_3",
-    "SECFWRECOVERYIF.INDIRECT_FIFO_STATUS_4",
-    "SECFWRECOVERYIF.INDIRECT_FIFO_RESERVED",
-    "SECFWRECOVERYIF.INDIRECT_FIFO_DATA",
-    "STDBYCTRLMODE.EXTCAP_HEADER",
-    "STDBYCTRLMODE.STBY_CR_CONTROL",
-    "STDBYCTRLMODE.STBY_CR_DEVICE_ADDR",
-    "STDBYCTRLMODE.STBY_CR_CAPABILITIES",
-    "STDBYCTRLMODE.STBY_CR_VIRTUAL_DEVICE_CHAR",
-    "STDBYCTRLMODE.STBY_CR_STATUS",
-    "STDBYCTRLMODE.STBY_CR_DEVICE_CHAR",
-    "STDBYCTRLMODE.STBY_CR_DEVICE_PID_LO",
-    "STDBYCTRLMODE.STBY_CR_INTR_STATUS",
-    "STDBYCTRLMODE.STBY_CR_VIRTUAL_DEVICE_PID_LO",
-    "STDBYCTRLMODE.STBY_CR_INTR_SIGNAL_ENABLE",
-    "STDBYCTRLMODE.STBY_CR_INTR_FORCE",
-    "STDBYCTRLMODE.STBY_CR_CCC_CONFIG_GETCAPS",
-    "STDBYCTRLMODE.STBY_CR_CCC_CONFIG_RSTACT_PARAMS",
-    "STDBYCTRLMODE.STBY_CR_VIRT_DEVICE_ADDR",
-    "STDBYCTRLMODE.STBY_CR_MWL",
-    "STDBYCTRLMODE.STBY_CR_MRL",
-    "TTI.EXTCAP_HEADER",
-    "TTI.CONTROL",
-    "TTI.STATUS",
-    "TTI.RESET_CONTROL",
-    "TTI.QUEUE_STATUS",
-    "TTI.DESC_QUEUE_DEPTH",
-    "TTI.DATA_QUEUE_DEPTH",
-    "TTI.IBI_QUEUE_DEPTH",
-    "TTI.INTERRUPT_STATUS",
-    "TTI.INTERRUPT_ENABLE",
-    "TTI.INTERRUPT_FORCE",
-    "TTI.TARGET_ERR_CTRL",
-    "TTI.TARGET_ERR_INTR_STATUS",
-    "TTI.TARGET_ERR_INTR_ENABLE",
-    "TTI.TARGET_ERR_INTR_FORCE",
-    "TTI.TARGET_ERR_CNT_TE0",
-    "TTI.TARGET_ERR_CNT_TE1",
-    "TTI.TARGET_ERR_CNT_TE2",
-    "TTI.TARGET_ERR_CNT_TE3",
-    "TTI.TARGET_ERR_CNT_TE4",
-    "TTI.TARGET_ERR_CNT_TE5",
-    "TTI.TARGET_ERR_CNT_FRAMING",
-    "TTI.TARGET_ERR_CNT_RI_PEC",
-    "TTI.TARGET_ERR_CNT_RI_LENGTH",
-    "TTI.TARGET_ERR_CNT_RI_READONLY",
-    "TTI.TARGET_ERR_CNT_RI_UNSUPPORTED",
-    "TTI.TARGET_ERR_CNT_RI_RX_FIFO_OVERFLOW",
-    "TTI.TARGET_ERR_CNT_RI_INDIRECT_FIFO_OVERFLOW",
-    "TTI.RX_DESC_QUEUE_PORT",
-    "TTI.RX_DATA_PORT",
-    "TTI.TX_DESC_QUEUE_PORT",
-    "TTI.TX_DATA_PORT",
-    "TTI.IBI_PORT",
-    "TTI.QUEUE_SIZE",
-    "TTI.IBI_QUEUE_SIZE",
-    "TTI.QUEUE_THLD_CTRL",
-    "TTI.DATA_BUFFER_THLD_CTRL",
-    "SOCMGMTIF.EXTCAP_HEADER",
-    "SOCMGMTIF.SOC_MGMT_CONTROL",
-    "SOCMGMTIF.SOC_MGMT_STATUS",
-    "SOCMGMTIF.REC_INTF_CFG",
-    "SOCMGMTIF.REC_INTF_REG_W1C_ACCESS",
-    "SOCMGMTIF.SOC_MGMT_RSVD_2",
-    "SOCMGMTIF.SOC_MGMT_RSVD_3",
-    "SOCMGMTIF.SOC_PAD_CONF",
-    "SOCMGMTIF.SOC_PAD_ATTR",
-    "SOCMGMTIF.SOC_MGMT_FEATURE_2",
-    "SOCMGMTIF.SOC_MGMT_FEATURE_3",
-    "SOCMGMTIF.T_R_REG",
-    "SOCMGMTIF.T_F_REG",
-    "SOCMGMTIF.T_SU_DAT_REG",
-    "SOCMGMTIF.T_HD_DAT_REG",
-    "SOCMGMTIF.T_HIGH_REG",
-    "SOCMGMTIF.T_LOW_REG",
-    "SOCMGMTIF.T_HD_STA_REG",
-    "SOCMGMTIF.T_SU_STA_REG",
-    "SOCMGMTIF.T_SU_STO_REG",
-    "SOCMGMTIF.T_FREE_REG",
-    "SOCMGMTIF.T_AVAL_REG",
-    "SOCMGMTIF.T_IDLE_REG",
-    "SOCMGMTIF.HDR_TIMEOUT_EN_REG",
-    "SOCMGMTIF.T_HDR_TIMEOUT_REG",
-    "CTRLCFG.EXTCAP_HEADER",
-    "CTRLCFG.CONTROLLER_CONFIG",
-]
+
+def _load_known_csrs():
+    """Load CSR names from the auto-generated reg_map.py.
+
+    Falls back to an empty list if reg_map.py is not found.
+    """
+    # Try to find reg_map.py relative to I3C_ROOT_DIR or script location
+    candidates = []
+    i3c_root = os.environ.get("I3C_ROOT_DIR")
+    if i3c_root:
+        candidates.append(Path(i3c_root) / "verification" / "cocotb" / "common" / "reg_map.py")
+    script_dir = Path(__file__).resolve().parent
+    candidates.append(script_dir.parent / "cocotb" / "common" / "reg_map.py")
+
+    for reg_map_path in candidates:
+        if reg_map_path.exists():
+            spec = importlib.util.spec_from_file_location("reg_map", str(reg_map_path))
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            return _collect_csr_names(dict(mod.reg_map))
+
+    print("WARNING: reg_map.py not found; coverage gap detection disabled.", file=sys.stderr)
+    return []
+
+
+def _collect_csr_names(d, prefix="", base=0):
+    """Walk reg_map dict and collect all CSR names (matching axi_csr_tracker.sv naming)."""
+    names = []
+    if not isinstance(d, dict):
+        return names
+    sa = d.get("start_addr", base)
+    for k, v in d.items():
+        if not isinstance(v, dict):
+            continue
+        if "offset" in v and any(
+            isinstance(fv, dict) and "low" in fv for fv in v.values() if isinstance(fv, dict)
+        ):
+            addr = sa + v["offset"]
+            if addr <= 0xFFF:
+                names.append(f"{prefix}{k}")
+        elif any(isinstance(fv, dict) for fv in v.values() if isinstance(fv, dict)):
+            new_prefix = f"{prefix}{k}." if k not in ("base_addr", "start_addr", "offset") else prefix
+            names.extend(_collect_csr_names(v, new_prefix, sa))
+    return names
+
+
+# Auto-populated from reg_map.py (same source as the SV tracker)
+KNOWN_CSRS = _load_known_csrs()
 
 
 def parse_log(path):
