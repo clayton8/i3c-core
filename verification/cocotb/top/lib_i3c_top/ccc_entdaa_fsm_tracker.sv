@@ -7,8 +7,7 @@
 // Usage: make ... TRACK_FSM=1
 //
 // Output format (one line per transition):
-//   <timestamp> <old_state_id> <new_state_id>
-// Run verification/tools/parse_ccc_entdaa_fsm_log.py to convert IDs to state names.
+//   <timestamp> | <old_state_name> | <new_state_name>
 
 `ifndef SYNTHESIS
 `ifndef VERILATOR
@@ -23,17 +22,41 @@ module ccc_entdaa_fsm_tracker (
   logic [7:0] prev_state_trk;
   integer fsm_log_fd;
 
+  function automatic string state_to_name(input logic [7:0] s);
+    case (s)
+      8'h0: return "Idle";
+      8'h1: return "WaitStart";
+      8'h2: return "ReceiveRsvdByte";
+      8'h3: return "AckRsvdByte";
+      8'h4: return "SendNack";
+      8'h5: return "SendID";
+      8'h6: return "PrepareIDBit";
+      8'h7: return "SendIDBit";
+      8'h8: return "LostArbitration";
+      8'h9: return "ReceiveAddr";
+      8'ha: return "AckAddr";
+      8'hb: return "Done";
+      8'hc: return "WaitStop";
+      default: begin
+        string name;
+        $sformat(name, "UNKNOWN(0x%02h)", s);
+        return name;
+      end
+    endcase
+  endfunction
+
   initial begin
     fsm_log_fd = $fopen("ccc_entdaa_fsm_transitions.log", "w");
     $fwrite(fsm_log_fd, "# ccc_entdaa state transition log\n");
-    $fwrite(fsm_log_fd, "# timestamp old_state new_state\n");
+    $fwrite(fsm_log_fd, "# timestamp | old_state | new_state\n");
   end
 
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
       prev_state_trk <= 8'd0;
     end else if (state_q !== prev_state_trk) begin
-      $fwrite(fsm_log_fd, "%0t %0d %0d\n", $time, prev_state_trk, state_q);
+      $fwrite(fsm_log_fd, "%0t | %s | %s\n",
+              $time, state_to_name(prev_state_trk), state_to_name(state_q));
       prev_state_trk <= state_q;
     end
   end

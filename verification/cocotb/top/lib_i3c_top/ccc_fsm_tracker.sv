@@ -7,8 +7,7 @@
 // Usage: make ... TRACK_FSM=1
 //
 // Output format (one line per transition):
-//   <timestamp> <old_state_id> <new_state_id>
-// Run verification/tools/parse_ccc_fsm_log.py to convert IDs to state names.
+//   <timestamp> | <old_state_name> | <new_state_name>
 
 `ifndef SYNTHESIS
 `ifndef VERILATOR
@@ -23,17 +22,48 @@ module ccc_fsm_tracker (
   logic [7:0] prev_state_trk;
   integer fsm_log_fd;
 
+  function automatic string state_to_name(input logic [7:0] s);
+    case (s)
+      8'd0:  return "WaitCCC";
+      8'd1:  return "RxCmdTbit";
+      8'd2:  return "RxDefByte";
+      8'd3:  return "RxDefByteOrBusCond";
+      8'd4:  return "RxDefByteTbit";
+      8'd5:  return "WaitDirectRstart";
+      8'd6:  return "RxDirectDefByteTbit";
+      8'd7:  return "RxTargetAddr";
+      8'd8:  return "TxTargetAddrAck";
+      8'd9:  return "RxSubCmdByte";
+      8'd10: return "RxData";
+      8'd11: return "RxDataTbit";
+      8'd12: return "TxData";
+      8'd13: return "TxDataTbit";
+      8'd14: return "WaitForBusCond";
+      8'd15: return "WaitForENTDAAEnd";
+      8'd16: return "NextCCC";
+      8'd17: return "DoneCCC";
+      8'd18: return "HandleTargetENTDAA";
+      8'd19: return "HandleVirtualTargetENTDAA";
+      default: begin
+        string name;
+        $sformat(name, "UNKNOWN(%0d)", s);
+        return name;
+      end
+    endcase
+  endfunction
+
   initial begin
     fsm_log_fd = $fopen("ccc_fsm_transitions.log", "w");
     $fwrite(fsm_log_fd, "# ccc state transition log\n");
-    $fwrite(fsm_log_fd, "# timestamp old_state new_state\n");
+    $fwrite(fsm_log_fd, "# timestamp | old_state | new_state\n");
   end
 
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
       prev_state_trk <= 8'd0;
     end else if (state_q !== prev_state_trk) begin
-      $fwrite(fsm_log_fd, "%0t %0d %0d\n", $time, prev_state_trk, state_q);
+      $fwrite(fsm_log_fd, "%0t | %s | %s\n",
+              $time, state_to_name(prev_state_trk), state_to_name(state_q));
       prev_state_trk <= state_q;
     end
   end
