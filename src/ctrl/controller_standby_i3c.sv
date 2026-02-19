@@ -365,7 +365,6 @@ module controller_standby_i3c
     // Private read start/abort
     .tx_pr_start_o   (tx_pr_start_o),
     .tx_pr_abort_o   (tx_pr_abort),
-
     .tx_desc_avail_i (tx_desc_avail),
 
     .tx_fifo_rvalid_i(tx_fifo_rvalid),
@@ -710,5 +709,4 @@ module controller_standby_i3c
     .ibi_byte_flush_i(ibi_fifo_flush),
     .ibi_pending_o
   );
-
 endmodule

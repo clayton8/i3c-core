@@ -138,17 +138,6 @@ module tti
     output logic irq_o
 );
 
-  always_comb begin : undriven_logic
-    hwif_tti_o.INTERRUPT_STATUS.IBI_THLD_STAT.we = '0; // FUTUREFIX: Not important since FW owns this queue
-    hwif_tti_o.INTERRUPT_STATUS.TRANSFER_ERR_STAT.we = '0; // FUTUREFIX: Implement at the end if easy to add
-    hwif_tti_o.INTERRUPT_STATUS.TRANSFER_ABORT_STAT.we = '0; // FUTUREFIX: Implement at the end if easy to add
-    hwif_tti_o.INTERRUPT_STATUS.TX_DESC_THLD_STAT.we = '0; // FUTUREFIX: Not important since FW owns this queue
-    hwif_tti_o.INTERRUPT_STATUS.TX_DATA_THLD_STAT.we = '0; // FUTUREFIX: Not important since FW owns this queue
-    hwif_tti_o.INTERRUPT_STATUS.TX_DESC_TIMEOUT.we = '0; // FUTUREFIX: Nice to have in the future
-    hwif_tti_o.INTERRUPT_STATUS.RX_DESC_TIMEOUT.we = '0; // FUTUREFIX: Nice to have in the future
-    hwif_tti_o.QUEUE_THLD_CTRL.IBI_THLD.next = '0; // FIUTUREFIX: Not important since FW owns this queue
-  end
-
   logic tx_desc_ready_thld_swmod_q, tx_desc_ready_thld_we;
   logic rx_desc_ready_thld_swmod_q, rx_desc_ready_thld_we;
 
@@ -270,22 +259,30 @@ module tti
     hwif_tti_o.CONTROL.HJ_EN.next = enec_hj_i;
   end
 
-  always_comb begin : wire_unconnected_regs
+  assign hwif_tti_o.INTERRUPT_STATUS.PENDING_IBI.next = ibi_pending_i;
 
+  always_comb begin : wire_unconnected_regs
     hwif_tti_o.RESET_CONTROL.SOFT_RST.we = '0;
     hwif_tti_o.RESET_CONTROL.SOFT_RST.next = '0;
 
     hwif_tti_o.INTERRUPT_STATUS.PENDING_INTERRUPT.next = {3'h0, ibi_pending_i};
     hwif_tti_o.INTERRUPT_STATUS.RX_DESC_TIMEOUT.next = '0;
+    hwif_tti_o.INTERRUPT_STATUS.RX_DESC_TIMEOUT.we = '0; // FUTUREFIX: Nice to have in the future
     hwif_tti_o.INTERRUPT_STATUS.TX_DESC_TIMEOUT.next = '0;
+    hwif_tti_o.INTERRUPT_STATUS.TX_DESC_TIMEOUT.we = '0; // FUTUREFIX: Nice to have in the future
     hwif_tti_o.INTERRUPT_STATUS.TX_DATA_THLD_STAT.next = '0;
+    hwif_tti_o.INTERRUPT_STATUS.TX_DATA_THLD_STAT.we = '0; // FUTUREFIX: Not important since FW owns this queue
     hwif_tti_o.INTERRUPT_STATUS.TX_DESC_THLD_STAT.next = '0;
+    hwif_tti_o.INTERRUPT_STATUS.TX_DESC_THLD_STAT.we = '0; // FUTUREFIX: Not important since FW owns this queue
     hwif_tti_o.INTERRUPT_STATUS.IBI_THLD_STAT.next = '0;
+    hwif_tti_o.INTERRUPT_STATUS.IBI_THLD_STAT.we = '0; // FUTUREFIX: Not important since FW owns this queue
     hwif_tti_o.INTERRUPT_STATUS.TRANSFER_ABORT_STAT.next = '0;
+    hwif_tti_o.INTERRUPT_STATUS.TRANSFER_ABORT_STAT.we = '0; // FUTUREFIX: Implement at the end if easy to add
     hwif_tti_o.INTERRUPT_STATUS.TRANSFER_ERR_STAT.next = '0;
+    hwif_tti_o.INTERRUPT_STATUS.TRANSFER_ERR_STAT.we = '0; // FUTUREFIX: Implement at the end if easy to add
 
-    hwif_tti_o.QUEUE_THLD_CTRL.IBI_THLD.we = '0;
-    hwif_tti_o.QUEUE_THLD_CTRL.IBI_THLD.we = '0;
+    hwif_tti_o.QUEUE_THLD_CTRL.IBI_THLD.next = '0; // FUTUREFIX: Not important since FW owns this queue
+    hwif_tti_o.QUEUE_THLD_CTRL.IBI_THLD.we = '0;    
   end
 
   // Wire queue status and depth registers

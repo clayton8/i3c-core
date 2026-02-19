@@ -2934,7 +2934,7 @@ reg_map = Munch.fromDict({
                 "MWL": {
                     "low": 0,
                     "mask": 65535,
-                    "reset": 0,
+                    "reset": 256,
                     "sw": "r",
                     "hw": "rw",
                     "woclr": 0,
@@ -2948,7 +2948,7 @@ reg_map = Munch.fromDict({
                 "MRL": {
                     "low": 0,
                     "mask": 65535,
-                    "reset": 0,
+                    "reset": 256,
                     "sw": "r",
                     "hw": "rw",
                     "woclr": 0,
@@ -2958,7 +2958,7 @@ reg_map = Munch.fromDict({
                 "IBIL": {
                     "low": 16,
                     "mask": 16711680,
-                    "reset": 0,
+                    "reset": 16,
                     "sw": "r",
                     "hw": "rw",
                     "woclr": 0,
@@ -3405,10 +3405,20 @@ reg_map = Munch.fromDict({
                     "hwclr": 0
                 },
                 "PENDING_INTERRUPT": {
-                    "low": 15,
-                    "mask": 491520,
+                    "low": 16,
+                    "mask": 983040,
                     "reset": 0,
                     "sw": "rw",
+                    "hw": "rw",
+                    "woclr": 0,
+                    "rclr": 0,
+                    "hwclr": 0
+                },
+                "PENDING_IBI": {
+                    "low": 20,
+                    "mask": 1048576,
+                    "reset": 0,
+                    "sw": "r",
                     "hw": "rw",
                     "woclr": 0,
                     "rclr": 0,

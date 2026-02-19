@@ -4,6 +4,9 @@
   This module extracts fields related to addressing from CSRs.
 */
 
+// Required to report legal MWL/MRL/IBIL after reset
+`include "i3c_defines.svh"
+
 module configuration (
     input logic clk_i,
     input logic rst_ni,
@@ -156,9 +159,9 @@ module configuration (
 
   always @(posedge clk_i or negedge rst_ni) begin : mrl_mwl
     if (~rst_ni) begin
-      get_mwl_o <= 16'd256;
-      get_mrl_o <= 16'd256;
-      get_ibil_o <= 8'd255;
+      get_mwl_o  <= 16'(`RX_FIFO_DEPTH << 2);
+      get_mrl_o  <= 16'(`TX_FIFO_DEPTH << 2);
+      get_ibil_o <= 8'd16;
     end else begin
       if (set_mwl_i) get_mwl_o <= mwl_i;
       if (set_mrl_i) get_mrl_o <= mrl_i;
@@ -167,11 +170,12 @@ module configuration (
   end
 
   assign get_status_fmt1_o = {
-    8'h00,  // Vendor-specific meaning
+    7'h00,  // Vendor-specific
+    hwif_out_i.I3C_EC.TTI.INTERRUPT_STATUS.PENDING_IBI.value,
     2'b11,  // Unable to do Handoff
-    hwif_out_i.I3C_EC.TTI.STATUS.PROTOCOL_ERROR,
+    hwif_out_i.I3C_EC.TTI.STATUS.PROTOCOL_ERROR.value,
     1'b0,   // Reserved
-    hwif_out_i.I3C_EC.TTI.INTERRUPT_STATUS.PENDING_INTERRUPT
+    hwif_out_i.I3C_EC.TTI.INTERRUPT_STATUS.PENDING_INTERRUPT.value
   };
 
   assign pid_o = {

@@ -3663,7 +3663,7 @@ package I3CCSR_uvm;
 
         virtual function void build();
             this.MWL = new("MWL");
-            this.MWL.configure(this, 16, 0, "RO", 1, 'h0, 1, 1, 0);
+            this.MWL.configure(this, 16, 0, "RO", 1, 'h100, 1, 1, 0);
             if (has_coverage(UVM_CVR_REG_BITS)) begin
                 foreach(MWL_bit_cg[bt]) MWL_bit_cg[bt] = new();
             end
@@ -3695,9 +3695,9 @@ package I3CCSR_uvm;
 
         virtual function void build();
             this.MRL = new("MRL");
-            this.MRL.configure(this, 16, 0, "RO", 1, 'h0, 1, 1, 0);
+            this.MRL.configure(this, 16, 0, "RO", 1, 'h100, 1, 1, 0);
             this.IBIL = new("IBIL");
-            this.IBIL.configure(this, 8, 16, "RO", 1, 'h0, 1, 1, 0);
+            this.IBIL.configure(this, 8, 16, "RO", 1, 'h10, 1, 1, 0);
             if (has_coverage(UVM_CVR_REG_BITS)) begin
                 foreach(MRL_bit_cg[bt]) MRL_bit_cg[bt] = new();
                 foreach(IBIL_bit_cg[bt]) IBIL_bit_cg[bt] = new();
@@ -4188,6 +4188,7 @@ package I3CCSR_uvm;
         I3CCSR__I3C_EC__TTI__INTERRUPT_STATUS_bit_cg IBI_THLD_STAT_bit_cg[1];
         I3CCSR__I3C_EC__TTI__INTERRUPT_STATUS_bit_cg IBI_DONE_bit_cg[1];
         I3CCSR__I3C_EC__TTI__INTERRUPT_STATUS_bit_cg PENDING_INTERRUPT_bit_cg[4];
+        I3CCSR__I3C_EC__TTI__INTERRUPT_STATUS_bit_cg PENDING_IBI_bit_cg[1];
         I3CCSR__I3C_EC__TTI__INTERRUPT_STATUS_bit_cg TRANSFER_ABORT_STAT_bit_cg[1];
         I3CCSR__I3C_EC__TTI__INTERRUPT_STATUS_bit_cg TX_DESC_COMPLETE_bit_cg[1];
         I3CCSR__I3C_EC__TTI__INTERRUPT_STATUS_bit_cg TRANSFER_ERR_STAT_bit_cg[1];
@@ -4203,6 +4204,7 @@ package I3CCSR_uvm;
         rand uvm_reg_field IBI_THLD_STAT;
         rand uvm_reg_field IBI_DONE;
         rand uvm_reg_field PENDING_INTERRUPT;
+        rand uvm_reg_field PENDING_IBI;
         rand uvm_reg_field TRANSFER_ABORT_STAT;
         rand uvm_reg_field TX_DESC_COMPLETE;
         rand uvm_reg_field TRANSFER_ERR_STAT;
@@ -4238,7 +4240,9 @@ package I3CCSR_uvm;
             this.IBI_DONE = new("IBI_DONE");
             this.IBI_DONE.configure(this, 1, 13, "W1C", 1, 'h0, 1, 1, 0);
             this.PENDING_INTERRUPT = new("PENDING_INTERRUPT");
-            this.PENDING_INTERRUPT.configure(this, 4, 15, "RW", 1, 'h0, 1, 1, 0);
+            this.PENDING_INTERRUPT.configure(this, 4, 16, "RW", 1, 'h0, 1, 1, 0);
+            this.PENDING_IBI = new("PENDING_IBI");
+            this.PENDING_IBI.configure(this, 1, 20, "RO", 1, 'h0, 1, 1, 0);
             this.TRANSFER_ABORT_STAT = new("TRANSFER_ABORT_STAT");
             this.TRANSFER_ABORT_STAT.configure(this, 1, 25, "W1C", 1, 'h0, 1, 1, 0);
             this.TX_DESC_COMPLETE = new("TX_DESC_COMPLETE");
@@ -4257,6 +4261,7 @@ package I3CCSR_uvm;
                 foreach(IBI_THLD_STAT_bit_cg[bt]) IBI_THLD_STAT_bit_cg[bt] = new();
                 foreach(IBI_DONE_bit_cg[bt]) IBI_DONE_bit_cg[bt] = new();
                 foreach(PENDING_INTERRUPT_bit_cg[bt]) PENDING_INTERRUPT_bit_cg[bt] = new();
+                foreach(PENDING_IBI_bit_cg[bt]) PENDING_IBI_bit_cg[bt] = new();
                 foreach(TRANSFER_ABORT_STAT_bit_cg[bt]) TRANSFER_ABORT_STAT_bit_cg[bt] = new();
                 foreach(TX_DESC_COMPLETE_bit_cg[bt]) TX_DESC_COMPLETE_bit_cg[bt] = new();
                 foreach(TRANSFER_ERR_STAT_bit_cg[bt]) TRANSFER_ERR_STAT_bit_cg[bt] = new();

@@ -97,19 +97,20 @@ module descriptor_ibi import i3c_pkg::i3c_byte_t; #(
       WriteMdb: begin
         ibi_byte_o       = data_mdb;
         ibi_byte_valid_o = 1'b1;
-        ibi_byte_last_o  = (data_len == 8'hFF); // No payload data
+        // No payload data - data_len is derived by subtracting 1 from the respective descriptor
+        // field, said field being zero therefore results in 0xFF for data_len (deliberate underflow).
+        ibi_byte_last_o  = (data_len == 8'hFF);
 
         if (ibi_byte_flush_i) begin
-          // Flush before MDB was consumed (e.g., IBI NACKed before data phase).
-          // Drain remaining payload words from the queue.
-          if (data_len == 8'hFF || data_words == 0) begin
-            // No payload to drain
+          // Handle special cases for flushing
+          if (data_words == 0) begin
+            // No data after MDB, flushing is a NOP
             state_d = Idle;
           end else begin
-            // Pop first data word and enter Flush to drain the rest
+            // At least one word in queue after descriptor, flush it out
             ibi_queue_rready_o = 1'b1;
-            data_cnt_d = 8'd4;
-            state_d = Flush;
+            // If there's more than one word, actually go to the Flush state
+            state_d = (data_words == 8'd1) ? Idle : Flush;
           end
         end else if (ibi_byte_ready_i) begin
           // Back to Idle on no payload data
