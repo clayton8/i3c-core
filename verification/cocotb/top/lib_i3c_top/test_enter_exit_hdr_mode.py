@@ -13,6 +13,7 @@ import logging
 import random
 
 from boot import boot_init
+from bus2csr import dword2int, int2dword
 from i3c_controller_fixed import I3cControllerFixed as I3cController
 from cocotbext_i3c.i3c_target import I3CTarget
 from interface import I3CTopTestInterface
@@ -356,6 +357,15 @@ async def test_hdr_timeout_recovery_te0(dut):
         dut, STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR,
         hdr_timeout_en=True, hdr_timeout_cycles=TEST_HDR_TIMEOUT_CYCLES)
 
+    # Enable TE0 interrupt so STATUS bit is captured
+    te0_en_field = tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_ENABLE.TE0_ERR_EN
+    await tb.write_csr_field(
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_ENABLE.base_addr, te0_en_field, 1)
+    # Clear stale status and counter
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.base_addr, int2dword(0xFFFFFFFF), 4)
+    await tb.write_csr(tb.reg_map.I3C_EC.TTI.TARGET_ERR_CNT_TE0.base_addr, int2dword(0), 4)
+
     await trigger_te0_error(i3c_controller)
     await ClockCycles(tb.clk, 10)
     assert_fsm_in_hdr_mode(dut)
@@ -365,6 +375,17 @@ async def test_hdr_timeout_recovery_te0(dut):
 
     await i3c_controller.send_stop()
     i3c_controller.give_bus_control()
+
+    # Verify TE0 error registers
+    te0_cnt = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.TTI.TARGET_ERR_CNT_TE0.base_addr, 4)) & 0xFF
+    te0_stat = await tb.read_csr_field(
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.base_addr,
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.TE0_ERR_STAT)
+    dut._log.info(f"TE0 counter={te0_cnt}, status={te0_stat}")
+    assert te0_cnt >= 1, f"Expected TE0 counter >= 1, got {te0_cnt}"
+    assert te0_stat == 1, f"Expected TE0_ERR_STAT=1, got {te0_stat}"
+
     await verify_target_responsive(i3c_controller, DYNAMIC_ADDR)
 
 
@@ -375,6 +396,15 @@ async def test_hdr_timeout_recovery_te1(dut):
     i3c_controller, i3c_target, tb = await test_setup(
         dut, STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR,
         hdr_timeout_en=True, hdr_timeout_cycles=TEST_HDR_TIMEOUT_CYCLES)
+
+    # Enable TE1 interrupt so STATUS bit is captured
+    te1_en_field = tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_ENABLE.TE1_ERR_EN
+    await tb.write_csr_field(
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_ENABLE.base_addr, te1_en_field, 1)
+    # Clear stale status and counter
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.base_addr, int2dword(0xFFFFFFFF), 4)
+    await tb.write_csr(tb.reg_map.I3C_EC.TTI.TARGET_ERR_CNT_TE1.base_addr, int2dword(0), 4)
 
     await trigger_te1_error(i3c_controller, i3c_target)
     await ClockCycles(tb.clk, 10)
@@ -388,6 +418,17 @@ async def test_hdr_timeout_recovery_te1(dut):
 
     # Re-enable the cocotb target model after recovery
     i3c_target.monitor_enable.set()
+
+    # Verify TE1 error registers
+    te1_cnt = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.TTI.TARGET_ERR_CNT_TE1.base_addr, 4)) & 0xFF
+    te1_stat = await tb.read_csr_field(
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.base_addr,
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.TE1_ERR_STAT)
+    dut._log.info(f"TE1 counter={te1_cnt}, status={te1_stat}")
+    assert te1_cnt >= 1, f"Expected TE1 counter >= 1, got {te1_cnt}"
+    assert te1_stat == 1, f"Expected TE1_ERR_STAT=1, got {te1_stat}"
+
     await verify_target_responsive(i3c_controller, DYNAMIC_ADDR)
 
 

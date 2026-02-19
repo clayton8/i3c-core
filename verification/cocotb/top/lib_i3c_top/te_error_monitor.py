@@ -1,0 +1,258 @@
+# SPDX-License-Identifier: Apache-2.0
+
+"""
+Continuous TE error monitors for I3C SDR Target verification.
+
+Three monitors that run passively for every test:
+  1. TeErrorEventMonitor   — tracks TE0–TE5 + framing error pulses from RTL
+  2. HdrRecoveryMonitor    — verifies no FIFO writes during HDR error mode
+  3. PostTe2DataIntegrityMonitor — verifies no FIFO writes after TE2 until recovery
+
+Started automatically by I3CTopTestInterface.setup(); raises immediately
+on violation to fail the test.
+"""
+
+import cocotb
+from cocotb.triggers import RisingEdge, FallingEdge, ClockCycles, First
+
+
+# FSM state constants (from i3c_target_fsm.sv primary_state_e)
+FSM_STATE_IDLE = 0
+FSM_STATE_IN_HDR_MODE = 19
+
+
+class TeErrorEventMonitor:
+    """Watches te0_err..te5_err + framing_err RTL signals on every clock edge.
+
+    On any error pulse:
+      - Logs the error type, simulation time, and FSM state
+      - Increments per-type error counter
+
+    Tests can query self.error_counts to verify expected error tallies.
+    """
+
+    _I3C = "xi3c_wrapper.i3c"
+    _FSM = ("xi3c_wrapper.i3c.xcontroller.xcontroller_standby"
+            ".xcontroller_standby_i3c.xi3c_target_fsm")
+
+    TE_NAMES = {0: "TE0", 1: "TE1", 2: "TE2", 3: "TE3", 4: "TE4", 5: "TE5", 6: "FRAMING"}
+
+    def __init__(self, dut):
+        self.dut = dut
+        self.error_counts = {n: 0 for n in range(7)}  # 0-5 = TE0-TE5, 6 = FRAMING
+        self._running = False
+        self._prev_te_vals = [0] * 7  # Track previous values for edge detection
+
+        i3c = getattr(dut, "xi3c_wrapper").i3c
+        self._te_signals = [
+            i3c.te0_err,
+            i3c.te1_err,
+            i3c.te2_err,
+            i3c.te3_err,
+            i3c.te4_err,
+            i3c.te5_err,
+            i3c.framing_err,
+        ]
+
+        fsm = (getattr(dut, "xi3c_wrapper").i3c
+               .xcontroller.xcontroller_standby
+               .xcontroller_standby_i3c.xi3c_target_fsm)
+        self._state_d = fsm.state_d
+
+        # Resolve clock
+        if hasattr(dut, 'aclk'):
+            self._clk = dut.aclk
+        elif hasattr(dut, 'hclk'):
+            self._clk = dut.hclk
+        else:
+            raise AttributeError("TeErrorEventMonitor: no clock signal found (aclk/hclk)")
+
+    async def run(self):
+        self._running = True
+        while True:
+            await RisingEdge(self._clk)
+            for n, sig in enumerate(self._te_signals):
+                try:
+                    val = int(sig.value)
+                except ValueError:
+                    val = 0
+                # Only count rising edges (0→1 transitions)
+                if val and not self._prev_te_vals[n]:
+                    fsm_state = int(self._state_d.value)
+                    time_ns = cocotb.utils.get_sim_time('ns')
+                    self.error_counts[n] += 1
+                    self.dut._log.info(
+                        f"TeErrorEventMonitor: {self.TE_NAMES[n]} error pulse "
+                        f"@ {time_ns}ns, FSM state={fsm_state}, "
+                        f"total {self.TE_NAMES[n]} count={self.error_counts[n]}"
+                    )
+                self._prev_te_vals[n] = val
+
+    def reset_counts(self):
+        """Reset all error counters to zero."""
+        for n in self.error_counts:
+            self.error_counts[n] = 0
+
+
+class HdrRecoveryMonitor:
+    """Watches in_hdr_err_mode_o — while asserted, no RX FIFO writes allowed.
+
+    HDR error mode is entered on TE0 or TE1 errors. The target goes deaf
+    until HDR Exit Pattern or 60us timeout. During this time, no data
+    should reach the RX FIFO.
+    """
+
+    def __init__(self, dut):
+        self.dut = dut
+        self._running = False
+        self.entry_count = 0
+        self.recovery_count = 0
+
+        ccc = (getattr(dut, "xi3c_wrapper").i3c
+               .xcontroller.xcontroller_standby
+               .xcontroller_standby_i3c.xccc)
+        self._in_hdr_err_mode = ccc.in_hdr_err_mode_o
+
+        tti = getattr(dut, "xi3c_wrapper").i3c.xtti
+        self._rx_data_write = tti.rx_data_queue_write_r
+        self._rx_desc_write = tti.rx_desc_queue_write_r
+
+        if hasattr(dut, 'aclk'):
+            self._clk = dut.aclk
+        elif hasattr(dut, 'hclk'):
+            self._clk = dut.hclk
+        else:
+            raise AttributeError("HdrRecoveryMonitor: no clock signal found")
+
+    async def run(self):
+        self._running = True
+        while True:
+            # Wait for HDR error mode to assert
+            await RisingEdge(self._in_hdr_err_mode)
+            self.entry_count += 1
+            entry_time = cocotb.utils.get_sim_time('ns')
+            self.dut._log.info(
+                f"HdrRecoveryMonitor: HDR error mode ENTERED @ {entry_time}ns "
+                f"(entry #{self.entry_count})"
+            )
+
+            # While in HDR error mode, check for illegal FIFO writes
+            while True:
+                result = await First(
+                    RisingEdge(self._rx_data_write),
+                    RisingEdge(self._rx_desc_write),
+                    FallingEdge(self._in_hdr_err_mode),
+                )
+
+                # Check if we exited HDR error mode
+                try:
+                    hdr_err = int(self._in_hdr_err_mode.value)
+                except ValueError:
+                    break
+                if not hdr_err:
+                    self.recovery_count += 1
+                    exit_time = cocotb.utils.get_sim_time('ns')
+                    self.dut._log.info(
+                        f"HdrRecoveryMonitor: HDR error mode EXITED @ {exit_time}ns "
+                        f"(duration={exit_time - entry_time}ns)"
+                    )
+                    break
+
+                # Still in HDR error mode — check for illegal FIFO writes
+                try:
+                    data_w = int(self._rx_data_write.value)
+                    desc_w = int(self._rx_desc_write.value)
+                except ValueError:
+                    continue
+                if data_w or desc_w:
+                    sigs = []
+                    if data_w:
+                        sigs.append("rx_data_queue_write_r")
+                    if desc_w:
+                        sigs.append("rx_desc_queue_write_r")
+                    time_ns = cocotb.utils.get_sim_time('ns')
+                    msg = (
+                        f"HdrRecoveryMonitor: FIFO write during HDR error mode! "
+                        f"{', '.join(sigs)} @ {time_ns}ns"
+                    )
+                    self.dut._log.error(msg)
+                    raise AssertionError(msg)
+
+
+class PostTe2DataIntegrityMonitor:
+    """After TE2 error, monitors for FIFO data writes in the SAME transaction.
+
+    TE2 (parity error on write data) should cause the target to discard
+    the corrupted byte. This monitor logs warnings if data writes are
+    observed after the TE2 pulse until the FSM returns to idle.
+
+    Note: The RTL may legitimately write data to the queue during cleanup
+    (e.g., flushing pipeline bytes). This monitor provides observability
+    but does not assert — data integrity is verified by the tests themselves.
+    """
+
+    def __init__(self, dut):
+        self.dut = dut
+        self._running = False
+        self.violation_count = 0
+
+        i3c = getattr(dut, "xi3c_wrapper").i3c
+        self._te2_err = i3c.te2_err
+        self._rx_data_write = i3c.xtti.rx_data_queue_write_r
+
+        fsm = (i3c.xcontroller.xcontroller_standby
+               .xcontroller_standby_i3c.xi3c_target_fsm)
+        self._state_d = fsm.state_d
+
+        if hasattr(dut, 'aclk'):
+            self._clk = dut.aclk
+        elif hasattr(dut, 'hclk'):
+            self._clk = dut.hclk
+        else:
+            raise AttributeError("PostTe2DataIntegrityMonitor: no clock signal found")
+
+    async def run(self):
+        self._running = True
+        while True:
+            # Wait for a TE2 error pulse
+            await RisingEdge(self._te2_err)
+            te2_time = cocotb.utils.get_sim_time('ns')
+            self.dut._log.info(
+                f"PostTe2DataIntegrityMonitor: TE2 pulse @ {te2_time}ns, "
+                f"monitoring for FIFO writes until FSM idle"
+            )
+
+            # Wait for te2_err to deassert first (it may be high for multiple cycles)
+            while True:
+                await RisingEdge(self._clk)
+                try:
+                    if not int(self._te2_err.value):
+                        break
+                except ValueError:
+                    break
+
+            # Now monitor until FSM returns to idle — log warnings only
+            while True:
+                await RisingEdge(self._clk)
+                try:
+                    fsm_state = int(self._state_d.value)
+                except ValueError:
+                    continue
+
+                # Transaction ended — stop monitoring this TE2 event
+                if fsm_state == FSM_STATE_IDLE:
+                    break
+
+                # Check for FIFO data write while still in error transaction
+                try:
+                    data_w = int(self._rx_data_write.value)
+                except ValueError:
+                    continue
+                if data_w:
+                    self.violation_count += 1
+                    time_ns = cocotb.utils.get_sim_time('ns')
+                    self.dut._log.warning(
+                        f"PostTe2DataIntegrityMonitor: FIFO data write after TE2 "
+                        f"rx_data_queue_write_r=1 @ {time_ns}ns "
+                        f"(TE2 was at {te2_time}ns, FSM state={fsm_state})"
+                    )

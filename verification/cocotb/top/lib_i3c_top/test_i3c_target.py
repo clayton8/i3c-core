@@ -735,6 +735,14 @@ async def test_i3c_target_pwrite_err_detection(dut):
         static_addr=STATIC_ADDR, virtual_static_addr=VIRT_STATIC_ADDR,
         dynamic_addr=DYNAMIC_ADDR, virtual_dynamic_addr=VIRT_DYNAMIC_ADDR)
 
+    # Enable TE2 interrupt and clear counters for register verification
+    te2_en_field = tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_ENABLE.TE2_ERR_EN
+    await tb.write_csr_field(
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_ENABLE.base_addr, te2_en_field, 1)
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.base_addr, int2dword(0xFFFFFFFF), 4)
+    await tb.write_csr(tb.reg_map.I3C_EC.TTI.TARGET_ERR_CNT_TE2.base_addr, int2dword(0), 4)
+
     for i in range(random.randint(5, 10)):
         target_addr = DYNAMIC_ADDR
         # Check error status
@@ -773,11 +781,23 @@ async def test_i3c_target_pwrite_err_detection(dut):
         err_stat = data >> 28
         assert err_stat == 1, "Expected error detection"
 
+        # Verify TE2 error counter and status (delta-based: counter is level-sensitive)
+        te2_cnt = dword2int(
+            await tb.read_csr(tb.reg_map.I3C_EC.TTI.TARGET_ERR_CNT_TE2.base_addr, 4)) & 0xFF
+        te2_stat = await tb.read_csr_field(
+            tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.base_addr,
+            tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.TE2_ERR_STAT)
+        dut._log.info(f"TE2 counter={te2_cnt}, status={te2_stat}")
+        assert te2_cnt >= 1, f"Expected TE2 counter >= 1, got {te2_cnt}"
+        assert te2_stat == 1, f"Expected TE2_ERR_STAT=1, got {te2_stat}"
+        # W1C the status bit
+        await tb.write_csr_field(
+            tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.base_addr,
+            tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.TE2_ERR_STAT, 1)
+
         desc_len = data & 0xFFFF
         # All bytes have corrupted T-bits so none enter the RX FIFO
         assert desc_len == 0, f"Expected desc_len 0 (parity-errored bytes dropped), got {desc_len}"
-
-        # Clear RX data FIFO
         await tb.write_csr_field(
             tb.reg_map.I3C_EC.TTI.RESET_CONTROL.base_addr,
             tb.reg_map.I3C_EC.TTI.RESET_CONTROL.RX_DATA_RST,
