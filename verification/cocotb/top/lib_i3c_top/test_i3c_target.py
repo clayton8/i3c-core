@@ -827,6 +827,7 @@ async def test_i3c_target_pwrite_err_detection(dut):
         await ClockCycles(tb.clk, 100)
 
     await ClockCycles(tb.clk, 100)
+    tb.te_error_monitor.check()
 
 
 @cocotb.test()

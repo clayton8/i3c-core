@@ -63,15 +63,24 @@ async def test_full_tx_desc_write(dut):
     tb = await initialize(dut)
     for _ in range(TRANSACTION_COUNT):
         await tb.write_csr(tb.reg_map.I3C_EC.TTI.TX_DESC_QUEUE_PORT.base_addr, int2dword(random.randint(0, 0xffffffff)), 4)
+    # Bus must not stall — verify it's still responsive
+    data = dword2int(await tb.read_csr(tb.reg_map.I3CBASE.HCI_VERSION.base_addr, 4))
+    assert data == 0x120, f"Bus stalled: HCI_VERSION read returned 0x{data:X} after {TRANSACTION_COUNT} TX_DESC writes"
 
 @cocotb.test()
 async def test_full_tx_data_write(dut):
     tb = await initialize(dut)
     for _ in range(TRANSACTION_COUNT):
         await tb.write_csr(tb.reg_map.I3C_EC.TTI.TX_DATA_PORT.base_addr, int2dword(random.randint(0, 0xffffffff)), 4)
+    # Bus must not stall — verify it's still responsive
+    data = dword2int(await tb.read_csr(tb.reg_map.I3CBASE.HCI_VERSION.base_addr, 4))
+    assert data == 0x120, f"Bus stalled: HCI_VERSION read returned 0x{data:X} after {TRANSACTION_COUNT} TX_DATA writes"
 
 @cocotb.test()
 async def test_full_ibi_write(dut):
     tb = await initialize(dut)
     for _ in range(TRANSACTION_COUNT):
         await tb.write_csr(tb.reg_map.I3C_EC.TTI.IBI_PORT.base_addr, int2dword(random.randint(0, 0xffffffff)), 4)
+    # Bus must not stall — verify it's still responsive
+    data = dword2int(await tb.read_csr(tb.reg_map.I3CBASE.HCI_VERSION.base_addr, 4))
+    assert data == 0x120, f"Bus stalled: HCI_VERSION read returned 0x{data:X} after {TRANSACTION_COUNT} IBI writes"

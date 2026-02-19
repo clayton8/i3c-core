@@ -518,8 +518,8 @@ async def test_virtual_write(dut):
     # is a recovery-only command and the device is not in recovery mode
     protocol_status = (status >> 8) & 0xFF
     assert protocol_status == 0x1, f"Protocol status error: expected 0x1 (Unsupported Command), got 0x{protocol_status:02X}"
-    assert data0 != 0xDDCCBBAA, "INDIRECT_FIFO_CTRL_0 should not have been written (not in recovery mode)"
-    assert data1 != 0x2211, "INDIRECT_FIFO_CTRL_1 should not have been written (not in recovery mode)"
+    assert data0 == 0x0, f"INDIRECT_FIFO_CTRL_0 should remain at reset value 0x0 (not in recovery mode), got 0x{data0:08X}"
+    assert data1 == 0x0, f"INDIRECT_FIFO_CTRL_1 should remain at reset value 0x0 (not in recovery mode), got 0x{data1:08X}"
 
 
 @cocotb.test()
@@ -2494,11 +2494,6 @@ async def test_recovery_flow(dut):
             VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.RECOVERY_STATUS
         )
         assert pec_ok
-        # # Read INDIRECT_FIFO_STATUS
-        # rx_data, pec_ok = await recovery.command_read(VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.INDIRECT_FIFO_STATUS)
-        # assert pec_ok
-        # xfer_size = bytes2int(rx_data[16:19])
-        # logger.info(f"xfer_size: {xfer_size} (words)")
 
         data = [0, 0, 0]
         await recovery.command_write(

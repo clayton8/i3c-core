@@ -226,18 +226,19 @@ class PostTe2DataIntegrityMonitor:
     """After TE2 error, monitors for FIFO data writes in the SAME transaction.
 
     TE2 (parity error on write data) should cause the target to discard
-    the corrupted byte. This monitor logs warnings if data writes are
-    observed after the TE2 pulse until the FSM returns to idle.
+    the corrupted byte. FIFO data writes after TE2 and before the FSM
+    returns to idle are protocol violations — they indicate corrupted data
+    may have reached the queue.
 
-    Note: The RTL may legitimately write data to the queue during cleanup
-    (e.g., flushing pipeline bytes). This monitor provides observability
-    but does not assert — data integrity is verified by the tests themselves.
+    Raises AssertionError immediately on violation, and provides a check()
+    method as a safety net for cases where cocotb swallows the exception.
     """
 
     def __init__(self, dut):
         self.dut = dut
         self._running = False
         self.violation_count = 0
+        self._violations = []
 
         i3c = getattr(dut, "xi3c_wrapper").i3c
         self._te2_err = i3c.te2_err
@@ -274,7 +275,7 @@ class PostTe2DataIntegrityMonitor:
                 except ValueError:
                     break
 
-            # Now monitor until FSM returns to idle — log warnings only
+            # Now monitor until FSM returns to idle
             while True:
                 await RisingEdge(self._clk)
                 try:
@@ -294,8 +295,24 @@ class PostTe2DataIntegrityMonitor:
                 if data_w:
                     self.violation_count += 1
                     time_ns = cocotb.utils.get_sim_time('ns')
-                    self.dut._log.warning(
+                    msg = (
                         f"PostTe2DataIntegrityMonitor: FIFO data write after TE2 "
                         f"rx_data_queue_write_r=1 @ {time_ns}ns "
                         f"(TE2 was at {te2_time}ns, FSM state={fsm_state})"
                     )
+                    self._violations.append(msg)
+                    self.dut._log.error(msg)
+                    raise AssertionError(msg)
+
+    def check(self):
+        """End-of-test check: assert no post-TE2 FIFO writes were observed.
+
+        Safety net in case cocotb swallowed the inline AssertionError.
+        """
+        if self._violations:
+            msg = (
+                f"PostTe2DataIntegrityMonitor: {self.violation_count} "
+                f"violation(s) detected:\n  "
+                + "\n  ".join(self._violations)
+            )
+            raise AssertionError(msg)

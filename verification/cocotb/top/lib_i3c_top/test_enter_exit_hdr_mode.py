@@ -388,6 +388,7 @@ async def test_hdr_timeout_recovery_te0(dut):
     assert te0_stat == 1, f"Expected TE0_ERR_STAT=1, got {te0_stat}"
 
     await verify_target_responsive(i3c_controller, DYNAMIC_ADDR)
+    tb.te_error_monitor.check()
 
 
 @cocotb.test()
@@ -432,6 +433,7 @@ async def test_hdr_timeout_recovery_te1(dut):
     assert te1_stat == 1, f"Expected TE1_ERR_STAT=1, got {te1_stat}"
 
     await verify_target_responsive(i3c_controller, DYNAMIC_ADDR)
+    tb.te_error_monitor.check()
 
 
 @cocotb.test()
@@ -491,6 +493,7 @@ async def test_hdr_timeout_resets_on_line_low(dut):
     await i3c_controller.send_stop()
     i3c_controller.give_bus_control()
     await verify_target_responsive(i3c_controller, DYNAMIC_ADDR)
+    tb.te_error_monitor.check()
 
 
 @cocotb.test()
@@ -512,6 +515,7 @@ async def test_hdr_timeout_disabled_by_default(dut):
     await i3c_controller.send_hdr_exit()
     assert_fsm_idle(dut)
     await verify_target_responsive(i3c_controller, DYNAMIC_ADDR)
+    tb.te_error_monitor.check()
 
 
 @cocotb.test()
@@ -534,6 +538,7 @@ async def test_hdr_timeout_configurable_threshold(dut):
     await i3c_controller.send_stop()
     i3c_controller.give_bus_control()
     await verify_target_responsive(i3c_controller, DYNAMIC_ADDR)
+    tb.te_error_monitor.check()
 
 
 @cocotb.test()
@@ -554,3 +559,4 @@ async def test_hdr_exit_pattern_works_alongside_timer(dut):
     await i3c_controller.send_hdr_exit()
     assert_fsm_idle(dut)
     await verify_target_responsive(i3c_controller, DYNAMIC_ADDR)
+    tb.te_error_monitor.check()

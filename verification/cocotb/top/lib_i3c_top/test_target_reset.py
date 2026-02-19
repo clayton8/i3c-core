@@ -263,8 +263,8 @@ async def test_15_transitions_before_scl(dut):
     # Let's just verify the behavior
     reset_detected = await wait_for_reset_detection(dut, tb, timeout_cycles=500)
 
-    dut._log.info(f"15 transitions result: reset_detected = {reset_detected}")
-    # For this test, we're documenting behavior - it may or may not trigger
+    assert not reset_detected, "Reset should NOT be detected with 15 transitions (extra transitions invalidate pattern)"
+    dut._log.info("PASS: 15 transitions correctly did not trigger reset")
 
 
 @cocotb.test()
@@ -484,8 +484,8 @@ async def test_first_edge_must_be_falling(dut):
     # So first positive edge doesn't count, meaning we only get 13 valid transitions
     no_reset = await check_no_reset_detection(dut, tb)
 
-    dut._log.info(f"First edge polarity test: no_reset = {no_reset}")
-    # Document behavior - first posedge doesn't count, so we effectively get 13 not 14
+    assert no_reset, "Reset should NOT be detected when first edge is rising (only 13 valid transitions counted)"
+    dut._log.info("PASS: First edge polarity requirement verified — rising start prevents reset")
 
 
 @cocotb.test()
@@ -541,8 +541,8 @@ async def test_very_fast_timing_below_spec(dut):
     # This should still be detectable
     reset_detected = await wait_for_reset_detection(dut, tb)
 
-    dut._log.info(f"Fast timing test: reset_detected = {reset_detected}")
-    # Document behavior - may or may not work depending on bus monitor timing
+    assert reset_detected, "Reset should be detected even at fast timing (40ns tDIG_H)"
+    dut._log.info("PASS: Reset detected at fast timing (below spec minimum)")
 
 
 @cocotb.test()

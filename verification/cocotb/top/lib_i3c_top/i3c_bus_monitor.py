@@ -200,12 +200,27 @@ class I3cBusMonitor:
             self._task = None
 
     def _record_violation(self, check_id, message):
-        """Record a violation and raise immediately."""
+        """Record a violation and raise immediately to fail the test."""
         time_ns = cocotb.utils.get_sim_time('ns')
         full_msg = f"[{check_id}] @{time_ns}ns phase={self._phase.name}: {message}"
         self.violations.append(full_msg)
         self.violation_count += 1
         self.log.error(f"I3cBusMonitor VIOLATION: {full_msg}")
+        raise AssertionError(full_msg)
+
+    def check(self):
+        """End-of-test check: assert no violations were recorded.
+
+        Call at end of test as a safety net. The primary mechanism is the
+        immediate AssertionError in _record_violation, but this catches any
+        edge case where a violation was logged but the exception was swallowed.
+        """
+        if self.violations:
+            msg = (
+                f"I3cBusMonitor: {self.violation_count} violation(s) detected:\n"
+                + "\n".join(f"  {v}" for v in self.violations)
+            )
+            raise AssertionError(msg)
 
     def _get_dut_sda_oe(self):
         """Read DUT sda output enable, returns None on X/Z."""

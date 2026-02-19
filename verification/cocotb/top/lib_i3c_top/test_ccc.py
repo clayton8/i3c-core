@@ -2117,6 +2117,7 @@ async def test_ccc_te2_parity(dut):
     responses = await i3c_controller.i3c_ccc_read(
         ccc=CCC.DIRECT.GETBCR, addr=DYNAMIC_ADDR, count=1)
     assert responses[0][0] == True, "Target should ACK after second TE2 recovery"
+    tb.te_error_monitor.check()
 
 
 @cocotb.test()
@@ -2478,6 +2479,7 @@ async def test_ccc_getstatus_sr_abort_clears_protocol_err(dut):
     assert err_final == 0, (
         f"err_o should be 0 after full GETSTATUS clears it, got err_o={err_final}")
     log.info("Step 4 OK: err_o = 0 after full GETSTATUS")
+    tb.te_error_monitor.check()
 
 
 # =============================================================================
@@ -2684,3 +2686,4 @@ async def test_ccc_getstatus_abort_then_chain_setmwl(dut):
     assert err_final == 0, (
         f"err_o should be 0 after full GETSTATUS, got err_o={err_final}")
     log.info("Step 6 OK: err_o = 0 (recovery complete)")
+    tb.te_error_monitor.check()
