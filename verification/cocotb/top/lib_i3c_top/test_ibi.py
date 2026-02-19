@@ -1427,8 +1427,6 @@ async def test_rxfbytearb_collision_blind_drive(dut):
     """Reproduce RxFByteArb collision: DUT processes garbled address byte
     when arbitration_lost_i and bus_rx_rsp_i.done fire on the same cycle.
 
-    BLOCKED BY DESIGN BUG: see verification/bugs/rxfbytearb_collision.md
-
     Uses blind (non-arb-aware) byte driving so the controller forces all 8
     bits of 0x7E/W (0xFC) onto the bus.  The DUT simultaneously drives its
     IBI address 0xB5 ({0x5A,1}).  Open-drain AND produces 0xB4 ({0x5A,0}).
@@ -1495,3 +1493,267 @@ async def test_rxfbytearb_collision_blind_drive(dut):
         "Per I3C spec 5.1.6.2, Target shall discard garbled byte on arb loss. "
         "See verification/bugs/rxfbytearb_collision.md"
     )
+
+
+# =============================================================================
+# Test: IbiFailureRetry from Idle — flush ignored → interrupt flood
+# =============================================================================
+
+@cocotb.test()
+async def test_ibi_flush_from_idle_interrupt_flood(dut):
+    """
+    BLOCKED BY DESIGN BUG: see verification/bugs/ibi_flush_idle_interrupt_flood.md
+
+    Provoke IbiFailureRetry while the target FSM is in Idle.
+
+    i3c_target_fsm.sv:463-469: In Idle, when ibi_pending && !ibi_can_retry,
+    the FSM asserts ibi_byte_flush_o and ibi_status_we_o combinationally
+    every cycle without transitioning out of Idle.  descriptor_ibi.sv only
+    checks ibi_byte_flush_i in WriteMdb and WriteData states (lines 102, 125).
+    If the flush is ignored (descriptor_ibi still in DescLatch/DescPop) or if
+    the descriptor_ibi gets stuck in WriteMdb, ibi_pending stays high and
+    ibi_status_we_o fires every cycle, flooding IBI_DONE interrupts.
+
+    Per spec §5.1.6.2: An IBI disposal shall produce a single status update.
+    ibi_status_we_o must not assert for more than one cycle per IBI disposal.
+    """
+    log = logging.getLogger("test_ibi_flush_idle_flood")
+    i3c_controller, _, tb = await test_setup(dut)
+
+    # retry_num=0 → allows exactly 1 attempt (cnt 0 ≤ retry_num 0)
+    await init_ibi(i3c_controller, tb, retry_num=0)
+
+    # Internal signal handles
+    standby = (
+        dut.xi3c_wrapper
+        .i3c.xcontroller
+        .xcontroller_standby
+        .xcontroller_standby_i3c
+    )
+    fsm = standby.xi3c_target_fsm
+    desc_ibi = standby.u_descriptor_ibi
+
+    # -----------------------------------------------------------------
+    # Phase 1: Exhaust the retry counter with a single NACK
+    # -----------------------------------------------------------------
+    i3c_controller.enable_ibi(False)
+
+    mdb_first = 0xAA
+    data_first = [0x11]
+    await send_ibi(tb, mdb_first, data_first)
+
+    result = await i3c_controller.wait_for_ibi_event()
+    assert result["ack"] is False, "Expected NACK for first IBI"
+
+    # After NACK: counter increments 0→1.  retry_num=0, so 1 > 0 → can't retry.
+    # DUT: IbiReadAck → WaitRestart → (STOP) → Idle.
+    # In Idle: descriptor_ibi is still in WriteMdb (MDB was never consumed).
+    # ibi_pending=1 && !ibi_can_retry → IbiFailureRetry flush.
+    await ClockCycles(tb.clk, 200)
+    await check_ibi_status(tb, 3, "IbiFailureRetry after 1 NACK")
+
+    # Confirm descriptor_ibi returned to Idle after the first flush
+    desc_state = int(desc_ibi.state_q.value)
+    assert desc_state == 0, (
+        f"descriptor_ibi stuck in state {desc_state} after first IbiFailureRetry"
+    )
+
+    # -----------------------------------------------------------------
+    # Phase 2: Queue a FRESH IBI with the retry counter still exhausted.
+    #
+    # descriptor_ibi: Idle → DescLatch → DescPop → WriteMdb (~3 sys clks).
+    # When WriteMdb is reached:  ibi_byte_valid_o=1 → ibi_pending=1.
+    # Target FSM (Idle): ibi_pending && !ibi_can_retry → flush + status_we.
+    #
+    # Bug scenario: descriptor_ibi ignores flush or gets stuck in WriteMdb,
+    # causing ibi_status_we_o to fire every cycle (flood).
+    # -----------------------------------------------------------------
+    mdb_fresh = 0xBB
+    data_fresh = [0x22, 0x33]
+    await send_ibi(tb, mdb_fresh, data_fresh)
+
+    # Monitor ibi_status_we_o for 500 system clock cycles.
+    # Correct behavior: at most 1 pulse (single IbiFailureRetry disposal).
+    status_we_count = 0
+    for _ in range(500):
+        await ClockCycles(tb.clk, 1)
+        val = fsm.ibi_status_we_o.value
+        if int(val) == 1:
+            status_we_count += 1
+    log.info(f"ibi_status_we_o pulse count over 500 cycles: {status_we_count}")
+
+    desc_state = int(desc_ibi.state_q.value)
+    log.info(f"descriptor_ibi state after fresh-IBI flush: {desc_state}")
+
+    # -----------------------------------------------------------------
+    # Phase 3: Assertions — correct spec behavior
+    # -----------------------------------------------------------------
+    assert status_we_count <= 1, (
+        f"DESIGN BUG: ibi_status_we_o asserted {status_we_count} times in 500 "
+        f"cycles (expected ≤ 1).  descriptor_ibi.state_q = {desc_state}. "
+        f"Flush from Idle/IbiFailureRetry was ignored or not handled atomically, "
+        f"causing ibi_status_we_o flood. "
+        f"See verification/bugs/ibi_flush_idle_interrupt_flood.md"
+    )
+
+    assert desc_state == 0, (
+        f"DESIGN BUG: descriptor_ibi stuck in state {desc_state} (expected "
+        f"Idle=0) after second IbiFailureRetry. "
+        f"See verification/bugs/ibi_flush_idle_interrupt_flood.md"
+    )
+
+    # -----------------------------------------------------------------
+    # Phase 4: Clean IBI after counter reset
+    # -----------------------------------------------------------------
+    await tb.write_csr_field(
+        tb.reg_map.I3C_EC.TTI.RESET_CONTROL.base_addr,
+        tb.reg_map.I3C_EC.TTI.RESET_CONTROL.IBI_RETRY_CTR_RST,
+        1,
+    )
+
+    mdb_clean = 0xCC
+    data_clean = [0x44]
+    await send_ibi(tb, mdb_clean, data_clean)
+
+    i3c_controller.enable_ibi(True)
+    response = await with_timeout(i3c_controller.wait_for_ibi(), 20, "us")
+    await verify_ibi_response(dut, response, TARGET_ADDRESS, mdb_clean, data_clean)
+    await check_ibi_status(tb, 0, "clean IBI after counter reset")
+
+    await ClockCycles(tb.clk, 10)
+
+
+# =============================================================================
+# Test: Late ibi_pending in RxFByteArb — shifted IBI address
+# =============================================================================
+
+@cocotb.test()
+async def test_ibi_late_pending_rxfbytearb_shifted_addr(dut):
+    """
+    BLOCKED BY DESIGN BUG: see verification/bugs/ibi_late_pending_shifted_addr.md
+
+    Enqueue an IBI via CSR mid-byte while the target FSM is in RxFByteArb
+    (some bits of the incoming address have already been transferred).
+
+    i3c_target_fsm.sv:573-589: In RxFByteArb, the IBI address is driven when
+    ibi_pending && ibi_can_retry evaluates true — even if the byte reception
+    is already partway through.  ibi_pending is combinational
+    (ibi_byte_valid_i && ibi_enable_i && target_ibi_addr_valid_i), so it can
+    rise at any point during the byte.  When it does rise mid-byte, the DUT
+    starts driving its IBI address ({target_ibi_addr_i, 1'b1}) onto SDA at
+    the wrong bit position, producing a "shifted" collision.
+
+    Per I3C spec §5.1.2.2.1: Address arbitration begins at bit 7 of the
+    Address Header following a START.  Starting arbitration mid-byte is a
+    protocol violation.
+
+    Expected behavior: IBI queued mid-byte should be deferred until the next
+    Bus Available condition.  The in-progress address byte must be received
+    and processed (or discarded) normally.
+    """
+    log = logging.getLogger("test_ibi_late_pending_shifted")
+    i3c_controller, _, tb = await test_setup(dut)
+    await init_ibi(i3c_controller, tb)
+
+    standby = (
+        dut.xi3c_wrapper
+        .i3c.xcontroller
+        .xcontroller_standby
+        .xcontroller_standby_i3c
+    )
+    fsm = standby.xi3c_target_fsm
+
+    # Confirm no IBI is pending at the start
+    await ClockCycles(tb.clk, 10)
+
+    # -----------------------------------------------------------------
+    # Phase 1: Send START + address byte bit-by-bit.
+    # After 4 bits, concurrently queue an IBI via CSR.
+    # -----------------------------------------------------------------
+    addr_byte = 0xFC  # 0x7E/W — reserved byte (CCC broadcast header)
+    mdb = 0xDD
+    ibi_data = [0xEE]
+
+    # Monitor ibi_status_we_o during the address byte to detect if the DUT
+    # attempted an IBI (it shouldn't — IBI wasn't pending at START).
+    status_we_during_addr = 0
+    monitoring = True
+
+    async def monitor_status_we():
+        nonlocal status_we_during_addr
+        while monitoring:
+            await ClockCycles(tb.clk, 1)
+            val = fsm.ibi_status_we_o.value
+            if int(val) == 1:
+                status_we_during_addr += 1
+
+    mon_task = cocotb.start_soon(monitor_status_we())
+
+    await i3c_controller.send_start()
+
+    # Send first 4 bits (MSBs) of the address byte
+    for i in range(4):
+        bit_val = bool(addr_byte & (1 << (7 - i)))
+        await i3c_controller.send_bit(bit_val)
+
+    # Queue IBI via CSR — descriptor_ibi will pipeline to WriteMdb within
+    # ~3 system clocks, causing ibi_pending to rise mid-byte.
+    cocotb.start_soon(send_ibi(tb, mdb, ibi_data))
+
+    # Send remaining 4 bits (LSBs)
+    for i in range(4, 8):
+        bit_val = bool(addr_byte & (1 << (7 - i)))
+        await i3c_controller.send_bit(bit_val)
+
+    # Read ACK/NACK (open-drain)
+    nack = await i3c_controller.recv_bit_od()
+    log.info(f"ACK/NACK after mid-IBI address byte: {'NACK' if nack else 'ACK'}")
+
+    # Stop monitoring
+    monitoring = False
+    await ClockCycles(tb.clk, 2)
+
+    # Send STOP
+    await i3c_controller.send_stop()
+    await Timer(2, "us")
+
+    fsm_state = int(fsm.state_q.value)
+    log.info(
+        f"Target FSM state after STOP: {fsm_state}, "
+        f"ibi_status_we_o pulses during addr: {status_we_during_addr}"
+    )
+
+    # -----------------------------------------------------------------
+    # Phase 2: Assertions — correct spec behavior
+    # -----------------------------------------------------------------
+    #
+    # If the DUT started driving IBI address mid-byte, it would have:
+    #   1. Produced a collision on the bus (shifted IBI bits)
+    #   2. Possibly transitioned to IbiReadAck/IbiSendData (state 21/22)
+    #   3. Possibly set ibi_status_we_o (arb lost / NACK / success)
+    #
+    # Correct behavior: no IBI attempt during the address byte.
+    # The IBI should be deferred to the next Bus Available condition.
+    # The DUT must be in Idle (0) after STOP.
+
+    assert status_we_during_addr == 0 and fsm_state == 0, (
+        f"DESIGN BUG: Late ibi_pending in RxFByteArb caused shifted IBI address. "
+        f"ibi_status_we_o fired {status_we_during_addr} time(s) during the "
+        f"address byte; target FSM state after STOP = {fsm_state} "
+        f"(expected Idle=0, got {'IbiSendData' if fsm_state == 22 else fsm_state}). "
+        f"ibi_pending rose mid-byte in RxFByteArb, causing the DUT to drive its "
+        f"IBI address at the wrong bit position (shifted). "
+        f"Per I3C spec §5.1.2.2.1, arbitration must begin at bit 7 of the "
+        f"Address Header, not mid-byte. "
+        f"See verification/bugs/ibi_late_pending_shifted_addr.md"
+    )
+
+    # -----------------------------------------------------------------
+    # Phase 3: Verify deferred IBI fires correctly on Bus Available
+    # -----------------------------------------------------------------
+    i3c_controller.enable_ibi(True)
+    response = await with_timeout(i3c_controller.wait_for_ibi(), 20, "us")
+    await verify_ibi_response(dut, response, TARGET_ADDRESS, mdb, ibi_data)
+    await check_ibi_status(tb, 0, "deferred IBI success after mid-byte queue")
+
+    await ClockCycles(tb.clk, 10)
