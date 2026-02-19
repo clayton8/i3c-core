@@ -13,15 +13,11 @@
 `ifndef SYNTHESIS
 `ifndef VERILATOR
 
-module fsm_state_tracker
-  import i3c_pkg::*;
-(
-    input logic clk_i,
-    input logic rst_ni
+module fsm_state_tracker (
+    input logic       clk_i,
+    input logic       rst_ni,
+    input logic [7:0] state_q
 );
-
-  // The bind statement places this module inside i3c_target_fsm's scope,
-  // so state_q resolves to the parent's local signal via upward name reference.
 
 `ifdef TRACK_FSM_TRANSITIONS
   logic [7:0] prev_state_trk;
@@ -50,8 +46,9 @@ module fsm_state_tracker
 endmodule : fsm_state_tracker
 
 bind i3c_target_fsm fsm_state_tracker u_fsm_state_tracker (
-    .clk_i  (clk_i),
-    .rst_ni (rst_ni)
+    .clk_i   (clk_i),
+    .rst_ni  (rst_ni),
+    .state_q (state_q)
 );
 
 `endif // VERILATOR

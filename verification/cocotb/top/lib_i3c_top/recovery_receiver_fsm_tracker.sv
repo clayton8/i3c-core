@@ -13,15 +13,11 @@
 `ifndef SYNTHESIS
 `ifndef VERILATOR
 
-module recovery_receiver_fsm_tracker
-  import i3c_pkg::*;
-(
-    input logic clk_i,
-    input logic rst_ni
+module recovery_receiver_fsm_tracker (
+    input logic       clk_i,
+    input logic       rst_ni,
+    input logic [7:0] state_q
 );
-
-  // The bind statement places this module inside recovery_receiver's scope,
-  // so state_q resolves to the parent's local signal via upward name reference.
 
 `ifdef TRACK_FSM_TRANSITIONS
   logic [7:0] prev_state_trk;
@@ -50,8 +46,9 @@ module recovery_receiver_fsm_tracker
 endmodule : recovery_receiver_fsm_tracker
 
 bind recovery_receiver recovery_receiver_fsm_tracker u_recovery_receiver_fsm_tracker (
-    .clk_i  (clk_i),
-    .rst_ni (rst_ni)
+    .clk_i   (clk_i),
+    .rst_ni  (rst_ni),
+    .state_q (state_q)
 );
 
 `endif // VERILATOR

@@ -17,15 +17,15 @@
 `ifndef SYNTHESIS
 `ifndef VERILATOR
 
-module axi_csr_tracker
-  import i3c_pkg::*;
-(
-    input logic clk_i,
-    input logic rst_ni
+module axi_csr_tracker (
+    input logic        clk_i,
+    input logic        rst_ni,
+    input logic        s_cpuif_wr_ack,
+    input logic        s_cpuif_rd_ack,
+    input logic [11:0] s_cpuif_addr,
+    input logic [31:0] s_cpuif_wr_data,
+    input logic [31:0] s_cpuif_rd_data
 );
-
-  // The bind statement places this module inside axi_adapter's scope.
-  // s_cpuif_* signals resolve via upward name reference.
 
 `ifdef TRACK_FSM_TRANSITIONS
 
@@ -226,8 +226,13 @@ module axi_csr_tracker
 endmodule : axi_csr_tracker
 
 bind axi_adapter axi_csr_tracker u_axi_csr_tracker (
-    .clk_i  (clk_i),
-    .rst_ni (rst_ni)
+    .clk_i          (clk_i),
+    .rst_ni         (rst_ni),
+    .s_cpuif_wr_ack (s_cpuif_wr_ack),
+    .s_cpuif_rd_ack (s_cpuif_rd_ack),
+    .s_cpuif_addr   (s_cpuif_addr),
+    .s_cpuif_wr_data(s_cpuif_wr_data),
+    .s_cpuif_rd_data(s_cpuif_rd_data)
 );
 
 `endif // VERILATOR
