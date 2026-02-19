@@ -461,7 +461,16 @@ async def test_i3c_target_ibi(dut):
     # Check LAST_IBI_STATUS
     last_ibi_status = await tb.read_csr_field(tb.reg_map.I3C_EC.TTI.STATUS.base_addr,
                                               tb.reg_map.I3C_EC.TTI.STATUS.LAST_IBI_STATUS)
+<<<<<<< HEAD
     assert last_ibi_status == 0, f"LAST_IBI_STATUS: expected 0, got {last_ibi_status}"
+=======
+    expected_status = 0
+    if last_ibi_status != expected_status:
+        dut._log.critical(
+            f"Incorrect IBI status, expected {expected_status}, got {last_ibi_status}"
+        )
+        result = False
+>>>>>>> d919b3b9256725f8e3554fbca82283c74c360eee
 
     await ClockCycles(tb.clk, 50)
 
@@ -491,9 +500,18 @@ async def test_i3c_target_ibi(dut):
         # Check LAST_IBI_STATUS
         last_ibi_status = await tb.read_csr_field(tb.reg_map.I3C_EC.TTI.STATUS.base_addr,
                                                   tb.reg_map.I3C_EC.TTI.STATUS.LAST_IBI_STATUS)
+<<<<<<< HEAD
         assert last_ibi_status == 0, (
             f"LAST_IBI_STATUS (len={lnt}): expected 0, got {last_ibi_status}"
         )
+=======
+        expected_status = 0
+        if last_ibi_status != expected_status:
+            dut._log.critical(
+                f"Incorrect IBI status, expected {expected_status}, got {last_ibi_status}"
+            )
+            result = False
+>>>>>>> d919b3b9256725f8e3554fbca82283c74c360eee
 
         await ClockCycles(tb.clk, 50)
 
@@ -535,12 +553,24 @@ async def test_i3c_target_ibi_retry(dut):
     # transmission
     await Timer(10, "us")
 
+<<<<<<< HEAD
     # T7: Verify the IBI was actually attempted and NACKed (not stale status)
     last_ibi_status = await tb.read_csr_field(tb.reg_map.I3C_EC.TTI.STATUS.base_addr,
                                               tb.reg_map.I3C_EC.TTI.STATUS.LAST_IBI_STATUS)
     assert last_ibi_status == 1, (
         f"LAST_IBI_STATUS after NACK: expected 1 (IbiFailureNack), got {last_ibi_status}"
     )
+=======
+    # Check LAST_IBI_STATUS
+    last_ibi_status = await tb.read_csr_field(tb.reg_map.I3C_EC.TTI.STATUS.base_addr,
+                                              tb.reg_map.I3C_EC.TTI.STATUS.LAST_IBI_STATUS)
+    expected_status = 1
+    if last_ibi_status != expected_status:
+        dut._log.critical(
+            f"Incorrect IBI status, expected {expected_status}, got {last_ibi_status}"
+        )
+        result = False
+>>>>>>> d919b3b9256725f8e3554fbca82283c74c360eee
 
     # Re-enable IBI ACK-ing
     i3c_controller.enable_ibi(True)
@@ -556,9 +586,18 @@ async def test_i3c_target_ibi_retry(dut):
     # Check LAST_IBI_STATUS
     last_ibi_status = await tb.read_csr_field(tb.reg_map.I3C_EC.TTI.STATUS.base_addr,
                                               tb.reg_map.I3C_EC.TTI.STATUS.LAST_IBI_STATUS)
+<<<<<<< HEAD
     assert last_ibi_status == 0, (
         f"LAST_IBI_STATUS after success: expected 0, got {last_ibi_status}"
     )
+=======
+    expected_status = 0
+    if last_ibi_status != expected_status:
+        dut._log.critical(
+            f"Incorrect IBI status, expected {expected_status}, got {last_ibi_status}"
+        )
+        result = False
+>>>>>>> d919b3b9256725f8e3554fbca82283c74c360eee
 
     # Dummy wait
     await ClockCycles(tb.clk, 10)
