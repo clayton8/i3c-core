@@ -3,6 +3,7 @@
 TOPLEVEL_LANG    = verilog
 SIM             ?= verilator
 WAVES           ?= 1
+TRACK_FSM       ?= 1
 
 # Paths
 CURDIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
@@ -70,6 +71,10 @@ ifeq ($(SIM), vcs)
     SIM_ARGS += +fsdbfile+dump.fsdb +fsdb+all=on +fsdb+mda=on
     EXTRA_ARGS += +vcs+lic+wait
 
+    # Opt-in FSM state transition logging: make ... TRACK_FSM=1
+    ifneq ($(TRACK_FSM),)
+        COMPILE_ARGS += +define+TRACK_FSM_TRANSITIONS
+    endif
 
     ifneq ($(COVERAGE_TYPE),)
         EXTRA_ARGS += -cm line+cond+fsm+tgl+branch -lca
