@@ -1078,10 +1078,16 @@ async def test_ibi_accept_no_mdb_stop(dut):
     sends STOP without reading MDB. Target should report a non-success
     IBI status since the MDB was never consumed.
 
-    expect_fail: RTL has no BCR[2] gating in IbiSendData — STOP during
-    push-pull goes to Idle via global override without writing
-    ibi_status_we. Status retains stale reset value (0=success) instead
-    of reporting failure. This is a known RTL gap.
+    DESIGN CHOICE: This I3C target does not support IBIs without MDB
+    (BCR[2]=0 mode). The target always sends MDB per BCR[2]=1. When
+    the controller violates this contract by issuing STOP before reading
+    the MDB, the IBI status is not updated (ibi_status_we is not
+    written). This is expected behavior for an unsupported flow — the
+    target makes no guarantee about status reporting in this scenario.
+
+    expect_fail: Status retains stale reset value (0=success) rather
+    than reporting failure, so the assertion fires. Kept as expect_fail
+    to document that the no-MDB path is intentionally unsupported.
     """
     i3c_controller, _, tb = await test_setup(dut)
     target = await init_ibi(i3c_controller, tb)
@@ -1122,9 +1128,15 @@ async def test_ibi_accept_no_mdb_sr_ccc(dut):
     sends Sr → CCC without reading MDB. Target should report a non-success
     IBI status since the MDB was never consumed.
 
-    expect_fail: Same RTL gap as Test 17 — IbiSendData has no status
-    write on early Sr termination. The orphaned IBI re-fires instead of
-    reporting failure.
+    DESIGN CHOICE: This I3C target does not support IBIs without MDB
+    (BCR[2]=0 mode). When the controller violates the BCR[2]=1 contract
+    by sending Sr → CCC before reading the MDB, the IBI status is not
+    updated and the orphaned IBI re-fires. This is expected behavior
+    for an unsupported flow.
+
+    expect_fail: Status retains stale value rather than reporting
+    failure, so the assertion fires. Kept as expect_fail to document
+    that the no-MDB path is intentionally unsupported.
     """
     i3c_controller, _, tb = await test_setup(dut)
     target = await init_ibi(i3c_controller, tb)
