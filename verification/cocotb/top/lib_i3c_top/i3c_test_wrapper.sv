@@ -1,12 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 `include "i3c_defines.svh"
 
-
-`define VERILATOR
-/*
-    This module is used only for simulation with Verilator
-*/
-
 module i3c_test_wrapper #(
 `ifdef I3C_USE_AHB
     parameter int unsigned AhbDataWidth = `AHB_DATA_WIDTH,

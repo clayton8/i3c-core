@@ -29,6 +29,11 @@ module fsm_state_tracker
 
   initial begin
     fsm_log_fd = $fopen("fsm_transitions.log", "w");
+    if (fsm_log_fd == 0) begin
+      $display("ERROR [fsm_state_tracker] $fopen failed for fsm_transitions.log");
+    end else begin
+      $display("INFO [fsm_state_tracker] Opened fsm_transitions.log (fd=%0d)", fsm_log_fd);
+    end
     $fwrite(fsm_log_fd, "# i3c_target_fsm state transition log\n");
     $fwrite(fsm_log_fd, "# timestamp old_state new_state\n");
   end
