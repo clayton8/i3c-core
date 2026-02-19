@@ -338,7 +338,9 @@ module i3c_target_fsm import i3c_pkg::*; (
 
 
   // RX FIFO valid before overflow gating: byte complete with no protocol error.
-  assign rx_fifo_wvalid_raw = (state_q == RxPWriteTbit) && (state_d != RxPWriteTbit) &&
+  // Gate with bus_rx_rsp_i.done so that STOP/Sr during the T-bit phase does NOT
+  // push an unchecked byte (the T-bit was never received, parity was never verified).
+  assign rx_fifo_wvalid_raw = (state_q == RxPWriteTbit) && bus_rx_rsp_i.done &&
                               !(te2_err_priv_wr || parity_err);
 
   // Overflow detection using rx_fifo_wvalid_raw to detect overflow on the same
@@ -379,12 +381,18 @@ module i3c_target_fsm import i3c_pkg::*; (
       end
     end
   end
-  // FSM on the last T bit will transition to
-  // RxPWriteData because the Sr/Stop doesn't happen until after we complete
-  // the T bit and are waiting for the next set of data in RxPWriteData. In
-  // this state if we get a repeat start we transition into RxFByte if we get
-  // a stop we transition to Idle. 
-  assign rx_last_byte_o = (state_q == RxPWriteData) && (state_d inside {RxFByte, Idle});
+  // Normal path: FSM completes the T-bit in RxPWriteTbit, transitions to
+  // RxPWriteData, and waits for the next byte. Sr/Stop arrives in RxPWriteData,
+  // setting state_d to RxFByte or Idle respectively.
+  //
+  // Abort path: If Sr/Stop arrives while still in RxPWriteTbit (before the T-bit
+  // completes), the incomplete byte is NOT pushed (gated by bus_rx_rsp_i.done
+  // above), but we still need a descriptor for the previously completed bytes.
+  // Including RxPWriteTbit in the state_q check covers this abort case. The
+  // normal T-bit completion (state_d = RxPWriteData) is excluded by the
+  // state_d inside {RxFByte, Idle} check, so no spurious descriptor is generated.
+  assign rx_last_byte_o = (state_q inside {RxPWriteData, RxPWriteTbit}) &&
+                          (state_d inside {RxFByte, Idle});
 
   // Logic for latching CCC code
   always_ff @(posedge clk_i or negedge rst_ni) begin : latch_ccc_data
