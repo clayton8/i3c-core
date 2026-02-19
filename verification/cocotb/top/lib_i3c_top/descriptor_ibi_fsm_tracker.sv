@@ -40,6 +40,11 @@ module descriptor_ibi_fsm_tracker (
 
   initial begin
     fsm_log_fd = $fopen("descriptor_ibi_fsm_transitions.log", "w");
+    if (fsm_log_fd == 0) begin
+      $display("ERROR [descriptor_ibi_fsm_tracker] $fopen failed");
+    end else begin
+      $display("INFO [descriptor_ibi_fsm_tracker] Opened descriptor_ibi_fsm_transitions.log (fd=%0d)", fsm_log_fd);
+    end
     $fwrite(fsm_log_fd, "# descriptor_ibi state transition log\n");
     $fwrite(fsm_log_fd, "# timestamp | old_state | new_state\n");
   end

@@ -47,6 +47,11 @@ module ccc_entdaa_fsm_tracker (
 
   initial begin
     fsm_log_fd = $fopen("ccc_entdaa_fsm_transitions.log", "w");
+    if (fsm_log_fd == 0) begin
+      $display("ERROR [ccc_entdaa_fsm_tracker] $fopen failed");
+    end else begin
+      $display("INFO [ccc_entdaa_fsm_tracker] Opened ccc_entdaa_fsm_transitions.log (fd=%0d)", fsm_log_fd);
+    end
     $fwrite(fsm_log_fd, "# ccc_entdaa state transition log\n");
     $fwrite(fsm_log_fd, "# timestamp | old_state | new_state\n");
   end
