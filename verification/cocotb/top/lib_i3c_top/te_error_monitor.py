@@ -230,6 +230,13 @@ class PostTe2DataIntegrityMonitor:
     returns to idle are protocol violations — they indicate corrupted data
     may have reached the queue.
 
+    Uses clock-edge sampling (not RisingEdge on te2_err) to match RTL
+    behavior: the te2_err_priv_wr signal can glitch for one delta cycle
+    during the RxPWriteData→RxPWriteTbit FSM transition when the stale
+    byte-done coincides with the new state_q.  All RTL consumers of
+    te2_err are registered, so the glitch is harmless in hardware.
+    Sampling at the clock edge filters these transient glitches.
+
     Raises AssertionError immediately on violation, and provides a check()
     method as a safety net for cases where cocotb swallows the exception.
     """
@@ -257,52 +264,66 @@ class PostTe2DataIntegrityMonitor:
 
     async def run(self):
         self._running = True
+        te2_prev = 0
         while True:
-            # Wait for a TE2 error pulse
-            await RisingEdge(self._te2_err)
-            te2_time = cocotb.utils.get_sim_time('ns')
-            self.dut._log.info(
-                f"PostTe2DataIntegrityMonitor: TE2 pulse @ {te2_time}ns, "
-                f"monitoring for FIFO writes until FSM idle"
-            )
+            await RisingEdge(self._clk)
 
-            # Wait for te2_err to deassert first (it may be high for multiple cycles)
-            while True:
-                await RisingEdge(self._clk)
-                try:
-                    if not int(self._te2_err.value):
+            # Sample te2_err at clock edge (like RTL interrupt module)
+            try:
+                te2_curr = int(self._te2_err.value)
+            except ValueError:
+                te2_prev = 0
+                continue
+
+            if te2_curr and not te2_prev:
+                # Registered rising edge detected — real TE2 event
+                te2_time = cocotb.utils.get_sim_time('ns')
+                self.dut._log.info(
+                    f"PostTe2DataIntegrityMonitor: TE2 pulse @ {te2_time}ns, "
+                    f"monitoring for FIFO writes until FSM idle"
+                )
+
+                # Wait for te2_err to deassert
+                while True:
+                    await RisingEdge(self._clk)
+                    try:
+                        if not int(self._te2_err.value):
+                            break
+                    except ValueError:
                         break
-                except ValueError:
-                    break
 
-            # Now monitor until FSM returns to idle
-            while True:
-                await RisingEdge(self._clk)
-                try:
-                    fsm_state = int(self._state_d.value)
-                except ValueError:
-                    continue
+                # Monitor until FSM returns to idle
+                while True:
+                    await RisingEdge(self._clk)
+                    try:
+                        fsm_state = int(self._state_d.value)
+                    except ValueError:
+                        continue
 
-                # Transaction ended — stop monitoring this TE2 event
-                if fsm_state == FSM_STATE_IDLE:
-                    break
+                    if fsm_state == FSM_STATE_IDLE:
+                        break
 
-                # Check for FIFO data write while still in error transaction
-                try:
-                    data_w = int(self._rx_data_write.value)
-                except ValueError:
-                    continue
-                if data_w:
-                    self.violation_count += 1
-                    time_ns = cocotb.utils.get_sim_time('ns')
-                    msg = (
-                        f"PostTe2DataIntegrityMonitor: FIFO data write after TE2 "
-                        f"rx_data_queue_write_r=1 @ {time_ns}ns "
-                        f"(TE2 was at {te2_time}ns, FSM state={fsm_state})"
-                    )
-                    self._violations.append(msg)
-                    self.dut._log.error(msg)
-                    raise AssertionError(msg)
+                    try:
+                        data_w = int(self._rx_data_write.value)
+                    except ValueError:
+                        continue
+                    if data_w:
+                        self.violation_count += 1
+                        time_ns = cocotb.utils.get_sim_time('ns')
+                        msg = (
+                            f"PostTe2DataIntegrityMonitor: FIFO data write after TE2 "
+                            f"rx_data_queue_write_r=1 @ {time_ns}ns "
+                            f"(TE2 was at {te2_time}ns, FSM state={fsm_state})"
+                        )
+                        self._violations.append(msg)
+                        self.dut._log.error(msg)
+                        raise AssertionError(msg)
+
+                # Reset for next detection
+                te2_prev = 0
+                continue
+
+            te2_prev = te2_curr
 
     def check(self):
         """End-of-test check: assert no post-TE2 FIFO writes were observed.

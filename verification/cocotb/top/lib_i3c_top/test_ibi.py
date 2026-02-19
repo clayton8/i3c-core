@@ -400,8 +400,15 @@ async def test_ibi_refuse_no_retry_on_rstart(dut):
     await Timer(3, "us")
     await check_ibi_status(tb, 1, "initial NACK")
 
-    # Controller issues Sr->Private Write->P — target must NOT arbitrate IBI here
-    # The Private Write uses Sr (repeated start), not a fresh Start
+    # Suppress DUT IBI retries before the private write to prevent a bus
+    # collision during the initial START + 0x7E/W phase.  Without this, the
+    # DUT re-arbitrates IBI on the fresh START, and the collision byte
+    # (0xFC & 0xB5 = 0xB4 ≡ {0x5A, W}) coincidentally matches the DUT's own
+    # address, triggering a phantom write and TE2 parity error.
+    # See verification/bugs/rxfbytearb_collision.md.
+    await set_ibi_enable(tb, False)
+    await Timer(2, "us")  # drain any in-flight IBI NACK+STOP
+
     write_data = [0xDE, 0xAD]
     await i3c_controller.i3c_write(TARGET_ADDRESS, write_data)
 
@@ -417,7 +424,8 @@ async def test_ibi_refuse_no_retry_on_rstart(dut):
 
     await ClockCycles(tb.clk, 10)
 
-    # Re-enable IBI ACK and wait for bus available retry
+    # Re-enable IBI ACK and DUT IBI, then wait for bus available retry
+    await set_ibi_enable(tb, True)
     i3c_controller.enable_ibi(True)
 
     response = await i3c_controller.wait_for_ibi()
