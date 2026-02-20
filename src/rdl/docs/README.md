@@ -2564,14 +2564,14 @@ STBY_CR_INTR_SIGNAL_ENABLE</p>
 
 | Bits|      Identifier     |Access|Reset|                  Name                  |
 |-----|---------------------|------|-----|----------------------------------------|
-| 7:0 |      RST_ACTION     |   r  | 0x0 |     Defining Byte of the RSTACT CCC    |
+| 7:0 |      RST_ACTION     |   r  | 0x1 |     Defining Byte of the RSTACT CCC    |
 | 15:8|RESET_TIME_PERIPHERAL|  rw  | 0x0 |        Time to Reset Peripheral        |
 |23:16|  RESET_TIME_TARGET  |  rw  | 0x0 |          Time to Reset Target          |
 |  31 |  RESET_DYNAMIC_ADDR |  rw  | 0x1 |Reset Dynamic Address after Target Reset|
 
 #### RST_ACTION field
 
-<p>Contains the Defining Byte received with the last Direct SET CCC sent by the Active Controller.</p>
+<p>Contains the Defining Byte received with the last Direct SET CCC sent by the Active Controller. If not armed (START or RSTACT with unsupported defining byte) set to spec default 0x1.</p>
 
 #### RESET_TIME_PERIPHERAL field
 

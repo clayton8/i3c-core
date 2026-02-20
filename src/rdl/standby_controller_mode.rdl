@@ -751,11 +751,10 @@ regfile StandbyControllerModeRegisters#(
         } RESET_TIME_PERIPHERAL[15:8];
         field {
             name = "Defining Byte of the RSTACT CCC";
-            desc = "Contains the Defining Byte received with the last Direct SET CCC sent by the Active Controller.";
+            desc = "Contains the Defining Byte received with the last Direct SET CCC sent by the Active Controller. If not armed (START or RSTACT with unsupported defining byte) set to spec default 0x1.";
             hw   = rw;
-            we   = true;
             sw   = r;
-            reset = 1'b0;
+            reset = 1'b1;
         } RST_ACTION[7:0];
     } STBY_CR_CCC_CONFIG_RSTACT_PARAMS;
     reg {
