@@ -175,11 +175,8 @@ async def test_ec_tti_csr_access(dut):
         "RX_DESC_QUEUE_PORT",
         "RX_DATA_PORT",
         "QUEUE_THLD_CTRL",
-<<<<<<< HEAD
         # PENDING_INTERRUPT field is HW-driven only (no we=true in RDL);
         # SW writes have no effect, so generic write-readback fails
-=======
->>>>>>> d919b3b9256725f8e3554fbca82283c74c360eee
         "INTERRUPT_STATUS",
     ]
     tb = await initialize(dut)
