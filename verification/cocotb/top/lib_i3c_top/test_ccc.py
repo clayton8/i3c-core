@@ -17,22 +17,16 @@ from cocotb.handle import Force, Release
 from cocotb.triggers import ClockCycles, RisingEdge, Event
 from cocotb.regression import TestFactory
 
-TGT_ADR = 0x5A
+from common import VALID_I3C_ADDRESSES, log_seed
 
-VALID_I3C_ADDRESSES = (
-    [i for i in range(0x03, 0x3E)]
-    + [i for i in range(0x3F, 0x5E)]
-    + [i for i in range(0x5F, 0x6E)]
-    + [i for i in range(0x6F, 0x76)]
-    + [i for i in range(0x77, 0x7A)]
-    + [0x7B, 0x7D]
-)
+TGT_ADR = 0x5A
 
 async def test_setup(dut, static_addr=0x5A, virtual_static_addr=0x5B, dynamic_addr=None, virtual_dynamic_addr=None):
     """
     Sets up controller, target models and top-level core interface
     """
     cocotb.log.setLevel(logging.DEBUG)
+    log_seed(dut)
 
     i3c_controller = I3cController(
         sda_i=dut.bus_sda,
@@ -108,7 +102,9 @@ async def test_ccc_getstatus(dut):
     responses = await i3c_controller.i3c_ccc_read(ccc=CCC.DIRECT.GETSTATUS, addr=DYNAMIC_ADDR, count=2)
     status = int.from_bytes(responses[0][1], byteorder="big", signed=False)
     ibi_pend_mask = 0x0100
-    assert((status & ibi_pend_mask) == ibi_pend_mask)
+    assert (status & ibi_pend_mask) == ibi_pend_mask, f"GETSTATUS PENDING_INTERRUPT not set: status=0x{status:04X}"
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -192,6 +188,8 @@ async def test_ccc_setdasa(dut):
     ), "Unexpected VIRT DYNAMIC ADDRESS read from the CSR"
     assert virt_dynamic_address_valid == 1, "New VIRT DYNAMIC ADDRESS is not set as valid"
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_ccc_setdasa_nack(dut):
@@ -212,26 +210,28 @@ async def test_ccc_setdasa_nack(dut):
         ccc=CCC.DIRECT.SETDASA, directed_data=[(STATIC_ADDR, [DYNAMIC_ADDR << 1])], stop=False
     )
     # check ACK
-    assert ack[0] == True
+    assert ack[0] == True, f"SETDASA NACK for STATIC_ADDR=0x{STATIC_ADDR:02X}"
 
     # try to send SETDASA again (should be NACKed)
     ack = await i3c_controller.i3c_ccc_write(
         ccc=CCC.DIRECT.SETDASA, directed_data=[(STATIC_ADDR, [DYNAMIC_ADDR << 1])], stop=False
     )
-    assert ack[0] == False
+    assert ack[0] == False, f"SETDASA unexpected ACK for already-assigned STATIC_ADDR=0x{STATIC_ADDR:02X}"
 
     # set virtual device dynamic address
     ack = await i3c_controller.i3c_ccc_write(
         ccc=CCC.DIRECT.SETDASA, directed_data=[(VIRT_STATIC_ADDR, [VIRT_DYNAMIC_ADDR << 1])]
     )
     # check ACK
-    assert ack[0] == True
+    assert ack[0] == True, f"SETDASA NACK for VIRT_STATIC_ADDR=0x{VIRT_STATIC_ADDR:02X}"
 
     # try to send SETDASA again (should be NACKed)
     ack = await i3c_controller.i3c_ccc_write(
         ccc=CCC.DIRECT.SETDASA, directed_data=[(VIRT_STATIC_ADDR, [VIRT_DYNAMIC_ADDR << 1])]
     )
-    assert ack[0] == False
+    assert ack[0] == False, f"SETDASA unexpected ACK for already-assigned VIRT_STATIC_ADDR=0x{VIRT_STATIC_ADDR:02X}"
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -302,6 +302,8 @@ async def test_ccc_setnewda(dut):
         virt_dynamic_address == NEW_VIRT_DYNAMIC_ADDR
     ), "Unexpected VIRT DYNAMIC ADDRESS read from the CSR"
     assert virt_dynamic_address_valid == 1, "New VIRT DYNAMIC ADDRESS is not set as valid"
+
+    await tb.teardown()
 
 @cocotb.test()
 async def test_ccc_rstdaa(dut):
@@ -381,6 +383,8 @@ async def test_ccc_rstdaa(dut):
     assert virt_dynamic_address == 0, "Unexpected DYNAMIC ADDRESS read from the CSR"
     assert virt_dynamic_address_valid == 0, "New DYNAMIC ADDRESS is not set as valid"
 
+    await tb.teardown()
+
 @cocotb.test()
 async def test_ccc_getbcr(dut):
 
@@ -411,7 +415,9 @@ async def test_ccc_getbcr(dut):
         bcr = responses[0][1]
         bcr_value = int.from_bytes(bcr, byteorder="big", signed=False)
         _BCR_VALUE = (_BCR_FIXED << 5) | _bcr_var
-        assert _BCR_VALUE == bcr_value
+        assert _BCR_VALUE == bcr_value, f"BCR mismatch: exp=0x{_BCR_VALUE:02X} got=0x{bcr_value:02X}"
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -442,7 +448,9 @@ async def test_ccc_getdcr(dut):
         responses = await i3c_controller.i3c_ccc_read(ccc=command, addr=_tgt_adr, count=1)
         dcr = responses[0][1]
         dcr_value = int.from_bytes(dcr, byteorder="big", signed=False)
-        assert _dcr_value == dcr_value
+        assert _dcr_value == dcr_value, f"DCR mismatch: exp=0x{_dcr_value:02X} got=0x{dcr_value:02X}"
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -468,6 +476,8 @@ async def test_ccc_getmwl(dut):
         assert mwl == _MWL_VALUE, \
             f"GETMWL from 0x{addr:02X}: expected 0x{_MWL_VALUE:04X}, got 0x{mwl:04X}"
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_ccc_getmrl(dut):
@@ -488,16 +498,18 @@ async def test_ccc_getmrl(dut):
     responses = await i3c_controller.i3c_ccc_read(ccc=command, addr=DYNAMIC_ADDR, count=3)
     [mrl_msb, mrl_lsb, ibi_payload_size] = responses[0][1]
     mrl = (mrl_msb << 8) | mrl_lsb
-    assert mrl == _MRL_VALUE
-    assert ibi_payload_size == _IBI_PAYLOAD_SIZE
+    assert mrl == _MRL_VALUE, f"GETMRL mismatch: exp={_MRL_VALUE} got={mrl}"
+    assert ibi_payload_size == _IBI_PAYLOAD_SIZE, f"IBI payload size mismatch: exp={_IBI_PAYLOAD_SIZE} got={ibi_payload_size}"
 
     # Virtual target: same MRL but IBIL=0 (no IBI support for VT)
     responses = await i3c_controller.i3c_ccc_read(ccc=command, addr=VIRT_DYNAMIC_ADDR, count=3)
     [mrl_msb, mrl_lsb, ibi_payload_size] = responses[0][1]
     mrl = (mrl_msb << 8) | mrl_lsb
-    assert mrl == _MRL_VALUE
+    assert mrl == _MRL_VALUE, f"GETMRL post-reset mismatch: exp={_MRL_VALUE} got={mrl}"
     assert ibi_payload_size == 0x00, \
         f"GETMRL VT IBIL: expected 0x00, got 0x{ibi_payload_size:02X}"
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -542,6 +554,8 @@ async def test_ccc_setaasa(dut):
     )
     assert virt_dynamic_address == VIRT_STATIC_ADDR, "Unexpected VIRT DYNAMIC ADDRESS read from the CSR"
     assert virt_dynamic_address_valid == 1, "New VIRT DYNAMIC ADDRESS is not set as valid"
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -594,6 +608,8 @@ async def test_ccc_setaasa_ignore(dut):
     assert virt_dynamic_address == VIRT_DYNAMIC_ADDR, "Unexpected VIRT DYNAMIC ADDRESS read from the CSR"
     assert virt_dynamic_address_valid == 1, "New VIRT DYNAMIC ADDRESS is not set as valid"
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_ccc_getpid(dut):
@@ -638,8 +654,10 @@ async def test_ccc_getpid(dut):
 
         # PID_HI has bit 0 always stuck at 0
         # Test can only setup 15 upper bits
-        assert pid_hi == _pid_hi * 2
-        assert pid_lo == _pid_lo
+        assert pid_hi == _pid_hi * 2, f"PID_HI mismatch: exp={_pid_hi * 2} got={pid_hi}"
+        assert pid_lo == _pid_lo, f"PID_LO mismatch: exp={_pid_lo} got={pid_lo}"
+
+    await tb.teardown()
 
 
 async def read_target_events(tb):
@@ -671,7 +689,7 @@ async def test_ccc_enec_disec_direct(dut):
 
     # Read default values
     event_en = await read_target_events(tb)
-    assert event_en == (1, 0, 1)
+    assert event_en == (1, 0, 1), f"Default ENEC state mismatch: exp=(1,0,1) got={event_en}"
 
     # Test each target with multiple bit patterns
     for tgt_addr in [DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR]:
@@ -723,6 +741,8 @@ async def test_ccc_enec_disec_direct(dut):
         ccc=command_enec, directed_data=[(DYNAMIC_ADDR, [0x0B])]
     )
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_ccc_enec_disec_bcast(dut):
@@ -737,21 +757,23 @@ async def test_ccc_enec_disec_bcast(dut):
 
     # Read default values
     event_en = await read_target_events(tb)
-    assert event_en == (1, 0, 1)
+    assert event_en == (1, 0, 1), f"Default ENEC state mismatch: exp=(1,0,1) got={event_en}"
 
     # Disable all target events
     await i3c_controller.i3c_ccc_write(ccc=command_disec, broadcast_data=[_EVENT_TOGGLE_BYTE])
 
     # Read disabled values
     event_en = await read_target_events(tb)
-    assert event_en == (0, 0, 0)
+    assert event_en == (0, 0, 0), f"DISEC state mismatch: exp=(0,0,0) got={event_en}"
 
     # Enable all target events
     await i3c_controller.i3c_ccc_write(ccc=command_enec, broadcast_data=[_EVENT_TOGGLE_BYTE])
 
     # Read enabled values
     event_en = await read_target_events(tb)
-    assert event_en == (1, 1, 1)
+    assert event_en == (1, 1, 1), f"ENEC state mismatch: exp=(1,1,1) got={event_en}"
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -798,6 +820,8 @@ async def test_ccc_setmwl_direct(dut):
             got_mwl = (got_msb << 8) | got_lsb
             assert got_mwl == mwl_val, \
                 f"GETMWL from 0x{read_addr:02X}: expected 0x{mwl_val:04X}, got 0x{got_mwl:04X}"
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -862,6 +886,8 @@ async def test_ccc_setmrl_direct(dut):
         assert got_ibil_vt == 0x00, \
             f"GETMRL VT IBIL: expected 0x00, got 0x{got_ibil_vt:02X}"
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_ccc_setmwl_bcast(dut):
@@ -879,7 +905,7 @@ async def test_ccc_setmwl_bcast(dut):
     # Check if MWL got written
     sig = dut.xi3c_wrapper.i3c.xcontroller.xconfiguration.get_mwl_o.value
     mwl = (mwl_msb << 8) | mwl_lsb
-    assert mwl == int(sig)
+    assert mwl == int(sig), f"SETMWL register mismatch: CCC sent={mwl} RTL={int(sig)}"
 
     # CP19: Verify FW-readable STBY_CR_MWL register (broadcast path)
     await ClockCycles(tb.clk, 10)
@@ -890,6 +916,8 @@ async def test_ccc_setmwl_bcast(dut):
     assert mwl_csr == mwl, (
         f"STBY_CR_MWL.MWL mismatch: expected 0x{mwl:04X}, got 0x{mwl_csr:04X}"
     )
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -909,7 +937,7 @@ async def test_ccc_setmrl_bcast(dut):
     # Check if MRL got written
     sig = dut.xi3c_wrapper.i3c.xcontroller.xconfiguration.get_mrl_o.value
     mrl = (mrl_msb << 8) | mrl_lsb
-    assert mrl == int(sig)
+    assert mrl == int(sig), f"SETMRL register mismatch: CCC sent={mrl} RTL={int(sig)}"
 
     # CP20: Verify FW-readable STBY_CR_MRL.MRL register (broadcast path)
     await ClockCycles(tb.clk, 10)
@@ -929,6 +957,8 @@ async def test_ccc_setmrl_bcast(dut):
     assert ibil_csr == ibil, (
         f"STBY_CR_MRL.IBIL mismatch: expected 0x{ibil:02X}, got 0x{ibil_csr:02X}"
     )
+
+    await tb.teardown()
 
 
 SUPPORTED_RESET_ACTIONS = [
@@ -976,14 +1006,14 @@ async def test_ccc_rstact(dut, type, rstact):
     # Start new frame and reset target with reset action set to peripheral reset
     await i3c_controller.target_reset(reset_actions)
     if rstact == I3cTargetResetAction.NO_RESET:
-        assert dut.peripheral_reset_o == 0
-        assert dut.escalated_reset_o == 0
+        assert dut.peripheral_reset_o == 0, f"peripheral_reset_o should be 0 for NO_RESET, got {int(dut.peripheral_reset_o)}"
+        assert dut.escalated_reset_o == 0, f"escalated_reset_o should be 0 for NO_RESET, got {int(dut.escalated_reset_o)}"
     elif rstact == I3cTargetResetAction.RESET_PERIPHERAL_ONLY:
-        assert dut.peripheral_reset_o == 1
-        assert dut.escalated_reset_o == 0
+        assert dut.peripheral_reset_o == 1, f"peripheral_reset_o should be 1 for RESET_PERIPHERAL_ONLY, got {int(dut.peripheral_reset_o)}"
+        assert dut.escalated_reset_o == 0, f"escalated_reset_o should be 0 for RESET_PERIPHERAL_ONLY, got {int(dut.escalated_reset_o)}"
     elif rstact == I3cTargetResetAction.RESET_WHOLE_TARGET:
-        assert dut.peripheral_reset_o == 0
-        assert dut.escalated_reset_o == 1
+        assert dut.peripheral_reset_o == 0, f"peripheral_reset_o should be 0 for RESET_WHOLE_TARGET, got {int(dut.peripheral_reset_o)}"
+        assert dut.escalated_reset_o == 1, f"escalated_reset_o should be 1 for RESET_WHOLE_TARGET, got {int(dut.escalated_reset_o)}"
     else:
         assert False, f"Unsupported reset action ({rstact}), must be one of {SUPPORTED_RESET_ACTIONS}"
     await ClockCycles(tb.clk, 50)
@@ -1079,6 +1109,8 @@ async def test_ccc_rstact_vt_detect(dut):
 
     log.info("PASS: All VT detect flag set/clear/indication checks passed")
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_ccc_rstact_vt_detect_no_reset_arm(dut):
@@ -1127,6 +1159,8 @@ async def test_ccc_rstact_vt_detect_no_reset_arm(dut):
 
     log.info("PASS: DB=0x04 does not interfere with default reset escalation")
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_ccc_direct_multiple_wr(dut):
@@ -1165,7 +1199,9 @@ async def test_ccc_direct_multiple_wr(dut):
         dut._log.error(f"Written MWL mismatch ({mwl} vs. {int(sig)})")
         result = False
 
-    assert result
+    assert result, "test_ccc_direct_multiple_wr failed — see errors above"
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -1187,7 +1223,7 @@ async def test_ccc_direct_multiple_rd(dut):
     )
     if acks != [True]:
         dut._log.error("Initial SETMWL failed")
-        assert False
+        assert False, "Initial SETMWL failed — see errors above"
 
     await ClockCycles(tb.clk, 50)
 
@@ -1210,12 +1246,14 @@ async def test_ccc_direct_multiple_rd(dut):
                 dut._log.error(f"Written and received MWL mismatch ({mwl} vs. 0x55) for CCC #{i}")
                 result = False
 
-    assert result
+    assert result, "test_ccc_direct_multiple_rd failed — see errors above"
 
 
 # =============================================================================
 # NEW TESTS — Phase 1
 # =============================================================================
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -1257,6 +1295,8 @@ async def test_ccc_getcaps(dut):
         data = responses[0][1]
         assert data[0] == 0x35, f"GETCAPS DB=0x93: expected 0x35, got 0x{data[0]:02X}"
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_ccc_unsupported_direct_nack(dut):
@@ -1295,6 +1335,8 @@ async def test_ccc_unsupported_direct_nack(dut):
                 ccc=ccc_code, addr=tgt_addr, count=1)
             assert responses[0][0] == False, \
                 f"Unsupported GET CCC 0x{ccc_code:02X} from 0x{tgt_addr:02X} should be NACKed"
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -1348,6 +1390,8 @@ async def test_ccc_rstact_read_action(dut):
         assert val == 0xFF, \
             f"RSTACT read DB=0x82: expected 0xFF, got 0x{val:02X}"
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_ccc_rstact_escalation_clear(dut):
@@ -1370,7 +1414,7 @@ async def test_ccc_rstact_escalation_clear(dut):
     await i3c_controller.send_target_reset_pattern()
     await ClockCycles(tb.clk, 10)
     assert dut.peripheral_reset_o == 1, "Expected peripheral_reset after 1st pattern"
-    assert dut.escalated_reset_o == 0
+    assert dut.escalated_reset_o == 0, f"escalated_reset_o should be 0 after 1st pattern, got {int(dut.escalated_reset_o)}"
 
     # Complete reset handshake
     dut.peripheral_reset_done_i.value = 1
@@ -1400,7 +1444,7 @@ async def test_ccc_rstact_escalation_clear(dut):
     await send_rstact_write(i3c_controller, 0x01, "broadcast", None)
     await i3c_controller.send_target_reset_pattern()
     await ClockCycles(tb.clk, 10)
-    assert dut.peripheral_reset_o == 1
+    assert dut.peripheral_reset_o == 1, f"peripheral_reset_o should be 1 after 2nd pattern, got {int(dut.peripheral_reset_o)}"
 
     # Complete reset handshake
     dut.peripheral_reset_done_i.value = 1
@@ -1421,6 +1465,8 @@ async def test_ccc_rstact_escalation_clear(dut):
     assert dut.escalated_reset_o == 0, "Escalation should NOT happen after GETSTATUS cleared counter"
 
     log.info("PASS: Escalation counter cleared by RSTACT and GETSTATUS")
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -1462,6 +1508,8 @@ async def test_ccc_rstact_arm_clear_on_start(dut):
 
     log.info("PASS: RSTACT arm cleared by START")
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_ccc_rstact_unsupported_db(dut):
@@ -1484,6 +1532,8 @@ async def test_ccc_rstact_unsupported_db(dut):
             assert acks[0] == False, \
                 f"RSTACT DB=0x{db:02X} to 0x{tgt_addr:02X} should be NACKed"
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_ccc_unknown_broadcast(dut):
@@ -1503,6 +1553,8 @@ async def test_ccc_unknown_broadcast(dut):
     responses = await i3c_controller.i3c_ccc_read(
         ccc=CCC.DIRECT.GETBCR, addr=TGT_ADR, count=1)
     assert responses[0][0] == True, "GETBCR should ACK after unknown broadcast"
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -1562,6 +1614,8 @@ async def test_ccc_addr_lifecycle(dut):
 
     log.info("PASS: Address lifecycle completed successfully")
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_ccc_chain_bcast(dut):
@@ -1591,6 +1645,8 @@ async def test_ccc_chain_bcast(dut):
     assert sig_mwl == mwl_val, f"Chained SETMWL: expected 0x{mwl_val:04X}, got 0x{sig_mwl:04X}"
     assert sig_mrl == mrl_val, f"Chained SETMRL: expected 0x{mrl_val:04X}, got 0x{sig_mrl:04X}"
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_ccc_chain_direct(dut):
@@ -1617,6 +1673,8 @@ async def test_ccc_chain_direct(dut):
     sig_mwl = int(dut.xi3c_wrapper.i3c.xcontroller.xconfiguration.get_mwl_o.value)
     assert sig_mwl == mwl_val, f"Chained direct SETMWL: expected 0x{mwl_val:04X}, got 0x{sig_mwl:04X}"
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_ccc_enthdr_all_codes(dut):
@@ -1639,6 +1697,8 @@ async def test_ccc_enthdr_all_codes(dut):
             ccc=CCC.DIRECT.GETBCR, addr=TGT_ADR, count=1)
         assert responses[0][0] == True, \
             f"GETBCR should ACK after ENTHDR 0x{hdr_code:02X} + exit"
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -1673,6 +1733,8 @@ async def test_ccc_te5_wrong_direction(dut):
     responses = await i3c_controller.i3c_ccc_read(
         ccc=CCC.DIRECT.GETBCR, addr=DYNAMIC_ADDR, count=1)
     assert responses[0][0] == True, "GETBCR should ACK after TE5 recovery"
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -1728,6 +1790,8 @@ async def test_ccc_abort_get_sr(dut):
         assert len(responses[0][1]) == total_bytes, \
             f"CCC 0x{ccc_code:02X} should return {total_bytes} bytes after recovery"
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_ccc_back_to_back(dut):
@@ -1766,6 +1830,8 @@ async def test_ccc_back_to_back(dut):
             ccc=CCC.DIRECT.GETBCR, addr=DYNAMIC_ADDR, count=1)
         assert responses[0][0] == True, "GETBCR should ACK"
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_ccc_random_interleave(dut):
@@ -1796,7 +1862,7 @@ async def test_ccc_random_interleave(dut):
         elif action == 'getmwl':
             responses = await i3c_controller.i3c_ccc_read(
                 ccc=CCC.DIRECT.GETMWL, addr=tgt, count=2)
-            assert responses[0][0] == True
+            assert responses[0][0] == True, f"CCC {action} NACK for addr=0x{tgt:02X}"
         elif action == 'setmrl':
             val = random.randint(0, 0xFFFF)
             await i3c_controller.i3c_ccc_write(
@@ -1805,23 +1871,23 @@ async def test_ccc_random_interleave(dut):
         elif action == 'getmrl':
             responses = await i3c_controller.i3c_ccc_read(
                 ccc=CCC.DIRECT.GETMRL, addr=tgt, count=3)
-            assert responses[0][0] == True
+            assert responses[0][0] == True, f"CCC {action} NACK for addr=0x{tgt:02X}"
         elif action == 'getbcr':
             responses = await i3c_controller.i3c_ccc_read(
                 ccc=CCC.DIRECT.GETBCR, addr=tgt, count=1)
-            assert responses[0][0] == True
+            assert responses[0][0] == True, f"CCC {action} NACK for addr=0x{tgt:02X}"
         elif action == 'getdcr':
             responses = await i3c_controller.i3c_ccc_read(
                 ccc=CCC.DIRECT.GETDCR, addr=tgt, count=1)
-            assert responses[0][0] == True
+            assert responses[0][0] == True, f"CCC {action} NACK for addr=0x{tgt:02X}"
         elif action == 'getstatus':
             responses = await i3c_controller.i3c_ccc_read(
                 ccc=CCC.DIRECT.GETSTATUS, addr=tgt, count=2)
-            assert responses[0][0] == True
+            assert responses[0][0] == True, f"CCC {action} NACK for addr=0x{tgt:02X}"
         elif action == 'getpid':
             responses = await i3c_controller.i3c_ccc_read(
                 ccc=CCC.DIRECT.GETPID, addr=tgt, count=6)
-            assert responses[0][0] == True
+            assert responses[0][0] == True, f"CCC {action} NACK for addr=0x{tgt:02X}"
         elif action == 'enec':
             await i3c_controller.i3c_ccc_write(
                 ccc=CCC.DIRECT.ENEC,
@@ -1833,7 +1899,9 @@ async def test_ccc_random_interleave(dut):
         elif action == 'getcaps':
             responses = await i3c_controller.i3c_ccc_read(
                 ccc=CCC.DIRECT.GETCAPS, addr=tgt, count=3)
-            assert responses[0][0] == True
+            assert responses[0][0] == True, f"CCC {action} NACK for addr=0x{tgt:02X}"
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -1867,6 +1935,8 @@ async def test_ccc_vendor_codes(dut):
     responses = await i3c_controller.i3c_ccc_read(
         ccc=CCC.DIRECT.GETBCR, addr=DYNAMIC_ADDR, count=1)
     assert responses[0][0] == True, "GETBCR should ACK after vendor codes"
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -1913,6 +1983,8 @@ async def test_ccc_abort_bcast_stop(dut):
     responses = await i3c_controller.i3c_ccc_read(
         ccc=CCC.DIRECT.GETBCR, addr=DYNAMIC_ADDR, count=1)
     assert responses[0][0] == True, "GETBCR should ACK after abort recovery"
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -1968,6 +2040,8 @@ async def test_ccc_error_det_enable(dut):
     responses = await i3c_controller.i3c_ccc_read(
         ccc=CCC.DIRECT.GETBCR, addr=DYNAMIC_ADDR, count=1)
     assert responses[0][0] == True, "GETBCR should ACK after error detect toggle"
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -2065,6 +2139,8 @@ async def test_ccc_setdasa_padding_err(dut):
         ccc=CCC.DIRECT.GETBCR, addr=DYNAMIC_ADDR, count=1)
     assert responses[0][0] == True, "Target should still ACK at old DA after padding error"
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_ccc_te2_parity(dut):
@@ -2145,6 +2221,8 @@ async def test_ccc_te2_parity(dut):
     assert responses[0][0] == True, "Target should ACK after second TE2 recovery"
     tb.te_error_monitor.check()
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_ccc_entdaa(dut):
@@ -2205,6 +2283,8 @@ async def test_ccc_entdaa(dut):
         ccc=CCC.DIRECT.GETBCR, addr=VIRT_DYNAMIC_ADDR, count=1)
     assert responses[0][0] == True, "Virtual target should ACK GETBCR at new DA"
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_ccc_entdaa_early_stop(dut):
@@ -2246,6 +2326,8 @@ async def test_ccc_entdaa_early_stop(dut):
         ccc=CCC.DIRECT.GETBCR, addr=DYNAMIC_ADDR, count=1)
     assert responses[0][0] == True, "Main target should ACK at assigned DA"
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_ccc_entdaa_te3_te4(dut):
@@ -2285,7 +2367,7 @@ async def test_ccc_entdaa_te3_te4(dut):
     await ClockCycles(tb.clk, 30)
 
     # Target should NACK the invalid reserved byte
-    assert len(results) >= 1
+    assert len(results) >= 1, f"Expected at least 1 ENTDAA result, got {len(results)}"
     assert results[0]["ack"] == False, f"Target should NACK TE4 invalid rsvd byte, got {results[0]}"
 
     # TE4 status should be set
@@ -2328,6 +2410,8 @@ async def test_ccc_entdaa_te3_te4(dut):
     assert te3_cnt == 1, (
         f"TE3 count should be exactly 1 after one event, got {te3_cnt}"
     )
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -2430,6 +2514,8 @@ async def test_ccc_entdaa_arb_lost(dut):
 # GETSTATUS Sr Abort: Protocol Error cleared prematurely
 # BLOCKED BY DESIGN BUG: see verification/bugs/getstatus_sr_abort.md
 # =============================================================================
+
+    await tb.teardown()
 @cocotb.test()
 async def test_ccc_getstatus_sr_abort_clears_protocol_err(dut):
     """
@@ -2518,6 +2604,8 @@ async def test_ccc_getstatus_sr_abort_clears_protocol_err(dut):
 # SETMWL Sr Abort: CCC FSM misinterprets post-Sr data
 # BLOCKED BY DESIGN BUG: see verification/bugs/setmwl_sr_abort.md
 # =============================================================================
+
+    await tb.teardown()
 @cocotb.test()
 async def test_ccc_setmwl_sr_abort_during_data(dut):
     """
@@ -2614,6 +2702,8 @@ async def test_ccc_setmwl_sr_abort_during_data(dut):
 # =============================================================================
 # GETSTATUS Abort then Immediate CCC Chain (no STOP between)
 # =============================================================================
+
+    await tb.teardown()
 @cocotb.test()
 async def test_ccc_getstatus_abort_then_chain_setmwl(dut):
     """
@@ -2719,3 +2809,5 @@ async def test_ccc_getstatus_abort_then_chain_setmwl(dut):
         f"err_o should be 0 after full GETSTATUS, got err_o={err_final}")
     log.info("Step 6 OK: err_o = 0 (recovery complete)")
     tb.te_error_monitor.check()
+
+    await tb.teardown()

@@ -91,3 +91,14 @@ class I3CTopTestInterface:
         except (AttributeError, Exception) as e:
             self.dut._log.warning(f"PostTe2DataIntegrityMonitor: failed to start: {e}")
             self.te2_integrity_monitor = None
+
+    async def teardown(self):
+        """End-of-test checks. Call at end of every @cocotb.test()."""
+        if self.te_error_monitor:
+            self.te_error_monitor.check()
+        if self.te2_integrity_monitor:
+            self.te2_integrity_monitor.check()
+        if self.bus_monitor and self.bus_monitor.violations:
+            self.dut._log.warning(
+                f"I3cBusMonitor: {len(self.bus_monitor.violations)} violation(s)"
+            )

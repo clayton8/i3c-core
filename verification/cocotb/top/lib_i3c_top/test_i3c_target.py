@@ -15,27 +15,9 @@ from utils import format_ibi_data, get_interrupt_status
 import cocotb
 from cocotb.triggers import ClockCycles, RisingEdge, Timer
 from cocotbext_i3c.common import I3cState
+from common import VALID_I3C_ADDRESSES, timeout_task, log_seed
 
-VALID_I3C_ADDRESSES = (
-    [i for i in range(0x03, 0x3E)]
-    + [i for i in range(0x3F, 0x5B)]
-    + [i for i in range(0x5C, 0x5E)]
-    + [i for i in range(0x5F, 0x6E)]
-    + [i for i in range(0x5F, 0x6E)]
-    + [i for i in range(0x6F, 0x76)]
-    + [i for i in range(0x77, 0x7A)]
-    + [0x7B, 0x7D]
-)
 TARGET_ADDRESS = 0x5A
-
-
-async def timeout_task(timeout_us=5):
-    """
-    A generic task for handling test timeout. Waits a fixed amount of
-    simulation time and then throws an exception.
-    """
-    await Timer(timeout_us, "us")
-    raise TimeoutError("Timeout!")
 
 
 async def test_setup(dut, fclk=333.0, fbus=12.5,
@@ -46,6 +28,7 @@ async def test_setup(dut, fclk=333.0, fbus=12.5,
     """
 
     cocotb.log.setLevel(logging.INFO)
+    log_seed(dut)
     cocotb.start_soon(timeout_task(500000))
 
     dut._log.info(f"fclk = {fclk:.3f} MHz")
@@ -129,12 +112,17 @@ async def test_i3c_target_write(dut):
 
             # Wait for the interrupt signal to go high
             irq = dut.xi3c_wrapper.i3c.irq_o
-            while irq.value == 0:
+            timeout_cycles = 1000
+            for _ in range(timeout_cycles):
+                if irq.value != 0:
+                    break
                 await RisingEdge(tb.clk)
+            else:
+                raise TimeoutError(f"IRQ did not assert within {timeout_cycles} clock cycles")
 
             # Read & check interrupt status
             intrs = await get_interrupt_status(tb)
-            assert intrs["RX_DESC_STAT"] == 1
+            assert intrs["RX_DESC_STAT"] == 1, f"RX_DESC_STAT expected 1, got {intrs['RX_DESC_STAT']}"
 
             # Read RX descriptor, the interrupt should go low
             data = dword2int(
@@ -151,12 +139,17 @@ async def test_i3c_target_write(dut):
 
             # Wait for the interrupt signal to go low
             irq = dut.xi3c_wrapper.i3c.irq_o
-            while irq.value != 0:
+            timeout_cycles = 1000
+            for _ in range(timeout_cycles):
+                if irq.value == 0:
+                    break
                 await RisingEdge(tb.clk)
+            else:
+                raise TimeoutError(f"IRQ did not deassert within {timeout_cycles} clock cycles")
 
             # Read & check interrupt status
             intrs = await get_interrupt_status(tb)
-            assert intrs["RX_DESC_STAT"] == 0
+            assert intrs["RX_DESC_STAT"] == 0, f"RX_DESC_STAT expected 0, got {intrs['RX_DESC_STAT']}"
 
             # Read RX data
             data_len = ceil(desc_len / 4)
@@ -191,7 +184,9 @@ async def test_i3c_target_write(dut):
             " ".join(["[ " + " ".join([f"0x{d:02X}" for d in s]) + " ]" for s in recv_data]),
         )
     )
-    assert test_data == recv_data
+    assert test_data == recv_data, f"Private write mismatch: sent={test_data}, recv={recv_data}"
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -234,7 +229,7 @@ async def test_i3c_target_read(dut):
 
         dut._log.info("Expected: [" + " ".join([f"{d:02X}" for d in expected]) + "]" + sfx)
         dut._log.info("Received: [" + " ".join([f"{d:02X}" for d in received]) + "]")
-        assert expected == received
+        assert expected == received, f"Data mismatch: exp=[{' '.join(f'{d:02X}' for d in expected)}] got=[{' '.join(f'{d:02X}' for d in received)}]"
 
     # .............
 
@@ -292,6 +287,8 @@ async def test_i3c_target_read(dut):
 
     # Dummy wait
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_i3c_target_read_empty(dut):
@@ -332,7 +329,7 @@ async def test_i3c_target_read_empty(dut):
 
         dut._log.info("Expected: [" + " ".join([f"{d:02X}" for d in expected]) + "]" + sfx)
         dut._log.info("Received: [" + " ".join([f"{d:02X}" for d in received]) + "]")
-        assert expected == received
+        assert expected == received, f"Data mismatch: exp=[{' '.join(f'{d:02X}' for d in expected)}] got=[{' '.join(f'{d:02X}' for d in received)}]"
 
     # issue 20 random read transactions
     # randomly choose to inicialize the FIFO or not
@@ -342,12 +339,14 @@ async def test_i3c_target_read_empty(dut):
         if transfer_data:
             tx_data = await make_transfer()
             response = await i3c_controller.i3c_read(TARGET_ADDRESS, len(tx_data), send_rsvd = random.choice([True, False]))
-            assert not response.nack
+            assert not response.nack, "Unexpected NACK"
             rx_data = list(response.data)
             compare(tx_data, rx_data)
         else:
             response = await i3c_controller.i3c_read(TARGET_ADDRESS, random.randint(1, 16), send_rsvd = random.choice([True, False]))
-            assert response.nack
+            assert response.nack, "Expected NACK but got ACK"
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -390,7 +389,7 @@ async def test_i3c_target_read_to_multiple_targets(dut):
 
         dut._log.info("Expected: [" + " ".join([f"{d:02X}" for d in expected]) + "]" + sfx)
         dut._log.info("Received: [" + " ".join([f"{d:02X}" for d in received]) + "]")
-        assert expected == received
+        assert expected == received, f"Data mismatch: exp=[{' '.join(f'{d:02X}' for d in expected)}] got=[{' '.join(f'{d:02X}' for d in received)}]"
 
     # issue 40 random read transactions
     # randomly choose to inicialize the FIFO or not
@@ -416,10 +415,12 @@ async def test_i3c_target_read_to_multiple_targets(dut):
 
         for address, (tx_data, length, rsvd, stop, nack) in zip(addresses, data_len_rsvd_stop_nack):
             response = await i3c_controller.i3c_read(address, length, send_rsvd=rsvd, stop=stop)
-            assert nack == response.nack
+            assert nack == response.nack, f"NACK mismatch: expected response.nack, got {nack}"
             if not nack:
                 rx_data = list(response.data)
                 compare(tx_data, rx_data)
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -497,6 +498,8 @@ async def test_i3c_target_ibi(dut):
 
         await ClockCycles(tb.clk, 50)
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_i3c_target_ibi_retry(dut):
@@ -562,6 +565,8 @@ async def test_i3c_target_ibi_retry(dut):
 
     # Dummy wait
     await ClockCycles(tb.clk, 10)
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -639,6 +644,8 @@ async def test_i3c_target_ibi_data(dut):
     # Dummy wait
     await ClockCycles(tb.clk, 10)
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_i3c_target_writes_and_reads(dut):
@@ -712,16 +719,18 @@ async def test_i3c_target_writes_and_reads(dut):
             " ".join(["[ " + " ".join([f"0x{d:02X}" for d in s]) + " ]" for s in recv_data]),
         )
     )
-    assert test_data == recv_data
+    assert test_data == recv_data, f"RX data mismatch after write+read"
 
     # Issue a private read
     recv_data = await i3c_controller.i3c_read(TARGET_ADDRESS, 16)
     recv_data = list(recv_data.data)
 
-    assert tx_test_data == recv_data
+    assert tx_test_data == recv_data, f"TX read-back mismatch: sent={tx_test_data}, recv={recv_data}"
 
     # Dummy wait
     await ClockCycles(tb.clk, 10)
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -829,6 +838,8 @@ async def test_i3c_target_pwrite_err_detection(dut):
     await ClockCycles(tb.clk, 100)
     tb.te_error_monitor.check()
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_i3c_target_pwrite_overflow_detection(dut):
@@ -880,7 +891,7 @@ async def test_i3c_target_pwrite_overflow_detection(dut):
         assert err_stat == 1, "Expected error detection"
 
         desc_len = data & 0xFFFF
-        assert desc_len == 260
+        assert desc_len == 260, f"Descriptor mismatch: expected 260, got {desc_len}"
 
         # T12: Read and verify surviving bytes match the first 260 bytes sent
         rx_data = []
@@ -908,6 +919,8 @@ async def test_i3c_target_pwrite_overflow_detection(dut):
         await ClockCycles(tb.clk, 100)
 
     await ClockCycles(tb.clk, 100)
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -947,7 +960,7 @@ async def test_i3c_target_private_read_sizes_and_abort(dut):
     def compare(expected, received):
         dut._log.info("Expected: [" + " ".join([f"{d:02X}" for d in expected]) + "]")
         dut._log.info("Received: [" + " ".join([f"{d:02X}" for d in received]) + "]")
-        assert expected == received
+        assert expected == received, f"Data mismatch: exp=[{' '.join(f'{d:02X}' for d in expected)}] got=[{' '.join(f'{d:02X}' for d in received)}]"
 
     # ---- Test 1: Private read of exactly 256 bytes ----
     dut._log.info("Test 1: Private read of 256 bytes")
@@ -1014,6 +1027,8 @@ async def test_i3c_target_private_read_sizes_and_abort(dut):
 
     await ClockCycles(tb.clk, 100)
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_i3c_target_tx_flush_clears_converter(dut):
@@ -1034,7 +1049,7 @@ async def test_i3c_target_tx_flush_clears_converter(dut):
     def compare(expected, received):
         dut._log.info("Expected: [" + " ".join([f"{d:02X}" for d in expected]) + "]")
         dut._log.info("Received: [" + " ".join([f"{d:02X}" for d in received]) + "]")
-        assert expected == received
+        assert expected == received, f"Data mismatch: exp=[{' '.join(f'{d:02X}' for d in expected)}] got=[{' '.join(f'{d:02X}' for d in received)}]"
 
     async def enqueue_tx_data(data):
         """Write data to TTI TX FIFO and TX descriptor."""
@@ -1104,6 +1119,8 @@ async def test_i3c_target_tx_flush_clears_converter(dut):
 # =============================================================================
 # Private Write Abort Test Helpers
 # =============================================================================
+
+    await tb.teardown()
 
 async def _read_rx_descriptor(tb, dut, timeout_clks=500):
     """Poll for RX descriptor interrupt, read and return (byte_count, err_stat) or None."""
@@ -1192,6 +1209,8 @@ async def test_priv_write_normal_stop_baseline(dut):
 # =============================================================================
 # Scenario A: STOP mid-byte during RxPWriteData
 # =============================================================================
+
+    await tb.teardown()
 @cocotb.test()
 async def test_priv_write_stop_mid_byte(dut):
     """
@@ -1253,6 +1272,8 @@ async def test_priv_write_stop_mid_byte(dut):
 # =============================================================================
 # Scenario B: Sr mid-byte during RxPWriteData
 # =============================================================================
+
+    await tb.teardown()
 @cocotb.test()
 async def test_priv_write_sr_mid_byte(dut):
     """
@@ -1314,6 +1335,8 @@ async def test_priv_write_sr_mid_byte(dut):
 # Scenario C: STOP during T-bit (RxPWriteTbit)
 # BLOCKED BY DESIGN BUG: see verification/bugs/stop_during_tbit.md
 # =============================================================================
+
+    await tb.teardown()
 @cocotb.test()
 async def test_priv_write_stop_during_tbit(dut):
     """
@@ -1401,6 +1424,8 @@ async def test_priv_write_stop_during_tbit(dut):
 # Scenario D: Sr during T-bit (RxPWriteTbit)
 # BLOCKED BY DESIGN BUG: see verification/bugs/sr_during_tbit.md
 # =============================================================================
+
+    await tb.teardown()
 @cocotb.test()
 async def test_priv_write_sr_during_tbit(dut):
     """
@@ -1488,6 +1513,8 @@ async def test_priv_write_sr_during_tbit(dut):
 # =============================================================================
 # Scenario E: Tight timing — Sr immediately after last complete byte
 # =============================================================================
+
+    await tb.teardown()
 @cocotb.test()
 async def test_priv_write_tight_timing_sr(dut):
     """
@@ -1529,3 +1556,5 @@ async def test_priv_write_tight_timing_sr(dut):
     assert rx_data == test_data, f"Data mismatch: expected {test_data}, got {rx_data}"
 
     await ClockCycles(tb.clk, 50)
+
+    await tb.teardown()

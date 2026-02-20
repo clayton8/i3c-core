@@ -22,6 +22,7 @@ import cocotb
 from cocotb.regression import TestFactory
 from cocotb.result import SimTimeoutError
 from cocotb.triggers import ClockCycles, Timer, with_timeout
+from common import timeout_task, log_seed
 
 # =============================================================================
 # Constants
@@ -30,20 +31,12 @@ from cocotb.triggers import ClockCycles, Timer, with_timeout
 TARGET_ADDRESS = 0x5A
 
 
-# =============================================================================
-# Shared Helpers
-# =============================================================================
-
-async def timeout_task(timeout_us):
-    await Timer(timeout_us, "us")
-    raise TimeoutError("Timeout!")
-
-
 async def test_setup(dut, fclk=333.0, fbus=12.5,
                      static_addr=TARGET_ADDRESS, timeout_us=500000):
     """Standard setup: controller + VIP target + DUT boot."""
 
     cocotb.log.setLevel(logging.INFO)
+    log_seed(dut)
     cocotb.start_soon(timeout_task(timeout_us))
 
     i3c_controller = I3cController(
@@ -215,6 +208,8 @@ async def test_ibi_accept_read_all_data(dut):
 # Test 2: Accept partial — target must NOT repeat
 # =============================================================================
 
+    await tb.teardown()
+
 @cocotb.test()
 async def test_ibi_accept_partial_no_repeat(dut):
     """
@@ -290,6 +285,8 @@ async def test_ibi_accept_partial_no_repeat(dut):
 # Test 3: Refuse IBI — retry sweep (0..7)
 # =============================================================================
 
+    await tb.teardown()
+
 async def _test_ibi_refuse_retry(dut, retry_num):
     """
     Sec 5.1.6.2 item 2: Refuse IBI sweep over all retry_num values.
@@ -311,10 +308,10 @@ async def _test_ibi_refuse_retry(dut, retry_num):
             result = await with_timeout(
                 i3c_controller.wait_for_ibi_event(), 20, "us",
             )
-            assert result["ack"] is False
-            assert result["addr"] == TARGET_ADDRESS
+            assert result["ack"] is False, f"IBI ACK mismatch: expected False, got {result['ack']}"
+            assert result["addr"] == TARGET_ADDRESS, f"Expected TARGET_ADDRESS, got {result['addr']}"
 
-        assert i3c_controller.ibi_nack_count == 9
+        assert i3c_controller.ibi_nack_count == 9, f"NACK mismatch: expected 9, got {i3c_controller.ibi_nack_count}"
 
         # Accept the IBI to finish cleanly
         i3c_controller.enable_ibi(True)
@@ -337,27 +334,30 @@ async def _test_ibi_refuse_retry(dut, retry_num):
             result = await with_timeout(
                 i3c_controller.wait_for_ibi_event(), 20, "us",
             )
-            assert result["ack"] is False
+            assert result["ack"] is False, f"IBI ACK mismatch: expected False, got {result['ack']}"
         i3c_controller.enable_ibi(True)
         response = await with_timeout(
             i3c_controller.wait_for_ibi(), 20, "us",
         )
-        assert response[0] == TARGET_ADDRESS
+        assert response[0] == TARGET_ADDRESS, f"Expected TARGET_ADDRESS, got {response[0]}"
         await check_ibi_status(tb, 0, "2nd IBI success after counter reset")
     else:
         # Finite retries: wait for DUT to exhaust its retry budget
         # The background monitor auto-NACKs each attempt. Wait for the DUT
         # to stop retrying (timeout), then count NACKs.
-        while True:
+        MAX_RETRY_POLLS = 100
+        for _poll in range(MAX_RETRY_POLLS):
             try:
                 result = await with_timeout(
                     i3c_controller.wait_for_ibi_event(),
                     20 if i3c_controller.ibi_nack_count == 0 else 3, "us",
                 )
-                assert result["ack"] is False
-                assert result["addr"] == TARGET_ADDRESS
+                assert result["ack"] is False, f"IBI ACK mismatch: expected False, got {result['ack']}"
+                assert result["addr"] == TARGET_ADDRESS, f"Expected TARGET_ADDRESS, got {result['addr']}"
             except SimTimeoutError:
                 break
+        else:
+            raise AssertionError(f"IBI retry polling exceeded {MAX_RETRY_POLLS} iterations")
 
         expected = retry_num + 1
         assert i3c_controller.ibi_nack_count == expected, (
@@ -439,6 +439,8 @@ async def test_ibi_refuse_no_retry_on_rstart(dut):
 # Test 5: Refuse and disable interrupts (DISEC)
 # =============================================================================
 
+    await tb.teardown()
+
 @cocotb.test()
 async def test_ibi_refuse_and_disable(dut):
     """
@@ -460,7 +462,7 @@ async def test_ibi_refuse_and_disable(dut):
     i3c_controller.set_ibi_chain_ccc(CCC.BCAST.DISEC, ccc_data=[0x01])
 
     result = await i3c_controller.wait_for_ibi_event()
-    assert result["ack"] is False
+    assert result["ack"] is False, f"IBI ACK mismatch: expected False, got {result['ack']}"
 
     await ClockCycles(tb.clk, 50)
 
@@ -492,6 +494,8 @@ async def test_ibi_refuse_and_disable(dut):
 # =============================================================================
 # Test 6: Accept IBI, then Sr->CCC
 # =============================================================================
+
+    await tb.teardown()
 
 @cocotb.test()
 async def test_ibi_accept_then_ccc(dut):
@@ -528,7 +532,7 @@ async def test_ibi_accept_then_ccc(dut):
     assert result["data"] == expected_data, (
         f"IBI data mismatch: expected {expected_data.hex()}, got {result['data'].hex()}"
     )
-    assert result["addr"] == TARGET_ADDRESS
+    assert result["addr"] == TARGET_ADDRESS, f"Expected TARGET_ADDRESS, got {result['addr']}"
 
     # CCC response should exist (GETSTATUS returns 2 bytes)
     assert result["ccc_response"] is not None, "CCC response missing after Sr->CCC"
@@ -551,6 +555,8 @@ async def test_ibi_accept_then_ccc(dut):
 # =============================================================================
 # Test 7: Refuse IBI, then Sr->CCC
 # =============================================================================
+
+    await tb.teardown()
 
 @cocotb.test()
 async def test_ibi_refuse_then_ccc(dut):
@@ -576,7 +582,7 @@ async def test_ibi_refuse_then_ccc(dut):
 
     result = await i3c_controller.wait_for_ibi_event()
 
-    assert result["ack"] is False
+    assert result["ack"] is False, f"IBI ACK mismatch: expected False, got {result['ack']}"
 
     # CCC should still work after NACK'd IBI
     assert result["ccc_response"] is not None, "CCC failed after NACK'd IBI"
@@ -601,6 +607,8 @@ async def test_ibi_refuse_then_ccc(dut):
 # =============================================================================
 # Test 8: IBI initiation — Bus Available vs Bus Start
 # =============================================================================
+
+    await tb.teardown()
 
 @cocotb.test()
 async def test_ibi_initiation_bus_available_vs_start(dut):
@@ -659,6 +667,8 @@ async def test_ibi_initiation_bus_available_vs_start(dut):
 # =============================================================================
 # Test 9: Pending Read Notification (MDB IGI=3'b101)
 # =============================================================================
+
+    await tb.teardown()
 
 async def _test_ibi_pending_read_notification(dut, read_len, ibi_extra_bytes=0):
     """
@@ -779,6 +789,8 @@ async def test_ibi_arbitration_dut_wins(dut):
 # Test 11: Arbitration — DUT loses, waits for Bus Available
 # =============================================================================
 
+    await tb.teardown()
+
 @cocotb.test()
 async def test_ibi_arbitration_dut_loses_bus_available_wait(dut):
     """
@@ -827,6 +839,8 @@ async def test_ibi_arbitration_dut_loses_bus_available_wait(dut):
 # Test 12: Back-to-back IBIs
 # =============================================================================
 
+    await tb.teardown()
+
 @cocotb.test()
 async def test_ibi_back_to_back(dut):
     """
@@ -862,6 +876,8 @@ async def test_ibi_back_to_back(dut):
 # =============================================================================
 # Test 13: Arbitration loss on address bits (Flow 1)
 # =============================================================================
+
+    await tb.teardown()
 
 @cocotb.test()
 async def test_ibi_arb_loss_address(dut):
@@ -904,7 +920,7 @@ async def test_ibi_arb_loss_address(dut):
 
     # After Bus Available the DUT retries
     response = await i3c_controller.wait_for_ibi()
-    assert response[0] == DUT_ADDR
+    assert response[0] == DUT_ADDR, f"Expected DUT_ADDR, got {response[0]}"
     # I7: Verify full IBI data and final success status after recovery
     await verify_ibi_response(dut, response, DUT_ADDR, 0xC1, [0x99])
     await check_ibi_status(tb, 0, "DUT IBI success after arb loss recovery")
@@ -915,6 +931,8 @@ async def test_ibi_arb_loss_address(dut):
 # =============================================================================
 # Test 14: Arbitration loss on RnW bit (Flow 2)
 # =============================================================================
+
+    await tb.teardown()
 
 @cocotb.test()
 async def test_ibi_arb_loss_rnw_bit(dut):
@@ -956,7 +974,7 @@ async def test_ibi_arb_loss_rnw_bit(dut):
 
     # ibi_inhibit prevents retry on immediate Start — verify via bus_available retry
     response = await i3c_controller.wait_for_ibi()
-    assert response[0] == TARGET_ADDRESS
+    assert response[0] == TARGET_ADDRESS, f"Expected TARGET_ADDRESS, got {response[0]}"
     await verify_ibi_response(dut, response, TARGET_ADDRESS, mdb, data)
     await check_ibi_status(tb, 0, "IBI success after RnW arb loss recovery")
 
@@ -966,6 +984,8 @@ async def test_ibi_arb_loss_rnw_bit(dut):
 # =============================================================================
 # Test 15: NACK → Sr → Private Write (Flow 4)
 # =============================================================================
+
+    await tb.teardown()
 
 @cocotb.test()
 async def test_ibi_nack_sr_private_write(dut):
@@ -987,7 +1007,7 @@ async def test_ibi_nack_sr_private_write(dut):
     i3c_controller.set_ibi_chain_write(TARGET_ADDRESS, write_payload)
 
     result = await i3c_controller.wait_for_ibi_event()
-    assert result["ack"] is False
+    assert result["ack"] is False, f"IBI ACK mismatch: expected False, got {result['ack']}"
     assert result["chain_write_ack"], "Target should ACK the chained Private Write"
 
     # I9: Verify chained write data was received by DUT
@@ -1015,6 +1035,8 @@ async def test_ibi_nack_sr_private_write(dut):
 # Test 16: NACK → Sr → Directed DISEC (Flow 6)
 # =============================================================================
 
+    await tb.teardown()
+
 @cocotb.test()
 async def test_ibi_nack_sr_directed_disec(dut):
     """
@@ -1038,7 +1060,7 @@ async def test_ibi_nack_sr_directed_disec(dut):
     )
 
     result = await i3c_controller.wait_for_ibi_event()
-    assert result["ack"] is False
+    assert result["ack"] is False, f"IBI ACK mismatch: expected False, got {result['ack']}"
 
     await ClockCycles(tb.clk, 50)
 
@@ -1071,6 +1093,8 @@ async def test_ibi_nack_sr_directed_disec(dut):
 # Test 17: BCR[2]=0 not supported — STOP without reading MDB (Flow 7)
 # =============================================================================
 
+    await tb.teardown()
+
 @cocotb.test(expect_fail=True)
 async def test_ibi_accept_no_mdb_stop(dut):
     """
@@ -1101,8 +1125,8 @@ async def test_ibi_accept_no_mdb_stop(dut):
 
     response = await i3c_controller.wait_for_ibi()
     result = i3c_controller.last_ibi_result
-    assert result["ack"] is True
-    assert result["addr"] == TARGET_ADDRESS
+    assert result["ack"] is True, f"IBI ACK mismatch: expected True, got {result['ack']}"
+    assert result["addr"] == TARGET_ADDRESS, f"Expected TARGET_ADDRESS, got {result['addr']}"
 
     await ClockCycles(tb.clk, 50)
 
@@ -1151,7 +1175,7 @@ async def test_ibi_accept_no_mdb_sr_ccc(dut):
 
     response = await i3c_controller.wait_for_ibi()
     result = i3c_controller.last_ibi_result
-    assert result["ack"] is True
+    assert result["ack"] is True, f"IBI ACK mismatch: expected True, got {result['ack']}"
 
     await ClockCycles(tb.clk, 50)
 
@@ -1194,8 +1218,8 @@ async def test_ibi_tbit_abort_sr_ccc(dut):
 
     response = await i3c_controller.wait_for_ibi()
     result = i3c_controller.last_ibi_result
-    assert result["ack"] is True
-    assert result["addr"] == TARGET_ADDRESS
+    assert result["ack"] is True, f"IBI ACK mismatch: expected True, got {result['ack']}"
+    assert result["addr"] == TARGET_ADDRESS, f"Expected TARGET_ADDRESS, got {result['addr']}"
     # Should have received MDB + 2 data bytes (truncated)
     expected_truncated = bytearray([mdb] + full_data[:2])
     assert result["data"] == expected_truncated, (
@@ -1222,6 +1246,8 @@ async def test_ibi_tbit_abort_sr_ccc(dut):
 # =============================================================================
 # Test 20: IBI queued while disabled, then enabled (CP6)
 # =============================================================================
+
+    await tb.teardown()
 
 @cocotb.test()
 async def test_ibi_queue_while_disabled_then_enable(dut):
@@ -1266,6 +1292,8 @@ async def test_ibi_queue_while_disabled_then_enable(dut):
 # Test 21: FW-initiated IBI retry counter reset (CP6)
 # =============================================================================
 
+    await tb.teardown()
+
 @cocotb.test()
 async def test_ibi_retry_ctr_fw_reset(dut):
     """
@@ -1284,7 +1312,7 @@ async def test_ibi_retry_ctr_fw_reset(dut):
     i3c_controller.enable_ibi(False)
 
     result = await i3c_controller.wait_for_ibi_event()
-    assert result["ack"] is False
+    assert result["ack"] is False, f"IBI ACK mismatch: expected False, got {result['ack']}"
     await check_ibi_status(tb, 1, "NACK #1")
 
     # FW resets retry counter before DUT retries
@@ -1296,14 +1324,14 @@ async def test_ibi_retry_ctr_fw_reset(dut):
 
     # NACK attempt 2 → counter becomes 1 again (was reset to 0)
     result = await i3c_controller.wait_for_ibi_event()
-    assert result["ack"] is False
+    assert result["ack"] is False, f"IBI ACK mismatch: expected False, got {result['ack']}"
 
     # Without FW reset, this would have been attempt 3 (cnt=2 > retry_num=1)
     # and DUT would have flushed. Instead DUT retries (cnt=1 ≤ 1).
     i3c_controller.enable_ibi(True)
     response = await i3c_controller.wait_for_ibi()
     result = i3c_controller.last_ibi_result
-    assert result["ack"] is True
+    assert result["ack"] is True, f"IBI ACK mismatch: expected True, got {result['ack']}"
     await verify_ibi_response(
         dut, bytearray([result["addr"]]) + result["data"],
         TARGET_ADDRESS, mdb, data,
@@ -1316,6 +1344,8 @@ async def test_ibi_retry_ctr_fw_reset(dut):
 # =============================================================================
 # Test 24: Multiple consecutive arbitration losses (CP25, CP4, CP10)
 # =============================================================================
+
+    await tb.teardown()
 
 @cocotb.test(skip=True)
 async def test_ibi_multiple_arb_losses(dut):
@@ -1427,6 +1457,8 @@ async def test_ibi_queued_during_hdr_fires_after_exit(dut):
 # RxFByteArb collision reproduction test
 # =============================================================================
 
+    await tb.teardown()
+
 @cocotb.test()
 async def test_rxfbytearb_collision_blind_drive(dut):
     """RxFByteArb arb-loss on RnW bit with conforming controller.
@@ -1476,7 +1508,7 @@ async def test_rxfbytearb_collision_blind_drive(dut):
 
     # After Bus Available the DUT retries IBI — verify it succeeds
     response = await i3c_controller.wait_for_ibi()
-    assert response[0] == TARGET_ADDRESS
+    assert response[0] == TARGET_ADDRESS, f"Expected TARGET_ADDRESS, got {response[0]}"
     await verify_ibi_response(dut, response, TARGET_ADDRESS, mdb, data)
     await check_ibi_status(tb, 0, "IBI success after RnW arb-loss recovery")
 
@@ -1486,6 +1518,8 @@ async def test_rxfbytearb_collision_blind_drive(dut):
 # =============================================================================
 # Test: IbiFailureRetry from Idle — flush ignored → interrupt flood
 # =============================================================================
+
+    await tb.teardown()
 
 @cocotb.test(skip=True)
 async def test_ibi_flush_from_idle_interrupt_flood(dut):

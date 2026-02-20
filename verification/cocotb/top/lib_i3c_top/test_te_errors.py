@@ -32,14 +32,7 @@ from cocotb.triggers import ClockCycles
 # Constants
 # =============================================================================
 
-VALID_I3C_ADDRESSES = (
-    [i for i in range(0x03, 0x3E)]
-    + [i for i in range(0x3F, 0x5E)]
-    + [i for i in range(0x5F, 0x6E)]
-    + [i for i in range(0x6F, 0x76)]
-    + [i for i in range(0x77, 0x7A)]
-    + [0x7B, 0x7D]
-)
+from common import VALID_I3C_ADDRESSES, log_seed
 
 # TE0 reserved address patterns (from i3c_pkg.sv)
 # Write patterns: 7 addresses that trigger TE0 when sent with W bit
@@ -75,6 +68,7 @@ async def test_setup(dut, static_addr=0x5A, virtual_static_addr=0x5B,
     """Sets up controller, target models and top-level core interface."""
 
     cocotb.log.setLevel(logging.DEBUG)
+    log_seed(dut)
 
     i3c_controller = I3cController(
         sda_i=dut.bus_sda,
@@ -376,6 +370,8 @@ async def test_te0_errors(dut):
 # Test C2: TE1 Error Detection and Recovery
 # =============================================================================
 
+    await tb.teardown()
+
 @cocotb.test()
 async def test_te1_errors(dut):
     """TE1 error: CCC parity error -> HDR error mode -> recovery.
@@ -488,6 +484,8 @@ async def test_te1_errors(dut):
 # =============================================================================
 # Test C3: TE2 Private Write Parity Error
 # =============================================================================
+
+    await tb.teardown()
 
 @cocotb.test()
 async def test_te2_private_write_parity(dut):
@@ -638,6 +636,8 @@ async def test_te2_private_write_parity(dut):
 # Test C9: TE Error Registers Sweep
 # =============================================================================
 
+    await tb.teardown()
+
 @cocotb.test()
 async def test_te_error_registers_sweep(dut):
     """Register infrastructure test: FORCE->STATUS, W1C, counter saturation,
@@ -772,6 +772,8 @@ async def test_te_error_registers_sweep(dut):
 # Test C10: Controller Abort Scenarios
 # =============================================================================
 
+    await tb.teardown()
+
 @cocotb.test()
 async def test_controller_abort_scenarios(dut):
     """Controller abort during private write/read at random positions.
@@ -828,6 +830,8 @@ async def test_controller_abort_scenarios(dut):
 # =============================================================================
 # Test C11: TE Error Sequence Mixing
 # =============================================================================
+
+    await tb.teardown()
 
 @cocotb.test()
 async def test_te_error_sequence_mixing(dut):
@@ -929,6 +933,8 @@ async def test_te_error_sequence_mixing(dut):
 # Test C12: TE <-> RI Error Isolation
 # =============================================================================
 
+    await tb.teardown()
+
 @cocotb.test()
 async def test_te_error_ri_isolation(dut):
     """Verify TE errors do not corrupt RI path and vice versa.
@@ -1019,6 +1025,8 @@ async def test_te_error_ri_isolation(dut):
 # Test: TE Counter Per-Event
 # =============================================================================
 
+    await tb.teardown()
+
 @cocotb.test()
 async def test_te_counter_per_event(dut):
     """Verify TE0/TE1 error counters increment exactly once per single error event.
@@ -1088,3 +1096,5 @@ async def test_te_counter_per_event(dut):
 
     log.info("test_te_counter_per_event PASSED")
     tb.te_error_monitor.check()
+
+    await tb.teardown()

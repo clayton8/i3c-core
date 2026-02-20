@@ -25,14 +25,7 @@ from cocotb.triggers import ClockCycles, Timer
 # Constants
 # =============================================================================
 
-VALID_I3C_ADDRESSES = (
-    [i for i in range(0x03, 0x3E)]
-    + [i for i in range(0x3F, 0x5E)]
-    + [i for i in range(0x5F, 0x6E)]
-    + [i for i in range(0x6F, 0x76)]
-    + [i for i in range(0x77, 0x7A)]
-    + [0x7B, 0x7D]
-)
+from common import VALID_I3C_ADDRESSES, log_seed
 
 # CCC codes
 ENTHDR0 = 0x20
@@ -62,6 +55,7 @@ async def test_setup(dut, static_addr=0x5A, virtual_static_addr=0x5B,
     """Sets up controller, target models and top-level core interface."""
 
     cocotb.log.setLevel(logging.DEBUG)
+    log_seed(dut)
 
     i3c_controller = I3cController(
         sda_i=dut.bus_sda,
@@ -209,12 +203,14 @@ async def test_enter_exit_hdr_mode_write(dut):
         assert (
             (test_data.nack == True and accept_data == 0) or
             (test_data.nack == False and accept_data == 1)
-        )
+        ), f"HDR-DDR ACK/NACK mismatch: nack={test_data.nack}, accept_data={accept_data}" 
 
         await i3c_controller.send_hdr_exit()
         i3c_target.address = 0
         assert_fsm_idle(dut)
         await verify_target_responsive(i3c_controller, DYNAMIC_ADDR)
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -247,7 +243,7 @@ async def test_enter_restart_exit_hdr_mode_write(dut):
             assert (
                 (test_data.nack == True and accept_data == 0) or
                 (test_data.nack == False and accept_data == 1)
-            )
+            ), f"HDR-DDR write ACK/NACK mismatch: nack={test_data.nack}, accept_data={accept_data}"
 
             if i != transactions - 1:
                 await i3c_controller.send_hdr_rstart()
@@ -257,6 +253,8 @@ async def test_enter_restart_exit_hdr_mode_write(dut):
 
         assert_fsm_idle(dut)
         await verify_target_responsive(i3c_controller, DYNAMIC_ADDR)
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -291,12 +289,14 @@ async def test_enter_exit_hdr_mode_read(dut):
         assert (
             (test_data.nack == True and accept_data == 0) or
             (test_data.nack == False and accept_data == 1)
-        )
+        ), f"HDR-DDR ACK/NACK mismatch: nack={test_data.nack}, accept_data={accept_data}" 
 
         await i3c_controller.send_hdr_exit()
         i3c_target.address = 0
         assert_fsm_idle(dut)
         await verify_target_responsive(i3c_controller, DYNAMIC_ADDR)
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -333,7 +333,7 @@ async def test_enter_restart_exit_hdr_mode_read(dut):
             assert (
                 (test_data.nack == True and accept_data == 0) or
                 (test_data.nack == False and accept_data == 1)
-            )
+            ), f"HDR-DDR read ACK/NACK mismatch: nack={test_data.nack}, accept_data={accept_data}"
 
             if i != transactions - 1:
                 await i3c_controller.send_hdr_rstart()
@@ -348,6 +348,8 @@ async def test_enter_restart_exit_hdr_mode_read(dut):
 # =============================================================================
 # Tests: HDR error recovery timer (I3C spec 1.10.1.9)
 # =============================================================================
+
+    await tb.teardown()
 
 @cocotb.test()
 async def test_hdr_timeout_recovery_te0(dut):
@@ -389,6 +391,8 @@ async def test_hdr_timeout_recovery_te0(dut):
 
     await verify_target_responsive(i3c_controller, DYNAMIC_ADDR)
     tb.te_error_monitor.check()
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -435,6 +439,8 @@ async def test_hdr_timeout_recovery_te1(dut):
     await verify_target_responsive(i3c_controller, DYNAMIC_ADDR)
     tb.te_error_monitor.check()
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_hdr_timeout_does_not_fire_for_ccc_hdr(dut):
@@ -456,6 +462,8 @@ async def test_hdr_timeout_does_not_fire_for_ccc_hdr(dut):
     await i3c_controller.send_hdr_exit()
     assert_fsm_idle(dut)
     await verify_target_responsive(i3c_controller, DYNAMIC_ADDR)
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -495,6 +503,8 @@ async def test_hdr_timeout_resets_on_line_low(dut):
     await verify_target_responsive(i3c_controller, DYNAMIC_ADDR)
     tb.te_error_monitor.check()
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_hdr_timeout_disabled_by_default(dut):
@@ -516,6 +526,8 @@ async def test_hdr_timeout_disabled_by_default(dut):
     assert_fsm_idle(dut)
     await verify_target_responsive(i3c_controller, DYNAMIC_ADDR)
     tb.te_error_monitor.check()
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -540,6 +552,8 @@ async def test_hdr_timeout_configurable_threshold(dut):
     await verify_target_responsive(i3c_controller, DYNAMIC_ADDR)
     tb.te_error_monitor.check()
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_hdr_exit_pattern_works_alongside_timer(dut):
@@ -560,3 +574,5 @@ async def test_hdr_exit_pattern_works_alongside_timer(dut):
     assert_fsm_idle(dut)
     await verify_target_responsive(i3c_controller, DYNAMIC_ADDR)
     tb.te_error_monitor.check()
+
+    await tb.teardown()
