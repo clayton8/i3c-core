@@ -136,7 +136,9 @@ module i3c_target_fsm import i3c_pkg::*; (
 
   // Target specific variables
   logic nack_transaction_q, nack_transaction_d;
-  logic rx_overflow_err_q, rx_overflow_err_r;
+  logic rx_overflow_err_q, rx_overflow_err_d;
+  logic rx_fifo_wvalid_raw;
+
 
   i3c_byte_t last_byte;
 
@@ -280,8 +282,9 @@ module i3c_target_fsm import i3c_pkg::*; (
 
   // TE0 error: Invalid reserved address + RnW combinations
   // Uses shared function from i3c_pkg to ensure consistency with ccc.sv
-  // Qualified with last_addr_valid_o to only report when address is valid
-  assign te0_err_o = te0_enable_i && last_addr_valid_o && is_te0_rsvd_addr_err(bus_addr_q, bus_rnw_q);
+  // Qualified with bus_addr_valid (single-cycle pulse) so te0_err_o is a
+  // single-cycle pulse, consistent with all other TE error signals.
+  assign te0_err_o = te0_enable_i && bus_addr_valid && is_te0_rsvd_addr_err(bus_addr_d, bus_rnw_d);
 
   // Latch whether this transaction is to be NACK'd.
   always_ff @(posedge clk_i or negedge rst_ni) begin : clk_nack_transaction
@@ -341,24 +344,38 @@ module i3c_target_fsm import i3c_pkg::*; (
     end
   end
 
+
+  // RX FIFO valid before overflow gating: byte complete with no protocol error.
+  // Gate with bus_rx_rsp_i.done so that STOP/Sr during the T-bit phase does NOT
+  // push an unchecked byte (the T-bit was never received, parity was never verified).
+  assign rx_fifo_wvalid_raw = (state_q == RxPWriteTbit) && bus_rx_rsp_i.done &&
+                              !(te2_err_priv_wr || parity_err);
+
+  // Overflow detection using rx_fifo_wvalid_raw to detect overflow on the same
+  // cycle the byte completes, avoiding a combo loop (raw does not depend on
+  // rx_overflow_err_d).
+  always_comb begin
+    rx_overflow_err_d = rx_overflow_err_q;
+
+    if (rx_fifo_wvalid_raw & ~rx_fifo_wready_i) begin
+      rx_overflow_err_d = 1'b1;
+    end else if (target_idle_o | state_d inside {RxFByte, Idle}) begin
+      rx_overflow_err_d = 1'b0;
+    end 
+  end 
   always_ff @(posedge clk_i or negedge rst_ni) begin : latch_rx_overflow_error
     if (~rst_ni) begin
-      rx_overflow_err_r <= 1'b0;
       rx_overflow_err_q <= 1'b0;
     end else begin
-      rx_overflow_err_q <= rx_overflow_err_r;
-      if (state_d == RxPWriteData & ~rx_fifo_wready_i & rx_fifo_wvalid_o) rx_overflow_err_r <= 1'b1;
-      else if (target_idle_o | state_d inside {RxFByte, Idle}) rx_overflow_err_r <= 1'b0;
-    end
-  end
+      rx_overflow_err_q <= rx_overflow_err_d;
+    end 
+  end 
 
-  assign rx_overflow_err_o = ~rx_overflow_err_q & rx_overflow_err_r;
+  assign rx_overflow_err_o = ~rx_overflow_err_q & rx_overflow_err_d;
 
-  // RX FIFO valid when we finish reading byte (leave RxPWriteTbit) and there was no protocol error.
-  // Use te2_err_priv_wr (combinational) so that errored byte is blocked in the same cycle the 
-  // mismatch is detected.
-  assign rx_fifo_wvalid = (state_q == RxPWriteTbit) && (state_d != RxPWriteTbit) &&
-                          !(te2_err_priv_wr || parity_err || rx_overflow_err_o);
+  // Final gated valid: block the push if overflow is detected this cycle.
+  assign rx_fifo_wvalid = rx_fifo_wvalid_raw & ~rx_overflow_err_d;
+
 
   always_ff @(posedge clk_i or negedge rst_ni) begin : latch_rx_fifo_wvalid
     if (~rst_ni) begin
@@ -372,12 +389,18 @@ module i3c_target_fsm import i3c_pkg::*; (
       end
     end
   end
-  // FSM on the last T bit will transition to
-  // RxPWriteData because the Sr/Stop doesn't happen until after we complete
-  // the T bit and are waiting for the next set of data in RxPWriteData. In
-  // this state if we get a repeat start we transition into RxFByte if we get
-  // a stop we transition to Idle. 
-  assign rx_last_byte_o = (state_q == RxPWriteData) && (state_d inside {RxFByte, Idle});
+  // Normal path: FSM completes the T-bit in RxPWriteTbit, transitions to
+  // RxPWriteData, and waits for the next byte. Sr/Stop arrives in RxPWriteData,
+  // setting state_d to RxFByte or Idle respectively.
+  //
+  // Abort path: If Sr/Stop arrives while still in RxPWriteTbit (before the T-bit
+  // completes), the incomplete byte is NOT pushed (gated by bus_rx_rsp_i.done
+  // above), but we still need a descriptor for the previously completed bytes.
+  // Including RxPWriteTbit in the state_q check covers this abort case. The
+  // normal T-bit completion (state_d = RxPWriteData) is excluded by the
+  // state_d inside {RxFByte, Idle} check, so no spurious descriptor is generated.
+  assign rx_last_byte_o = (state_q inside {RxPWriteData, RxPWriteTbit}) &&
+                          (state_d inside {RxFByte, Idle});
 
   // Logic for latching CCC code
   always_ff @(posedge clk_i or negedge rst_ni) begin : latch_ccc_data

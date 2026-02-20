@@ -530,7 +530,7 @@ module recovery_handler
   ) tti_conv_8toN (
       .clk_i,
       .rst_ni(rst_ni),
-      .soft_reset_ni(~bypass_i3c_core_i & ~recv_conv_soft_reset),
+      .soft_reset_ni(~bypass_i3c_core_i & ~recv_conv_soft_reset & ~tti_rx_data_queue_reg_rst),
 
       .sink_valid_i(tti_rx_data_queue_wvalid),
       .sink_ready_o(tti_rx_data_queue_wready),
@@ -842,7 +842,7 @@ module recovery_handler
 
     end else begin
       tti_tx_data_queue_rready_conv_source    = ctl_tti_tx_data_queue_rready_i;
-      tti_tx_data_queue_flush_conv_source     = ctl_tti_tx_data_queue_flush_i;
+      tti_tx_data_queue_flush_conv_source     = ctl_tti_tx_data_queue_flush_i | tti_tx_data_queue_reg_rst;
       send_tti_tx_data_ready                  = '0;
       ctl_tti_tx_data_queue_full_o            = tti_tx_data_queue_full;
       ctl_tti_tx_data_queue_depth_o           = tti_tx_data_queue_depth;

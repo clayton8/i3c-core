@@ -1148,9 +1148,11 @@ module ccc
         tx_req_ccc.data       = tx_data;
 
         if (bus_rstart_det_i) begin
-          // Controller abort: Target sent T=1 but Controller issued Sr
+          // Controller abort: Sr during T-bit means the transfer is
+          // incomplete — do NOT mark tx_data_complete. This prevents
+          // get_status_done_o from falsely firing on an aborted GETSTATUS,
+          // which would prematurely clear the Protocol Error in err_o.
           state_d = RxTargetAddr;
-          set_tx_data_complete = 1'b1;
         end else if (bus_tx_rsp_i.done) begin
           if (tx_data_last_byte) begin
             // Target complete: Target sent T=0, wait for Sr or STOP
