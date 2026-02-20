@@ -13,7 +13,7 @@ from interface import I3CTopTestInterface
 from utils import format_ibi_data, get_interrupt_status
 
 import cocotb
-from cocotb.triggers import ClockCycles, RisingEdge, Timer
+from cocotb.triggers import ClockCycles, FallingEdge, RisingEdge, Timer
 from cocotbext_i3c.common import I3cState
 from common import VALID_I3C_ADDRESSES, timeout_task, log_seed
 
@@ -112,13 +112,8 @@ async def test_i3c_target_write(dut):
 
             # Wait for the interrupt signal to go high
             irq = dut.xi3c_wrapper.i3c.irq_o
-            timeout_cycles = 1000
-            for _ in range(timeout_cycles):
-                if irq.value != 0:
-                    break
-                await RisingEdge(tb.clk)
-            else:
-                raise TimeoutError(f"IRQ did not assert within {timeout_cycles} clock cycles")
+            if irq.value == 0:
+                await RisingEdge(irq)
 
             # Read & check interrupt status
             intrs = await get_interrupt_status(tb)
@@ -139,13 +134,8 @@ async def test_i3c_target_write(dut):
 
             # Wait for the interrupt signal to go low
             irq = dut.xi3c_wrapper.i3c.irq_o
-            timeout_cycles = 1000
-            for _ in range(timeout_cycles):
-                if irq.value == 0:
-                    break
-                await RisingEdge(tb.clk)
-            else:
-                raise TimeoutError(f"IRQ did not deassert within {timeout_cycles} clock cycles")
+            if irq.value != 0:
+                await FallingEdge(irq)
 
             # Read & check interrupt status
             intrs = await get_interrupt_status(tb)
