@@ -8,11 +8,7 @@ from interface import I3CTopTestInterface
 
 import cocotb
 from cocotb.triggers import Timer
-
-
-async def timeout_task(timeout):
-    await Timer(timeout, "us")
-    raise RuntimeError("Test timeout!")
+from common import timeout_task, log_seed
 
 
 async def initialize(dut, fclk=333.0, timeout=50):
@@ -21,6 +17,7 @@ async def initialize(dut, fclk=333.0, timeout=50):
     """
 
     cocotb.log.setLevel(logging.DEBUG)
+    log_seed(dut)
 
     # Start the background timeout task
     await cocotb.start(timeout_task(timeout))
@@ -97,6 +94,8 @@ async def test_dat_csr_access(dut):
     tb = await initialize(dut)
     await run_basic_csr_access(tb, tb.reg_map.DAT)
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_dct_csr_access(dut):
@@ -106,6 +105,8 @@ async def test_dct_csr_access(dut):
     tb = await initialize(dut)
     await run_basic_csr_access(tb, tb.reg_map.DCT, exceptions)
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_base_csr_access(dut):
@@ -114,6 +115,8 @@ async def test_base_csr_access(dut):
     ]
     tb = await initialize(dut)
     await run_basic_csr_access(tb, tb.reg_map.I3CBASE, exceptions)
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -128,6 +131,8 @@ async def test_pio_csr_access(dut):
     tb = await initialize(dut)
     await run_basic_csr_access(tb, tb.reg_map.PIOCONTROL, exceptions)
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_ec_sec_fw_rec_csr_access(dut):
@@ -137,6 +142,8 @@ async def test_ec_sec_fw_rec_csr_access(dut):
     ]
     tb = await initialize(dut)
     await run_basic_csr_access(tb, tb.reg_map.I3C_EC.SECFWRECOVERYIF, exceptions)
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -167,6 +174,8 @@ async def test_ec_stdby_ctrl_mode_csr_access(dut):
         rd_data = await tb.read_csr(addr)
         compare_values(int2dword(exp_rd), rd_data, addr)
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_ec_tti_csr_access(dut):
@@ -175,10 +184,14 @@ async def test_ec_tti_csr_access(dut):
         "RX_DESC_QUEUE_PORT",
         "RX_DATA_PORT",
         "QUEUE_THLD_CTRL",
+        # PENDING_INTERRUPT field is HW-driven only (no we=true in RDL);
+        # SW writes have no effect, so generic write-readback fails
         "INTERRUPT_STATUS",
     ]
     tb = await initialize(dut)
     await run_basic_csr_access(tb, tb.reg_map.I3C_EC.TTI, exceptions)
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -187,14 +200,20 @@ async def test_ec_soc_mgmt_csr_access(dut):
     tb = await initialize(dut)
     await run_basic_csr_access(tb, tb.reg_map.I3C_EC.SOCMGMTIF, exceptions)
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_ec_contrl_config_csr_access(dut):
     tb = await initialize(dut)
     await run_basic_csr_access(tb, tb.reg_map.I3C_EC.CTRLCFG)
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_ec_csr_access(dut):
     tb = await initialize(dut)
     await run_basic_csr_access(tb, tb.reg_map.I3C_EC)
+
+    await tb.teardown()

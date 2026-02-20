@@ -13,6 +13,7 @@ import logging
 import random
 
 from boot import boot_init
+from bus2csr import dword2int, int2dword
 from i3c_controller_fixed import I3cControllerFixed as I3cController
 from cocotbext_i3c.i3c_target import I3CTarget
 from interface import I3CTopTestInterface
@@ -24,14 +25,7 @@ from cocotb.triggers import ClockCycles, Timer
 # Constants
 # =============================================================================
 
-VALID_I3C_ADDRESSES = (
-    [i for i in range(0x03, 0x3E)]
-    + [i for i in range(0x3F, 0x5E)]
-    + [i for i in range(0x5F, 0x6E)]
-    + [i for i in range(0x6F, 0x76)]
-    + [i for i in range(0x77, 0x7A)]
-    + [0x7B, 0x7D]
-)
+from common import VALID_I3C_ADDRESSES, log_seed
 
 # CCC codes
 ENTHDR0 = 0x20
@@ -44,7 +38,7 @@ FSM_STATE_IN_HDR_MODE = 19
 # DUT hierarchy path to FSM state register
 FSM_STATE_PATH = (
     "xi3c_wrapper.i3c.xcontroller.xcontroller_standby"
-    ".xcontroller_standby_i3c.xi3c_target_fsm.state_d"
+    ".xcontroller_standby_i3c.xi3c_target_fsm.state_q"
 )
 
 # HDR timeout test threshold (small value so tests run fast)
@@ -61,6 +55,7 @@ async def test_setup(dut, static_addr=0x5A, virtual_static_addr=0x5B,
     """Sets up controller, target models and top-level core interface."""
 
     cocotb.log.setLevel(logging.DEBUG)
+    log_seed(dut)
 
     i3c_controller = I3cController(
         sda_i=dut.bus_sda,
@@ -208,12 +203,14 @@ async def test_enter_exit_hdr_mode_write(dut):
         assert (
             (test_data.nack == True and accept_data == 0) or
             (test_data.nack == False and accept_data == 1)
-        )
+        ), f"HDR-DDR ACK/NACK mismatch: nack={test_data.nack}, accept_data={accept_data}" 
 
         await i3c_controller.send_hdr_exit()
         i3c_target.address = 0
         assert_fsm_idle(dut)
         await verify_target_responsive(i3c_controller, DYNAMIC_ADDR)
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -246,7 +243,7 @@ async def test_enter_restart_exit_hdr_mode_write(dut):
             assert (
                 (test_data.nack == True and accept_data == 0) or
                 (test_data.nack == False and accept_data == 1)
-            )
+            ), f"HDR-DDR write ACK/NACK mismatch: nack={test_data.nack}, accept_data={accept_data}"
 
             if i != transactions - 1:
                 await i3c_controller.send_hdr_rstart()
@@ -256,6 +253,8 @@ async def test_enter_restart_exit_hdr_mode_write(dut):
 
         assert_fsm_idle(dut)
         await verify_target_responsive(i3c_controller, DYNAMIC_ADDR)
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -290,12 +289,14 @@ async def test_enter_exit_hdr_mode_read(dut):
         assert (
             (test_data.nack == True and accept_data == 0) or
             (test_data.nack == False and accept_data == 1)
-        )
+        ), f"HDR-DDR ACK/NACK mismatch: nack={test_data.nack}, accept_data={accept_data}" 
 
         await i3c_controller.send_hdr_exit()
         i3c_target.address = 0
         assert_fsm_idle(dut)
         await verify_target_responsive(i3c_controller, DYNAMIC_ADDR)
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -332,7 +333,7 @@ async def test_enter_restart_exit_hdr_mode_read(dut):
             assert (
                 (test_data.nack == True and accept_data == 0) or
                 (test_data.nack == False and accept_data == 1)
-            )
+            ), f"HDR-DDR read ACK/NACK mismatch: nack={test_data.nack}, accept_data={accept_data}"
 
             if i != transactions - 1:
                 await i3c_controller.send_hdr_rstart()
@@ -348,6 +349,8 @@ async def test_enter_restart_exit_hdr_mode_read(dut):
 # Tests: HDR error recovery timer (I3C spec 1.10.1.9)
 # =============================================================================
 
+    await tb.teardown()
+
 @cocotb.test()
 async def test_hdr_timeout_recovery_te0(dut):
     """60us timeout recovery after TE0 error (invalid reserved address)."""
@@ -355,6 +358,16 @@ async def test_hdr_timeout_recovery_te0(dut):
     i3c_controller, i3c_target, tb = await test_setup(
         dut, STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR,
         hdr_timeout_en=True, hdr_timeout_cycles=TEST_HDR_TIMEOUT_CYCLES)
+    tb.te_error_monitor.expect_error(0)
+
+    # Enable TE0 interrupt so STATUS bit is captured
+    te0_en_field = tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_ENABLE.TE0_ERR_EN
+    await tb.write_csr_field(
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_ENABLE.base_addr, te0_en_field, 1)
+    # Clear stale status and counter
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.base_addr, int2dword(0xFFFFFFFF), 4)
+    await tb.write_csr(tb.reg_map.I3C_EC.TTI.TARGET_ERR_CNT_TE0.base_addr, int2dword(0), 4)
 
     await trigger_te0_error(i3c_controller)
     await ClockCycles(tb.clk, 10)
@@ -365,7 +378,21 @@ async def test_hdr_timeout_recovery_te0(dut):
 
     await i3c_controller.send_stop()
     i3c_controller.give_bus_control()
+
+    # Verify TE0 error registers
+    te0_cnt = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.TTI.TARGET_ERR_CNT_TE0.base_addr, 4)) & 0xFF
+    te0_stat = await tb.read_csr_field(
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.base_addr,
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.TE0_ERR_STAT)
+    dut._log.info(f"TE0 counter={te0_cnt}, status={te0_stat}")
+    assert te0_cnt >= 1, f"Expected TE0 counter >= 1, got {te0_cnt}"
+    assert te0_stat == 1, f"Expected TE0_ERR_STAT=1, got {te0_stat}"
+
     await verify_target_responsive(i3c_controller, DYNAMIC_ADDR)
+    tb.te_error_monitor.check()
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -375,6 +402,16 @@ async def test_hdr_timeout_recovery_te1(dut):
     i3c_controller, i3c_target, tb = await test_setup(
         dut, STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR,
         hdr_timeout_en=True, hdr_timeout_cycles=TEST_HDR_TIMEOUT_CYCLES)
+    tb.te_error_monitor.expect_error(1)
+
+    # Enable TE1 interrupt so STATUS bit is captured
+    te1_en_field = tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_ENABLE.TE1_ERR_EN
+    await tb.write_csr_field(
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_ENABLE.base_addr, te1_en_field, 1)
+    # Clear stale status and counter
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.base_addr, int2dword(0xFFFFFFFF), 4)
+    await tb.write_csr(tb.reg_map.I3C_EC.TTI.TARGET_ERR_CNT_TE1.base_addr, int2dword(0), 4)
 
     await trigger_te1_error(i3c_controller, i3c_target)
     await ClockCycles(tb.clk, 10)
@@ -388,7 +425,21 @@ async def test_hdr_timeout_recovery_te1(dut):
 
     # Re-enable the cocotb target model after recovery
     i3c_target.monitor_enable.set()
+
+    # Verify TE1 error registers
+    te1_cnt = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.TTI.TARGET_ERR_CNT_TE1.base_addr, 4)) & 0xFF
+    te1_stat = await tb.read_csr_field(
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.base_addr,
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.TE1_ERR_STAT)
+    dut._log.info(f"TE1 counter={te1_cnt}, status={te1_stat}")
+    assert te1_cnt >= 1, f"Expected TE1 counter >= 1, got {te1_cnt}"
+    assert te1_stat == 1, f"Expected TE1_ERR_STAT=1, got {te1_stat}"
+
     await verify_target_responsive(i3c_controller, DYNAMIC_ADDR)
+    tb.te_error_monitor.check()
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -412,6 +463,8 @@ async def test_hdr_timeout_does_not_fire_for_ccc_hdr(dut):
     assert_fsm_idle(dut)
     await verify_target_responsive(i3c_controller, DYNAMIC_ADDR)
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_hdr_timeout_resets_on_line_low(dut):
@@ -420,6 +473,7 @@ async def test_hdr_timeout_resets_on_line_low(dut):
     i3c_controller, i3c_target, tb = await test_setup(
         dut, STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR,
         hdr_timeout_en=True, hdr_timeout_cycles=TEST_HDR_TIMEOUT_CYCLES)
+    tb.te_error_monitor.expect_error(0)
 
     await trigger_te0_error(i3c_controller)
     await ClockCycles(tb.clk, 10)
@@ -447,6 +501,9 @@ async def test_hdr_timeout_resets_on_line_low(dut):
     await i3c_controller.send_stop()
     i3c_controller.give_bus_control()
     await verify_target_responsive(i3c_controller, DYNAMIC_ADDR)
+    tb.te_error_monitor.check()
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -456,6 +513,7 @@ async def test_hdr_timeout_disabled_by_default(dut):
     i3c_controller, i3c_target, tb = await test_setup(
         dut, STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR,
         hdr_timeout_cycles=TEST_HDR_TIMEOUT_CYCLES)
+    tb.te_error_monitor.expect_error(0)
 
     await trigger_te0_error(i3c_controller)
     await ClockCycles(tb.clk, 10)
@@ -467,6 +525,9 @@ async def test_hdr_timeout_disabled_by_default(dut):
     await i3c_controller.send_hdr_exit()
     assert_fsm_idle(dut)
     await verify_target_responsive(i3c_controller, DYNAMIC_ADDR)
+    tb.te_error_monitor.check()
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -477,6 +538,7 @@ async def test_hdr_timeout_configurable_threshold(dut):
     i3c_controller, i3c_target, tb = await test_setup(
         dut, STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR,
         hdr_timeout_en=True, hdr_timeout_cycles=SHORT_THRESHOLD)
+    tb.te_error_monitor.expect_error(0)
 
     await trigger_te0_error(i3c_controller)
     await ClockCycles(tb.clk, 10)
@@ -488,6 +550,9 @@ async def test_hdr_timeout_configurable_threshold(dut):
     await i3c_controller.send_stop()
     i3c_controller.give_bus_control()
     await verify_target_responsive(i3c_controller, DYNAMIC_ADDR)
+    tb.te_error_monitor.check()
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -498,6 +563,7 @@ async def test_hdr_exit_pattern_works_alongside_timer(dut):
     i3c_controller, i3c_target, tb = await test_setup(
         dut, STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR,
         hdr_timeout_en=True, hdr_timeout_cycles=LARGE_THRESHOLD)
+    tb.te_error_monitor.expect_error(0)
 
     await trigger_te0_error(i3c_controller)
     await ClockCycles(tb.clk, 10)
@@ -507,3 +573,6 @@ async def test_hdr_exit_pattern_works_alongside_timer(dut):
     await i3c_controller.send_hdr_exit()
     assert_fsm_idle(dut)
     await verify_target_responsive(i3c_controller, DYNAMIC_ADDR)
+    tb.te_error_monitor.check()
+
+    await tb.teardown()
