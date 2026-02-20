@@ -230,5 +230,313 @@
       tests: ["ccc_direct_multiple_rd"]
       tags: ["top"]
     }
+    {
+      name: ccc_entdaa
+      desc:
+        '''
+        Verifies ENTDAA procedure: controller issues ENTDAA CCC, target responds
+        with 64-bit device ID, controller assigns dynamic address. Checks address
+        is set correctly in STBY_CR_DEVICE_ADDR CSR.
+        '''
+      tests: ["ccc_entdaa"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_entdaa_arb_lost
+      desc:
+        '''
+        Verifies ENTDAA arbitration-lost path: when arbitration_lost_i is asserted
+        during ID bit transmission, the DUT enters LostArbitration state and
+        retries on the next ENTDAA round.
+        '''
+      tests: ["ccc_entdaa_arb_lost"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_entdaa_early_stop
+      desc:
+        '''
+        Verifies ENTDAA with early STOP after assigning only the main target.
+        The virtual target should remain unaddressed.
+        '''
+      tests: ["ccc_entdaa_early_stop"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_entdaa_te3_te4
+      desc:
+        '''
+        Verifies TE3 and TE4 error handling during ENTDAA.
+
+        TE3: Parity error on assigned address causes target to NACK, retries
+        on next ENTDAA round.
+        TE4: Controller assigns same address to two targets, causes error.
+        '''
+      tests: ["ccc_entdaa_te3_te4"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_enthdr_all_codes
+      desc:
+        '''
+        Verifies all ENTHDR codes (0x20-0x27) cause the target to enter HDR mode.
+        After each ENTHDR, verifies clean recovery with HDR exit pattern.
+        '''
+      tests: ["ccc_enthdr_all_codes"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_error_det_enable
+      desc:
+        '''
+        Verifies TE0-TE5 error detection enable CSR bits can be toggled.
+        When TE0 is disabled, unsupported CCC should not trigger error.
+        When TE0 is re-enabled, error detection resumes.
+        '''
+      tests: ["ccc_error_det_enable"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_getcaps
+      desc:
+        '''
+        Tests GETCAPS (0x95) direct GET CCC with various defining bytes,
+        targeting both main and virtual targets.
+        '''
+      tests: ["ccc_getcaps"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_setdasa_padding_err
+      desc:
+        '''
+        Verifies that SETDASA/SETNEWDA with padding bit[0]=1 triggers a framing
+        error and does NOT apply the address.
+        '''
+      tests: ["ccc_setdasa_padding_err"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_te2_parity
+      desc:
+        '''
+        Verifies TE2 error detection: bad T-bit parity on CCC defining byte
+        causes the target to abort the CCC and signal TE2.
+        '''
+      tests: ["ccc_te2_parity"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_te5_wrong_direction
+      desc:
+        '''
+        TE5 error: wrong R/W direction for direct CCC.
+        GET CCC sent with W direction causes NACK.
+        SET CCC sent with R direction causes NACK.
+        '''
+      tests: ["ccc_te5_wrong_direction"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_unknown_broadcast
+      desc:
+        '''
+        Unknown broadcast CCCs should be silently ignored (target accepts data
+        but takes no action). Verifies no crash and clean recovery.
+        '''
+      tests: ["ccc_unknown_broadcast"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_unsupported_direct_nack
+      desc:
+        '''
+        Verifies that unsupported direct CCCs are NACKed by the target.
+        Tests deprecated, unsupported, and vendor-specific CCC codes.
+        '''
+      tests: ["ccc_unsupported_direct_nack"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_vendor_codes
+      desc:
+        '''
+        Verifies vendor-specific CCC codes:
+        Broadcast vendor CCCs (0x61-0x7F): target ignores data silently.
+        Direct vendor CCCs: target NACKs.
+        '''
+      tests: ["ccc_vendor_codes"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_abort_bcast_stop
+      desc:
+        '''
+        Controller STOP during CCC at various phases:
+        STOP during broadcast SET data (incomplete data).
+        Verifies clean recovery.
+        '''
+      tests: ["ccc_abort_bcast_stop"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_abort_get_sr
+      desc:
+        '''
+        Controller Sr abort during multi-byte GET CCC reads. Reads fewer bytes
+        than expected, then sends Sr to abort. Verifies clean recovery and
+        correct subsequent CCC processing.
+        '''
+      tests: ["ccc_abort_get_sr"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_addr_lifecycle
+      desc:
+        '''
+        Full address lifecycle: RSTDAA -> SETDASA -> verify -> SETNEWDA -> verify ->
+        RSTDAA -> verify cleared. Tests both main and virtual targets.
+        '''
+      tests: ["ccc_addr_lifecycle"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_back_to_back
+      desc:
+        '''
+        Back-to-back CCCs with no idle gap between transactions.
+        Verifies all CCCs process correctly.
+        '''
+      tests: ["ccc_back_to_back"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_chain_bcast
+      desc:
+        '''
+        Chain multiple broadcast CCCs via Sr+7E/W within a single frame.
+        Verifies each CCC takes effect.
+        '''
+      tests: ["ccc_chain_bcast"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_chain_direct
+      desc:
+        '''
+        Chain multiple direct CCCs within a single frame.
+        Verifies correct target address matching across chained CCCs.
+        '''
+      tests: ["ccc_chain_direct"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_random_interleave
+      desc:
+        '''
+        Random sequence of SET/GET CCCs to random targets. Stress tests the
+        CCC FSM state machine with varied patterns.
+        '''
+      tests: ["ccc_random_interleave"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_rstact_arm_clear_on_start
+      desc:
+        '''
+        Verifies RSTACT arm is cleared by START (not Sr). After arming with
+        whole-target reset, a private transfer (START) clears the arm state.
+        '''
+      tests: ["ccc_rstact_arm_clear_on_start"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_rstact_escalation_clear
+      desc:
+        '''
+        Verifies that RSTACT CCC and GETSTATUS CCC clear the escalation counter,
+        preventing escalated reset on the next target reset pattern.
+        '''
+      tests: ["ccc_rstact_escalation_clear"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_rstact_read_action
+      desc:
+        '''
+        Verifies RSTACT internal state after arming. Per spec, rstact_armed is
+        cleared by the next START (not Sr), so a subsequent read may return
+        the armed action.
+        '''
+      tests: ["ccc_rstact_read_action"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_rstact_unsupported_db
+      desc:
+        '''
+        Verifies RSTACT with unsupported defining bytes is NACKed.
+        '''
+      tests: ["ccc_rstact_unsupported_db"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_rstact_vt_detect
+      desc:
+        '''
+        Verifies RSTACT Defining Byte 0x04 (Virtual Target Detect) flag set/clear
+        and Defining Byte 0x84 (Virtual Target Indication) behavior.
+        '''
+      tests: ["ccc_rstact_vt_detect"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_rstact_vt_detect_no_reset_arm
+      desc:
+        '''
+        Verifies DB=0x04 does not arm a reset action: default peripheral->escalation
+        path still works after sending RSTACT with VT detect defining byte.
+        '''
+      tests: ["ccc_rstact_vt_detect_no_reset_arm"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_setmwl_sr_abort_during_data
+      desc:
+        '''
+        Sr abort during SETMWL data phase. Verifies that the target does not apply
+        the partial data.
+
+        BLOCKED BY DESIGN BUG: set_tx_data_complete fires unconditionally on Sr
+        abort.
+        '''
+      tests: ["ccc_setmwl_sr_abort_during_data"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_getstatus_abort_then_chain_setmwl
+      desc:
+        '''
+        Verifies that aborting GETSTATUS mid-read and immediately chaining into
+        another CCC (SETMWL) in the same bus frame does not corrupt the target
+        state.
+        '''
+      tests: ["ccc_getstatus_abort_then_chain_setmwl"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_getstatus_sr_abort_clears_protocol_err
+      desc:
+        '''
+        Verifies GETSTATUS Sr abort behavior with protocol error flag. Per spec,
+        a target shall only clear its pending status upon successfully completing
+        the GETSTATUS response.
+
+        BLOCKED BY DESIGN BUG: set_tx_data_complete fires unconditionally on Sr
+        abort, causing premature error clearing.
+        '''
+      tests: ["ccc_getstatus_sr_abort_clears_protocol_err"]
+      tags: ["top"]
+    }
   ]
 }

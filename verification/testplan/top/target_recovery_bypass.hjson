@@ -73,6 +73,16 @@
       tags: ["top"]
     }
     {
+      name: bypass_read
+      desc: '''
+            Verify basic read functionality through recovery bypass
+            - Enable I3C Core bypass in the Recovery Handler via CSR
+            - Read from a recovery CSR via the bypass path
+            - Verify data integrity'''
+      tests: ["read"]
+      tags: ["top"]
+    }
+    {
       name: recovery_flow
       desc: '''
             Verify that Recovery Handler with bypass enabled can perform full Recovery Sequence
