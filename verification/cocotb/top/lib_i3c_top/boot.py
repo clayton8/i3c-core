@@ -113,33 +113,41 @@ async def boot_init(
         tb, static_addr, virtual_static_addr, dynamic_addr, virtual_dynamic_addr
     )
 
+    # Inform the I3C bus monitor of the DUT's dynamic address
+    dut_addr = dynamic_addr if dynamic_addr is not None else static_addr
+    if hasattr(tb, 'bus_monitor') and tb.bus_monitor is not None:
+        tb.bus_monitor.set_dut_dynamic_addr(dut_addr)
+        virt_addr = virtual_dynamic_addr if virtual_dynamic_addr is not None else virtual_static_addr
+        if virt_addr is not None:
+            tb.bus_monitor.set_virt_dynamic_addr(virt_addr)
+
 
 async def check_version(tb):
     """Check HCI version"""
     hci_version = await _read_csr(tb, tb.reg_map.I3CBASE.HCI_VERSION.base_addr)
-    assert hci_version == 0x120
+    assert hci_version == 0x120  # HCI v1.2 per MIPI I3C HCI spec §7.7.1
 
 
 async def get_dxt_offsets(tb):
     """Check DAT/DCT offsets"""
     dat_offset = await _read_csr(tb, tb.reg_map.I3CBASE.DAT_SECTION_OFFSET.base_addr)
-    assert (dat_offset & mask(12)) == 0x400
+    assert (dat_offset & mask(12)) == 0x400  # DAT base at 0x400 per i3c_core_configs.yaml
     dct_offset = await _read_csr(tb, tb.reg_map.I3CBASE.DCT_SECTION_OFFSET.base_addr)
-    assert (dct_offset & mask(12)) == 0x800
+    assert (dct_offset & mask(12)) == 0x800  # DCT base at 0x800 per i3c_core_configs.yaml
     return dat_offset, dct_offset
 
 
 async def get_pio_offset(tb):
     """Check PIO offset"""
     offset = await _read_csr(tb, tb.reg_map.I3CBASE.PIO_SECTION_OFFSET.base_addr)
-    assert (offset & mask(16)) == 0x80
+    assert (offset & mask(16)) == 0x80  # PIO base at 0x80 per i3c_core_configs.yaml
     return offset
 
 
 async def get_ring_offset(tb):
     """Check ring offset"""
     offset = await _read_csr(tb, tb.reg_map.I3CBASE.RING_HEADERS_SECTION_OFFSET.base_addr)
-    assert (offset & mask(16)) == 0x0
+    assert (offset & mask(16)) == 0x0  # Ring headers at 0x0 (not used in standby mode)
     return offset
 
 
@@ -160,7 +168,7 @@ async def discover_ec(tb):
     are defined in the same order as in the expected_cap_ids variable.
     """
     base_offset = await _read_csr(tb, tb.reg_map.I3CBASE.EXT_CAPS_SECTION_OFFSET.base_addr)
-    assert (base_offset & mask(16)) == 0x100
+    assert (base_offset & mask(16)) == 0x100  # Extended capabilities base at 0x100 per i3c_core_configs.yaml
 
     expected_cap_ids = [0xC0, 0x12, 0xC4, 0xC1, 0x02]
     cap_ids = []

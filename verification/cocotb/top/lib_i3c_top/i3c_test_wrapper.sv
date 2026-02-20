@@ -1,12 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 `include "i3c_defines.svh"
 
-
-`define VERILATOR
-/*
-    This module is used only for simulation with Verilator
-*/
-
 module i3c_test_wrapper #(
 `ifdef I3C_USE_AHB
     parameter int unsigned AhbDataWidth = `AHB_DATA_WIDTH,
@@ -107,6 +101,11 @@ module i3c_test_wrapper #(
     output logic bus_sda,
     output logic bus_scl,
 
+    // I3C Core DUT SDA signals (exposed for bus monitor)
+    output logic i3c_sda_o,
+    output logic i3c_sda_oe,
+    output logic i3c_sel_od_pp,
+
     output logic peripheral_reset_o,
     input  logic peripheral_reset_done_i,
     output logic escalated_reset_o
@@ -123,26 +122,58 @@ assign clk_i = aclk;
 assign rst_ni = areset_n;
 `endif
 
-localparam int unsigned NumDevices = 3; // 2 Targets, 1 Controller
+localparam int unsigned NumDevices = 3; // 2 BFMs (Controller, Target), 1 DUT (I3C Core)
 
-logic [NumDevices-1:0] sda_i;
-logic [NumDevices-1:0] scl_i;
+// SDA/SCL data signals per device
+logic [NumDevices-1:0] sda_data;
+logic [NumDevices-1:0] scl_data;
 
-assign sda_i[0] = sda_sim_ctrl_i;
-assign scl_i[0] = scl_sim_ctrl_i;
-assign sda_i[1] = sda_sim_target_i;
-assign scl_i[1] = scl_sim_target_i;
+// SDA/SCL output enable signals per device
+logic [NumDevices-1:0] sda_oe;
+logic [NumDevices-1:0] scl_oe;
+
+// OD/PP mode per device
+logic [NumDevices-1:0] sel_od_pp;
+
+// Device 0: Controller BFM (simulation model, always OD mode)
+// BFMs don't have explicit OE, so derive it: in OD mode, driving when output is 0
+assign sda_data[0] = sda_sim_ctrl_i;
+assign scl_data[0] = scl_sim_ctrl_i;
+assign sda_oe[0]   = !sda_sim_ctrl_i;  // OD: driving low when sda=0
+assign scl_oe[0]   = !scl_sim_ctrl_i;  // OD: driving low when scl=0
+assign sel_od_pp[0] = 1'b0;            // Controller BFM always OD
+
+// Device 1: Target BFM (simulation model, always OD mode)
+assign sda_data[1] = sda_sim_target_i;
+assign scl_data[1] = scl_sim_target_i;
+assign sda_oe[1]   = !sda_sim_target_i; // OD: driving low when sda=0
+assign scl_oe[1]   = !scl_sim_target_i; // OD: driving low when scl=0
+assign sel_od_pp[1] = 1'b0;             // Target BFM always OD
+
+// Device 2: I3C Core DUT (has proper OE and OD/PP mode signals)
+// sda_data[2], scl_data[2], sda_oe[2], sel_od_pp[2] connected below from i3c_wrapper
+
+// I3C Core output signals (i3c_sda_o, i3c_sda_oe, i3c_sel_od_pp are module ports)
+logic i3c_scl_o;
+logic i3c_scl_oe;
+
+assign sda_data[2]  = i3c_sda_o;
+assign scl_data[2]  = i3c_scl_o;
+assign sda_oe[2]    = i3c_sda_oe;
+assign scl_oe[2]    = !i3c_scl_o;      // SCL from core is OD (driving when low)
+assign sel_od_pp[2] = i3c_sel_od_pp;
 
 i3c_bus_harness #(
     .NumDevices(NumDevices)
 ) xi3_bus_harness (
-    .sda_i(sda_i),
-    .scl_i(scl_i),
-    .sda_o(bus_sda),
-    .scl_o(bus_scl)
+    .sda_i     (sda_data),
+    .sda_oe_i  (sda_oe),
+    .sel_od_pp_i(sel_od_pp),
+    .scl_i     (scl_data),
+    .scl_oe_i  (scl_oe),
+    .sda_o     (bus_sda),
+    .scl_o     (bus_scl)
 );
-
-logic sel_od_pp;
 
 i3c_wrapper xi3c_wrapper (
     .clk_i,
@@ -209,9 +240,11 @@ i3c_wrapper xi3c_wrapper (
 
     .scl_i(bus_scl),
     .sda_i(bus_sda),
-    .scl_o(scl_i[2]),
-    .sda_o(sda_i[2]),
-    .sel_od_pp_o(sel_od_pp),
+    .scl_o(i3c_scl_o),
+    .sda_o(i3c_sda_o),
+    .scl_oe(i3c_scl_oe),
+    .sda_oe(i3c_sda_oe),
+    .sel_od_pp_o(i3c_sel_od_pp),
 
     .peripheral_reset_o,
     .peripheral_reset_done_i,
