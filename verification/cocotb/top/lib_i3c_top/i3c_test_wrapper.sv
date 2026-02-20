@@ -246,9 +246,14 @@ i3c_wrapper xi3c_wrapper (
     .sda_oe(i3c_sda_oe),
     .sel_od_pp_o(i3c_sel_od_pp),
 
+    .recovery_payload_available_o(),
+    .recovery_image_activated_o(),
+
     .peripheral_reset_o,
     .peripheral_reset_done_i,
-    .escalated_reset_o
+    .escalated_reset_o,
+
+    .irq_o()
 );
 
 endmodule
