@@ -1062,6 +1062,7 @@ async def test_ri_error_injection_stress(dut):
     # =========================================================================
     # Scenario 3: T-bit (parity) error on command byte
     # =========================================================================
+    tb.te_error_monitor.expect_error(2)
     await run_scenario(
         "Scenario 3: T-bit error on command",
         recovery.command_write_tbit_error,
@@ -1082,6 +1083,8 @@ async def test_ri_error_injection_stress(dut):
         [0x10, 0x20, 0x30, 0x40],
         5  # 4th data byte (CMD=0, LenL=1, LenH=2, D0=3, D1=4, D2=5)
     )
+
+    tb.te_error_monitor.clear_expectations()
 
     # =========================================================================
     # Scenario 5: PEC error (incorrect checksum)
@@ -2871,6 +2874,7 @@ async def test_ri_comprehensive_stress(dut):
 
     # Test 2a: T-bit error on data byte
     dut._log.info("Test 2a: T-bit parity error during write")
+    tb.te_error_monitor.expect_error(2)
     try:
         # Use low-level I3C operations to inject T-bit error
         controller = i3c_controller
@@ -2913,6 +2917,7 @@ async def test_ri_comprehensive_stress(dut):
         dut._log.error(f"  Exception: {e}")
         test_results["2a_tbit_error"] = f"FAIL - {e}"
 
+    tb.te_error_monitor.clear_expectations()
 
     # =========================================================================
     # SECTION 3: Length Mismatch Testing
@@ -4193,6 +4198,8 @@ async def test_indirect_fifo_parity_error(dut):
     dut._log.info("")
     dut._log.info("Sending frame with T-bit parity errors...")
 
+    tb.te_error_monitor.expect_error(2)
+
     controller = i3c_controller
 
     # Take bus control and start the transaction
@@ -4221,6 +4228,7 @@ async def test_indirect_fifo_parity_error(dut):
 
     dut._log.info("Frame transmission complete")
 
+    tb.te_error_monitor.clear_expectations()
 
     # =========================================================================
     # VERIFY FIFO REMAINS EMPTY
@@ -5405,6 +5413,8 @@ async def test_ri_read_interrupted_by_ccc(dut):
     dut._log.info("TE0 trigger: Sending 0x7E (I3C reserved) with Read bit set")
     dut._log.info("")
 
+    tb.te_error_monitor.expect_error(0)
+
     # Clear DEVICE_STATUS before test
     await tb.write_csr(
         tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_STATUS_0.base_addr,
@@ -5440,6 +5450,7 @@ async def test_ri_read_interrupted_by_ccc(dut):
     await i3c_controller.send_stop()
     i3c_controller.give_bus_control()
 
+    tb.te_error_monitor.clear_expectations()
 
     # Verify RI protocol error was detected
     status_after_5 = dword2int(
@@ -5664,6 +5675,7 @@ async def test_parity_error_isolation(dut):
     # =========================================================================
     dut._log.info("Part 1: RI write with T-bit error on PEC byte")
 
+    tb.te_error_monitor.expect_error(2)
     # Seed the CSR with a known good value first
     await recovery.command_write(
         VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.DEVICE_RESET, [0x11, 0x22, 0x33]

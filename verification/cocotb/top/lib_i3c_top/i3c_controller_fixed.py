@@ -541,11 +541,14 @@ class I3cControllerFixed(I3cController):
                 await self.send_byte_tbit(ccc)
                 if defining_byte is not None:
                     await self.send_byte_tbit(defining_byte)
-                for a in addr:
+                for i, a in enumerate(addr):
+                    is_last = (i == len(addr) - 1)
                     await self.send_start()
                     ack = await self.write_addr_header(a, read=True)
                     rd_data = bytearray()
-                    await self.recv_until_eod_tbit(rd_data, count, stop=False)
+                    await self.recv_until_eod_tbit(
+                        rd_data, count, stop=is_last and stop
+                    )
                     responses.append((ack, rd_data))
 
                 if stop:
