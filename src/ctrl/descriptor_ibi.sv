@@ -128,7 +128,7 @@ module descriptor_ibi import i3c_pkg::i3c_byte_t; #(
           // Overflow check
           if (data_cnt_q[7:2] != '1) begin
             // Round up to next full word and pop word from queue
-            data_cnt_d = {data_cnt_q[7:2] + 1, 2'b00};
+            data_cnt_d = {6'(data_cnt_q[7:2] + 1), 2'b00};
             state_d = Flush;
           end else begin
             // This was a very big IBI and we happened to be at the last word already
