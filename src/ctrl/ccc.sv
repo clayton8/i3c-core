@@ -449,6 +449,8 @@ module ccc
   logic       escalate_rst_arm_d;
   logic       set_peripheral_reset;
   logic       set_escalate_reset;
+  logic       vt_detect_flag_q;
+  logic       vt_detect_flag_d;
 
   // ---------------------------------------------------------------------------
   // HDR Mode Handling
@@ -741,7 +743,7 @@ module ccc
   assign supported_direct_command_code = ccc_requires_read | ccc_requires_write | is_rstact;
 
   assign unsupported_defining_byte = have_defining_byte & defining_byte_valid & (
-        (command_code == CCC_DIRECT_RSTACT) & ~(defining_byte inside {8'h00, 8'h01, 8'h02, 8'h81, 8'h82})
+        (command_code == CCC_DIRECT_RSTACT) & ~(defining_byte inside {8'h00, 8'h01, 8'h02, 8'h04, 8'h81, 8'h82, 8'h84})
       | (command_code == CCC_DIRECT_GETCAPS) & ~(defining_byte inside {8'h00, 8'h93}));
 
   assign supported_direct_command = supported_direct_command_code & ~unsupported_defining_byte;
@@ -1305,6 +1307,12 @@ module ccc
         if (defining_byte == 8'h81 || defining_byte == 8'h82) begin
           // 0x81/0x82: Return reset recovery time (0xFF = worst case ~1s)
           tx_data = 8'hFF;
+        end else if (defining_byte == 8'h84) begin
+          // 0x84: Virtual Target Indication — both targets support DB 0x04
+          tx_data = 8'h01;
+        end else if (defining_byte == 8'h04) begin
+          // 0x04 (read direction): Return VT detect flag state
+          tx_data = {7'b0, vt_detect_flag_q};
         end else if (defining_byte inside {8'h00, 8'h01, 8'h02}) begin
           // 0x00-0x02: Return armed action, or 0x80 if not armed
           tx_data = rstact_armed_q ? rst_action_q : 8'h80;
@@ -1670,11 +1678,14 @@ module ccc
   always_comb begin : proc_rstact_comb
     rstact_armed_d    = rstact_armed_q;
     rst_action_d      = rst_action_q;
+    vt_detect_flag_d  = vt_detect_flag_q;
 
     // --- Arming: Clear on START (not Repeated START) ---
     // Spec: "Any reset action configured via the RSTACT CCC shall be cleared
     // by the next SCL falling edge following a START (but not by the next
     // Repeated START)."
+    // Note: vt_detect_flag is NOT cleared on START — it persists until
+    // explicitly cleared via RSTACT with Defining Byte 0x00.
     if (bus_start_det_i) begin
       rstact_armed_d = 1'b0;
       rst_action_d   = 8'h00;
@@ -1682,17 +1693,33 @@ module ccc
 
       case(command_code) 
         CCC_BCAST_RSTACT: begin
-          if (def_byte_tbit_valid && (defining_byte inside {8'h00, 8'h01, 8'h02})) begin
-            rstact_armed_d = 1'b1;
-            rst_action_d   = defining_byte;
+          if (def_byte_tbit_valid) begin
+            if(defining_byte inside {8'h00, 8'h01, 8'h02}) begin
+              rstact_armed_d = 1'b1;
+              rst_action_d   = defining_byte;
+            end 
+
+            if (defining_byte == 8'h00) begin
+              vt_detect_flag_d = 1'b0;
+            end
           end
         end
 
         CCC_DIRECT_RSTACT: begin
-          if (target_addr_ack_done && addr_ack && ~target_rnw &&
-             (defining_byte inside {8'h00, 8'h01, 8'h02})) begin
-            rstact_armed_d = 1'b1;
-            rst_action_d   = defining_byte;
+          if (target_addr_ack_done && addr_ack && ~target_rnw) begin
+            if(defining_byte inside {8'h00, 8'h01, 8'h02}) begin
+              rstact_armed_d = 1'b1;
+              rst_action_d   = defining_byte;
+              if (defining_byte == 8'h00) begin
+                vt_detect_flag_d = 1'b0;
+              end
+            end else if(defining_byte == 8'h04) begin
+              // Per spec line 3611: This operation does not configure a
+              // Target or its shared Peripheral logic for any defined 
+              // Target Reset action. It is only used for identification 
+              // and association of any linked Virtual Targets. 
+              vt_detect_flag_d = 1'b1;
+            end
           end
         end
       endcase
@@ -1746,10 +1773,12 @@ module ccc
       escalate_rst_arm_q <= 1'b0;
       peripheral_reset_o <= 1'b0;
       escalated_reset_o   <= 1'b0;
+      vt_detect_flag_q   <= 1'b0;
     end else begin
       rstact_armed_q     <= rstact_armed_d;
       rst_action_q       <= rst_action_d;
       escalate_rst_arm_q <= escalate_rst_arm_d;
+      vt_detect_flag_q   <= vt_detect_flag_d;
 
       if (set_peripheral_reset) begin
         peripheral_reset_o <= 1'b1;
