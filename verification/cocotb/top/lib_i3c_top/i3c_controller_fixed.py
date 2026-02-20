@@ -7,7 +7,7 @@ arbitration-aware IBI handling, chaining, and stress testing.
 
 Key Features:
     - Arbitration-aware write_addr_header: detects IBI during S→0x7E phase
-      per I3C spec §5.1.2.2.1 and handles it inline
+      per I3C spec Sec.5.1.2.2.1 and handles it inline
     - Automatic IBI retry in i3c_write/i3c_read/i3c_ccc_write/i3c_ccc_read
     - One-shot IBI chaining knobs: CCC, Private Write, skip_data, max_data
     - Unified _handle_ibi_inline replaces both background _handle_ibi and
@@ -144,7 +144,7 @@ class I3cControllerFixed(I3cController):
     async def send_bit_arb(self, b: bool) -> tuple:
         """Drive a bit in open-drain and read back the bus value.
 
-        Per I3C spec §5.1.2.2.1: if the device drives Hi-Z (1) but reads
+        Per I3C spec Sec.5.1.2.2.1: if the device drives Hi-Z (1) but reads
         Low (0), another device is driving → arbitration lost.
 
         Returns:
@@ -312,9 +312,9 @@ class I3cControllerFixed(I3cController):
     async def write_addr_header(self, addr: int, read: bool = False) -> bool:
         """Override: detect IBI arbitration during the 0x7E address header.
 
-        Per §5.1.2.2.1, the address header after a Start (not Sr) is arbitrable.
+        Per Sec.5.1.2.2.1, the address header after a Start (not Sr) is arbitrable.
         Only the 0x7E reserved byte phase can collide with a target IBI. Address
-        headers after Repeated Start are push-pull and not arbitrable (§5.1.2.2.4).
+        headers after Repeated Start are push-pull and not arbitrable (Sec.5.1.2.2.4).
 
         When an IBI is detected during 0x7E:
         1. The IBI address byte is already captured from the bus
@@ -858,10 +858,10 @@ class I3cControllerFixed(I3cController):
         """
         Trigger a TE0 error by sending START followed by 0x7E/R.
 
-        Per I3C spec §5.1.10.1.1, receipt of 7'h7E/R (broadcast address with
+        Per I3C spec Sec.5.1.10.1.1, receipt of 7'h7E/R (broadcast address with
         read bit) after a dynamic address has been assigned is an Error Type
         TE0. The target enters HDR error mode (deaf) until it detects the HDR
-        Exit Pattern or the optional 60µs timeout (§5.1.10.1.9).
+        Exit Pattern or the optional 60µs timeout (Sec.5.1.10.1.9).
 
         After calling this method the controller still holds bus control.
         The caller must release the bus (e.g., send_hdr_exit + give_bus_control,
@@ -875,10 +875,10 @@ class I3cControllerFixed(I3cController):
         """
         Trigger a TE1 error by sending a CCC with bad T-bit parity.
 
-        Per I3C spec §5.1.10.1.2, if the target detects a parity error during
+        Per I3C spec Sec.5.1.10.1.2, if the target detects a parity error during
         a CCC code it cannot know whether the bus has changed to HDR mode.
         The target enters HDR error mode (deaf) until it detects the HDR Exit
-        Pattern or the optional 60µs timeout (§5.1.10.1.9).
+        Pattern or the optional 60µs timeout (Sec.5.1.10.1.9).
 
         Args:
             ccc: CCC command code to send with bad parity (default: ENTHDR0 0x20).
@@ -897,7 +897,7 @@ class I3cControllerFixed(I3cController):
         Trigger a TE2 error by sending a CCC with bad T-bit parity on the
         defining byte or data byte.
 
-        Per I3C spec §5.1.10.1.3, a parity error on a CCC defining byte
+        Per I3C spec Sec.5.1.10.1.3, a parity error on a CCC defining byte
         or data byte is a TE2 error.
 
         Args:

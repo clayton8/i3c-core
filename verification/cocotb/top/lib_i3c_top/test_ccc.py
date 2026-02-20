@@ -2397,7 +2397,7 @@ async def test_ccc_entdaa_te3_te4(dut):
     )
 
     # ---- TE3: Bad parity on address byte during ENTDAA ----
-    # Per I3C spec §5.1.10.1.4: if parity is wrong on the assigned address,
+    # Per I3C spec Sec.5.1.10.1.4: if parity is wrong on the assigned address,
     # the target shall NACK and wait for the next Sr+7E/R to retry.
     log.info("Testing TE3: bad parity on ENTDAA address")
     te3_stat_field = tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.TE3_ERR_STAT
@@ -2538,7 +2538,7 @@ async def test_ccc_getstatus_sr_abort_clears_protocol_err(dut):
     """
     BLOCKED BY DESIGN BUG: see verification/bugs/getstatus_sr_abort.md
 
-    Per spec (§5.1.9.2.1): A Target shall only clear its Protocol Error status
+    Per spec (Sec.5.1.9.2.1): A Target shall only clear its Protocol Error status
     after a successful GETSTATUS where the Controller reads ALL bytes. If the
     Controller aborts GETSTATUS after byte 0, the error must NOT be cleared.
 
@@ -2628,7 +2628,7 @@ async def test_ccc_setmwl_sr_abort_during_data(dut):
     """
     BLOCKED BY DESIGN BUG: see verification/bugs/setmwl_sr_abort.md
 
-    Per spec (§5.1.9.2.1): If a Controller aborts a SET CCC mid-data, the Target
+    Per spec (Sec.5.1.9.2.1): If a Controller aborts a SET CCC mid-data, the Target
     shall handle the termination gracefully. Partial data should NOT corrupt CSRs.
 
     RTL bug (ccc.sv:1096-1101): The CCC FSM has no bus_rstart_det_i handling in
@@ -2727,7 +2727,7 @@ async def test_ccc_getstatus_abort_then_chain_setmwl(dut):
     Verifies that aborting GETSTATUS mid-read and immediately chaining into
     another CCC (SETMWL) in the same bus frame does NOT clear err_o.
 
-    Per spec (§5.1.9.2.1): The Protocol Error status shall only be cleared
+    Per spec (Sec.5.1.9.2.1): The Protocol Error status shall only be cleared
     after a SUCCESSFUL (complete) GETSTATUS read. An aborted GETSTATUS
     followed by a different CCC must NOT clear the error.
 

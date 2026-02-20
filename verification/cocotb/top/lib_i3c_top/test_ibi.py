@@ -1463,7 +1463,7 @@ async def test_ibi_queued_during_hdr_fires_after_exit(dut):
 async def test_rxfbytearb_collision_blind_drive(dut):
     """RxFByteArb arb-loss on RnW bit with conforming controller.
 
-    Per §5.1.2.2.1, address arbitration is open-drain: 0 is dominant.
+    Per Sec.5.1.2.2.1, address arbitration is open-drain: 0 is dominant.
     DUT enters RxFByteArb driving IBI byte {0x5A, 1} = 0xB5.  Controller
     drives a write to the same address: {0x5A, 0} = 0xB4.  Bits 7..1
     match; at bit 0 the DUT drives 1 (IBI/read) but reads 0 (controller
@@ -1539,7 +1539,7 @@ async def test_ibi_flush_from_idle_interrupt_flood(dut):
     the descriptor_ibi gets stuck in WriteMdb, ibi_pending stays high and
     ibi_status_we_o fires every cycle, flooding IBI_DONE interrupts.
 
-    Per spec §5.1.6.2: An IBI disposal shall produce a single status update.
+    Per spec Sec.5.1.6.2: An IBI disposal shall produce a single status update.
     ibi_status_we_o must not assert for more than one cycle per IBI disposal.
     """
     log = logging.getLogger("test_ibi_flush_idle_flood")

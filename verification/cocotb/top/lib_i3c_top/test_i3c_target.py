@@ -1335,7 +1335,7 @@ async def test_priv_write_stop_during_tbit(dut):
     8-byte private write. After 5 complete bytes+T-bits, send 8 data bits of
     byte 6 (no T-bit), then STOP fires while FSM is in RxPWriteTbit.
 
-    Per spec (§5.1.2.3.3): The Target shall only push a byte after verifying
+    Per spec (Sec.5.1.2.3.3): The Target shall only push a byte after verifying
     T-bit parity. A STOP during the T-bit means parity was never checked, so
     the byte shall NOT be pushed to the RX queue. An RX descriptor shall be
     generated for the 5 previously completed bytes.
@@ -1424,7 +1424,7 @@ async def test_priv_write_sr_during_tbit(dut):
     8-byte private write. After 5 complete bytes+T-bits, send 8 data bits of
     byte 6, then Sr fires while FSM is in RxPWriteTbit.
 
-    Per spec (§5.1.2.3.3): Same as Scenario C — byte shall not be pushed
+    Per spec (Sec.5.1.2.3.3): Same as Scenario C — byte shall not be pushed
     without T-bit parity check. Descriptor shall be generated for 5 bytes.
 
     RTL bug: Same as Scenario C — rx_fifo_wvalid_raw fires spuriously,

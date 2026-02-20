@@ -98,7 +98,7 @@ async def boot_init(
     await _write_csr(tb, tb.reg_map.I3C_EC.SOCMGMTIF.T_IDLE_REG.base_addr,
                      int(fclk * 200))
 
-    # HDR error recovery timer (I3C spec §5.1.10.1.9)
+    # HDR error recovery timer (I3C spec Sec.5.1.10.1.9)
     # Default threshold = 60 µs worth of clock cycles; overridable for tests
     timeout_cycles = hdr_timeout_cycles if hdr_timeout_cycles is not None else int(fclk * 60)
     await _write_csr(tb, tb.reg_map.I3C_EC.SOCMGMTIF.T_HDR_TIMEOUT_REG.base_addr,
@@ -125,7 +125,7 @@ async def boot_init(
 async def check_version(tb):
     """Check HCI version"""
     hci_version = await _read_csr(tb, tb.reg_map.I3CBASE.HCI_VERSION.base_addr)
-    assert hci_version == 0x120  # HCI v1.2 per MIPI I3C HCI spec §7.7.1
+    assert hci_version == 0x120  # HCI v1.2 per MIPI I3C HCI spec Sec.7.7.1
 
 
 async def get_dxt_offsets(tb):
