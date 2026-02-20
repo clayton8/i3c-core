@@ -346,5 +346,157 @@
       tests: ["ocp_csr_access"]
       tags: ["top"]
     }
+    {
+      name: ri_error_detection
+      desc:
+        '''
+        Tests Recovery Interface error detection, interrupt status, and counters.
+        Validates RI_PEC_ERR (PEC/CRC error detection), RI_PROT_ERR (protocol
+        error detection), and associated interrupt and counter behavior.
+        '''
+      tests: ["ri_error_detection"]
+      tags: ["top"]
+    }
+    {
+      name: ri_comprehensive_stress
+      desc:
+        '''
+        Comprehensive Recovery Interface stress test covering PEC errors,
+        T-bit parity errors, and protocol edge cases in rapid succession.
+        '''
+      tests: ["ri_comprehensive_stress"]
+      tags: ["top"]
+    }
+    {
+      name: ri_error_injection_stress
+      desc:
+        '''
+        Tests Recovery Interface resilience to various I3C framing errors and
+        abnormal conditions including controller-side protocol violations and
+        unexpected bus events.
+        '''
+      tests: ["ri_error_injection_stress"]
+      tags: ["top"]
+    }
+    {
+      name: ri_length_underrun
+      desc:
+        '''
+        Tests that writing to INDIRECT_FIFO_DATA with RI length field 1 byte
+        larger than actual data sent results in a length underrun error.
+        '''
+      tests: ["ri_length_underrun"]
+      tags: ["top"]
+    }
+    {
+      name: ri_mid_byte_stop
+      desc:
+        '''
+        Tests that issuing STOP mid-byte during different phases of the RI
+        protocol is handled correctly. The device should detect the error
+        and recover gracefully.
+        '''
+      tests: ["ri_mid_byte_stop"]
+      tags: ["top"]
+    }
+    {
+      name: ri_read_interrupted_by_ccc
+      desc:
+        '''
+        Tests RI protocol error handling when the READ command's read phase is
+        interrupted by various bus conditions instead of the expected
+        Sr + Addr+R sequence.
+        '''
+      tests: ["ri_read_interrupted_by_ccc"]
+      tags: ["top"]
+    }
+    {
+      name: chained_ri_and_ccc_commands
+      desc:
+        '''
+        Tests chaining of Recovery Interface commands, CCCs, and private writes
+        within sequences using Sr. All RI/private transfers use Sr, only CCCs
+        use broadcast address. Verifies correct interleaving.
+        '''
+      tests: ["chained_ri_and_ccc_commands"]
+      tags: ["top"]
+    }
+    {
+      name: indirect_fifo_large_write
+      desc:
+        '''
+        Tests writing more than 256 bytes to the INDIRECT_FIFO via I3C
+        interface. The INDIRECT_FIFO has a fixed size (typically 256 bytes).
+        Verifies correct handling of writes that exceed capacity.
+        '''
+      tests: ["indirect_fifo_large_write"]
+      tags: ["top"]
+    }
+    {
+      name: indirect_fifo_two_writes_overflow
+      desc:
+        '''
+        Tests two consecutive writes to the INDIRECT_FIFO that together exceed
+        capacity. First write fits, second write overflows. Verifies correct
+        handling of the overflow condition.
+        '''
+      tests: ["indirect_fifo_two_writes_overflow"]
+      tags: ["top"]
+    }
+    {
+      name: indirect_fifo_parity_error
+      desc:
+        '''
+        Tests that T-bit (parity) errors during INDIRECT_FIFO_DATA write are
+        handled correctly. Verifies parity errors on specific bytes are
+        detected and reported.
+        '''
+      tests: ["indirect_fifo_parity_error"]
+      tags: ["top"]
+    }
+    {
+      name: indirect_fifo_overflow_pointer
+      desc:
+        '''
+        Tests that WRITE_INDEX does not increment when writing to a full
+        INDIRECT_FIFO. Fills the hardware FIFO completely and verifies
+        the pointer behavior on overflow.
+        '''
+      tests: ["indirect_fifo_overflow_pointer"]
+      tags: ["top"]
+    }
+    {
+      name: write_exceeds_register_size
+      desc:
+        '''
+        Tests behavior when writing more data than the register size allows.
+        Attempts to write excess bytes to a recovery CSR and verifies
+        correct handling.
+        '''
+      tests: ["write_exceeds_register_size"]
+      tags: ["top"]
+    }
+    {
+      name: private_read_and_ri_read
+      desc:
+        '''
+        Verifies that a recovery interface PROT_CAP read and a standard private
+        read from the TTI TX FIFO work correctly and do not interfere with
+        each other.
+        '''
+      tests: ["private_read_and_ri_read"]
+      tags: ["top"]
+    }
+    {
+      name: parity_error_isolation
+      desc:
+        '''
+        Verifies that parity/PEC errors on RI writes do not leak into the TTI
+        interrupt path, and that T-bit errors on normal target writes do
+        produce the expected TTI interrupts.
+        '''
+      tests: ["parity_error_isolation"]
+      tags: ["top"]
+    }
   ]
 }

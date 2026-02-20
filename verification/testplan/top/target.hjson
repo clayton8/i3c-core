@@ -180,5 +180,104 @@
       tests: ["i3c_target_pwrite_overflow_detection"]
       tags: ["top"]
     }
+    {
+      name: i3c_target_private_read_sizes_and_abort
+      desc:
+        '''
+        Tests private read transfers with specific sizes and controller-initiated
+        aborts.
+
+        Performs private reads of exactly 256 bytes, 8 bytes, 11 bytes (non-word-
+        aligned), and a controller-abort scenario where the read is terminated
+        early. Verifies data matches and the target recovers cleanly after abort.
+        '''
+      tests: ["i3c_target_private_read_sizes_and_abort"]
+      tags: ["top"]
+    }
+    {
+      name: i3c_target_tx_flush_clears_converter
+      desc:
+        '''
+        Verifies that TTI RESET_CONTROL.TX_DATA_RST flushes both the TX FIFO
+        and the width_converter_Nto8 shift register.
+
+        Writes data to the TX FIFO without a descriptor, asserts TX_DATA_RST,
+        then writes new data with a descriptor and performs a private read.
+        Verifies only the post-flush data is returned.
+        '''
+      tests: ["i3c_target_tx_flush_clears_converter"]
+      tags: ["top"]
+    }
+    {
+      name: priv_write_normal_stop_baseline
+      desc:
+        '''
+        Baseline: 8-byte private write completes normally with STOP.
+        Verifies RX descriptor byte count equals 8 and data matches.
+        '''
+      tests: ["priv_write_normal_stop_baseline"]
+      tags: ["top"]
+    }
+    {
+      name: priv_write_stop_mid_byte
+      desc:
+        '''
+        8-byte private write. After 5 complete bytes and T-bits, sends 4 bits
+        of byte 6, then STOP. Verifies RX descriptor reports 5 bytes and data
+        matches. Also verifies clean recovery with a subsequent normal write.
+        '''
+      tests: ["priv_write_stop_mid_byte"]
+      tags: ["top"]
+    }
+    {
+      name: priv_write_sr_mid_byte
+      desc:
+        '''
+        8-byte private write. After 5 complete bytes, sends 4 bits of byte 6,
+        then Repeated Start followed by STOP. Verifies RX descriptor reports
+        5 bytes. Also verifies clean recovery.
+        '''
+      tests: ["priv_write_sr_mid_byte"]
+      tags: ["top"]
+    }
+    {
+      name: priv_write_stop_during_tbit
+      desc:
+        '''
+        8-byte private write. After 5 complete bytes and T-bits, sends 8 data
+        bits of byte 6 (no T-bit), then STOP fires while FSM is in
+        RxPWriteTbit. Tests correct handling of STOP during T-bit phase.
+
+        BLOCKED BY DESIGN BUG: rx_fifo_wvalid_raw fires but rx_last_byte_o
+        does not, resulting in data pushed without a descriptor.
+        '''
+      tests: ["priv_write_stop_during_tbit"]
+      tags: ["top"]
+    }
+    {
+      name: priv_write_sr_during_tbit
+      desc:
+        '''
+        8-byte private write. After 5 complete bytes and T-bits, sends 8 data
+        bits of byte 6, then Sr fires while FSM is in RxPWriteTbit. Tests
+        correct handling of Repeated Start during T-bit phase.
+
+        BLOCKED BY DESIGN BUG: rx_fifo_wvalid_raw fires but rx_last_byte_o
+        does not, resulting in data pushed without a descriptor.
+        '''
+      tests: ["priv_write_sr_during_tbit"]
+      tags: ["top"]
+    }
+    {
+      name: priv_write_tight_timing_sr
+      desc:
+        '''
+        5-byte private write. All bytes and T-bits complete normally. Sr issued
+        immediately after the last T-bit (tight timing). Verifies descriptor
+        reports exactly 5 bytes (not 4 due to off-by-one).
+        '''
+      tests: ["priv_write_tight_timing_sr"]
+      tags: ["top"]
+    }
   ]
 }
