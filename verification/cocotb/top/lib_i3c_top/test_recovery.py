@@ -2496,6 +2496,7 @@ async def test_recovery_flow(dut):
 
     bfm_done = Event()
     dev_done = Event()
+    handshake_done = Event()
 
     # BFM-side agent
     async def bfm_agent():
@@ -2548,6 +2549,9 @@ async def test_recovery_flow(dut):
 
         assert (wrptr, rdptr) == (0, 0), f"FIFO state mismatch: expected (0, 0), got {(wrptr, rdptr)}"
 
+        # Signal dev_agent that handshake is complete and data writes are starting
+        handshake_done.set()
+
         # Send firmware chunks
         xfer_size = 4
         for data_ptr in range(0, image_size, xfer_size * 4):
@@ -2594,6 +2598,8 @@ async def test_recovery_flow(dut):
         logger.info(f"xfer_size: {xfer_size} (words)")
 
         xfer_size = 4
+        # Wait for bfm_agent to complete handshake before polling FIFO
+        await handshake_done.wait()
         # Receive the firmware image
         for data_ptr in range(0, image_size, xfer_size * 4):
 
