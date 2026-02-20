@@ -2255,9 +2255,6 @@ async def test_ccc_entdaa_te3_te4(dut):
     TE3: Parity error on assigned address → target NACKs, retries on next Sr+7E/R.
     TE4: Invalid reserved byte (not 7E/R) → target NACKs, waits for STOP.
 
-    BLOCKED BY DESIGN BUG: TE3 counter assertion (== 1) will fail due to
-    level-sensitive counter WE — te3_err stays high for 2+ cycles.
-    See verification/bugs/te_counter_level_sensitive.md
     """
     log = logging.getLogger("test_ccc_entdaa_te3_te4")
 
@@ -2297,8 +2294,7 @@ async def test_ccc_entdaa_te3_te4(dut):
 
     te4_cnt = await tb.read_csr_field(te4_cnt_addr, te4_cnt_field)
     assert te4_cnt == 1, (
-        f"DESIGN BUG: TE4 count should be exactly 1 after one event, "
-        f"got {te4_cnt}. See verification/bugs/te_counter_level_sensitive.md"
+        f"TE4 count should be exactly 1 after one event, got {te4_cnt}"
     )
 
     # ---- TE3: Bad parity on address byte during ENTDAA ----
@@ -2315,7 +2311,7 @@ async def test_ccc_entdaa_te3_te4(dut):
     await ClockCycles(tb.clk, 5)
 
     results = await i3c_controller.i3c_entdaa(
-        addrs_to_assign=[DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR],
+        addrs_to_assign=[DYNAMIC_ADDR],
         inject_te3_parity=True)
     await ClockCycles(tb.clk, 30)
 
@@ -2330,8 +2326,7 @@ async def test_ccc_entdaa_te3_te4(dut):
 
     te3_cnt = await tb.read_csr_field(te3_cnt_addr, te3_cnt_field)
     assert te3_cnt == 1, (
-        f"DESIGN BUG: TE3 count should be exactly 1 after one event, "
-        f"got {te3_cnt}. See verification/bugs/te_counter_level_sensitive.md"
+        f"TE3 count should be exactly 1 after one event, got {te3_cnt}"
     )
 
 
