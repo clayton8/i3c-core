@@ -46,6 +46,8 @@ async def test_setup(
     log_seed(dut)
 
     i3c_controller = I3cController(
+        sda_i=dut.bus_sda,
+        sda_o=dut.sda_sim_ctrl_i,
         scl_i=dut.bus_scl,
         scl_o=dut.scl_sim_ctrl_i,
         debug_state_o=None,

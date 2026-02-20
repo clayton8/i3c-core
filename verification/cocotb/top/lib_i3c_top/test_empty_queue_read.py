@@ -78,6 +78,7 @@ async def init_recovery_with_i3c(dut, fclk=333.0, fbus=12.5, timeout=200):
     await cocotb.start(timeout_task(timeout))
 
     i3c_controller = I3cController(
+        sda_i=dut.bus_sda,
         sda_o=dut.sda_sim_ctrl_i,
         scl_i=dut.bus_scl,
         scl_o=dut.scl_sim_ctrl_i,
