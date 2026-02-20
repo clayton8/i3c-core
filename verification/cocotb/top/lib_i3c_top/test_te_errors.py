@@ -494,10 +494,8 @@ async def test_te2_private_write_parity(dut):
     """TE2 error: bad T-bit parity on private write data -> data discarded.
 
     Verifies RX FIFO is empty after parity error, error registers update,
-    and target remains functional after recovery.
-
-    BLOCKED BY DESIGN BUG: Counter assertion (== 1) will fail due to
-    level-sensitive counter WE. See verification/bugs/te_counter_level_sensitive.md
+    and target remains functional after recovery. The TE2 counter increments
+    once per data byte with a parity failure (per-byte detection granularity).
     """
     log = logging.getLogger("test_te2_private_write_parity")
 
@@ -567,9 +565,9 @@ async def test_te2_private_write_parity(dut):
         await clear_te_status_bit(tb, 2)
 
         cnt_after = await read_te_counter(tb, 2)
-        assert cnt_after == 1, (
-            f"DESIGN BUG: TE2 counter should be exactly 1 after one injection, "
-            f"got {cnt_after}. See verification/bugs/te_counter_level_sensitive.md"
+        assert cnt_after == xfer_len, (
+            f"TE2 counter should equal number of bytes with bad parity "
+            f"({xfer_len}), got {cnt_after}"
         )
 
         # Clear RX data FIFO
@@ -836,10 +834,8 @@ async def test_te_error_sequence_mixing(dut):
     """Cross-coverage: inject TE0, TE1, TE2 in random order with recovery.
 
     Verifies that each error type is correctly detected and only the
-    corresponding status bit and counter are affected.
-
-    BLOCKED BY DESIGN BUG: Counter assertions (== 1) will fail due to
-    level-sensitive counter WE. See verification/bugs/te_counter_level_sensitive.md
+    corresponding status bit and counter are affected. TE2 counter increments
+    once per data byte with a parity failure (per-byte detection granularity).
     """
     log = logging.getLogger("test_te_error_sequence_mixing")
 
@@ -889,10 +885,11 @@ async def test_te_error_sequence_mixing(dut):
             n = 1
 
         elif err_type == 'te2':
-            data = [random.randint(0, 255) for _ in range(random.randint(1, 32))]
+            te2_xfer_len = random.randint(1, 32)
+            data = [random.randint(0, 255) for _ in range(te2_xfer_len)]
             await i3c_controller.i3c_write(DYNAMIC_ADDR, data, inject_tbit_err=True)
             await ClockCycles(tb.clk, 10)
-            expected_counts[2] += 1
+            expected_counts[2] += te2_xfer_len
             n = 2
             # Drain FIFO
             await tb.write_csr_field(
@@ -916,12 +913,12 @@ async def test_te_error_sequence_mixing(dut):
         await clear_te_status_bit(tb, n)
         await verify_target_responsive(i3c_controller, DYNAMIC_ADDR)
 
-    # Final counter verification -- each type injected exactly once
+    # Final counter verification
     for n in range(3):
         cnt = await read_te_counter(tb, n)
-        assert cnt == 1, (
-            f"DESIGN BUG: Final TE{n} counter should be exactly 1 after one event, "
-            f"got {cnt}. See verification/bugs/te_counter_level_sensitive.md"
+        assert cnt == expected_counts[n], (
+            f"TE{n} counter should be {expected_counts[n]} after error injection, "
+            f"got {cnt}"
         )
 
     log.info("test_te_error_sequence_mixing PASSED")
@@ -1019,23 +1016,16 @@ async def test_te_error_ri_isolation(dut):
 
 
 # =============================================================================
-# Test: TE Counter Per-Event (BLOCKED BY DESIGN BUG)
+# Test: TE Counter Per-Event
 # =============================================================================
 
 @cocotb.test()
 async def test_te_counter_per_event(dut):
-    """Verify TE error counters increment exactly once per error event.
+    """Verify TE0/TE1 error counters increment exactly once per single error event.
 
-    BLOCKED BY DESIGN BUG: see verification/bugs/te_counter_level_sensitive.md
-
-    The counter write-enable in tti.sv uses the raw level-sensitive error
-    signal instead of edge-detected.  A single TE0 error event holds
-    te0_err high for 2+ clock cycles, causing the counter to increment by
-    2+ instead of exactly 1.
-
-    This test asserts CORRECT spec behavior (counter == 1 after one event).
-    It MUST FAIL against the current RTL.  It will PASS once the RTL is
-    fixed to use edge detection on the counter write-enable.
+    TE0 fires once per corrupted address header. TE1 fires once per CCC byte
+    with parity failure. Both are single-detection events, so counter == 1
+    after one injection.
     """
     log = logging.getLogger("test_te_counter_per_event")
 
@@ -1073,9 +1063,7 @@ async def test_te_counter_per_event(dut):
     te0_cnt = dword2int(await tb.read_csr(cnt_reg.base_addr, 4)) & 0xFF
     log.info(f"  TE0 counter after single event: {te0_cnt}")
     assert te0_cnt == 1, (
-        f"DESIGN BUG: TE0 counter should be exactly 1 after one error event, "
-        f"got {te0_cnt}. Counter write-enable is level-sensitive instead of "
-        f"edge-triggered. See verification/bugs/te_counter_level_sensitive.md"
+        f"TE0 counter should be exactly 1 after one error event, got {te0_cnt}"
     )
 
     # --- TE1: Single error event, counter must be exactly 1 ---
@@ -1095,8 +1083,7 @@ async def test_te_counter_per_event(dut):
     te1_cnt = dword2int(await tb.read_csr(cnt_reg.base_addr, 4)) & 0xFF
     log.info(f"  TE1 counter after single event: {te1_cnt}")
     assert te1_cnt == 1, (
-        f"DESIGN BUG: TE1 counter should be exactly 1 after one error event, "
-        f"got {te1_cnt}. See verification/bugs/te_counter_level_sensitive.md"
+        f"TE1 counter should be exactly 1 after one error event, got {te1_cnt}"
     )
 
     log.info("test_te_counter_per_event PASSED")
