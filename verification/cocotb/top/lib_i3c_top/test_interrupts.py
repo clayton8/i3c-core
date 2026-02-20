@@ -14,19 +14,11 @@ from utils import format_ibi_data, get_interrupt_status
 import cocotb
 from cocotb.regression import TestFactory
 from cocotb.triggers import ClockCycles, Event, RisingEdge, Timer
+from common import timeout_task, log_seed
 
 # =============================================================================
 
 TARGET_ADDRESS = 0x5A
-
-
-async def timeout_task(timeout_us):
-    """
-    A generic task for handling test timeout. Waits a fixed amount of
-    simulation time and then throws an exception.
-    """
-    await Timer(timeout_us, "us")
-    raise TimeoutError("Timeout!")
 
 
 async def test_setup(dut, timeout_us=25):
@@ -35,6 +27,7 @@ async def test_setup(dut, timeout_us=25):
     """
 
     cocotb.log.setLevel(logging.INFO)
+    log_seed(dut)
     cocotb.start_soon(timeout_task(timeout_us))
 
     i3c_controller = I3cController(
@@ -80,12 +73,12 @@ async def test_rx_desc_stat(dut):
 
     # Ensure that irq is low
     await ClockCycles(tb.clk, 10)
-    assert irq.value == 0
+    assert irq.value == 0, f"IRQ expected 0, got {int(irq.value)}"
 
     # Send a private write to the target
+    tx_data = [random.randint(0, 255) for i in range(4)]
     async def i3c_task():
-        data = [random.randint(0, 255) for i in range(4)]
-        await i3c_controller.i3c_write(TARGET_ADDRESS, data)
+        await i3c_controller.i3c_write(TARGET_ADDRESS, tx_data)
 
     cocotb.start_soon(i3c_task())
 
@@ -93,15 +86,28 @@ async def test_rx_desc_stat(dut):
     while irq.value == 0:
         await RisingEdge(tb.clk)
 
-    # Read RX descriptor, the interrupt should go low
-    await tb.read_csr(tb.reg_map.I3C_EC.TTI.RX_DESC_QUEUE_PORT.base_addr, 4)
+    # R1: Explicitly assert irq went HIGH
+    assert irq.value == 1, "IRQ should be HIGH after RX descriptor ready"
+
+    # R2: Read RX descriptor and validate content
+    desc = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.TTI.RX_DESC_QUEUE_PORT.base_addr, 4)
+    )
+    desc_len = desc & 0xFFFF
+    err_stat = desc >> 28
+    assert err_stat == 0, f"Unexpected error in RX descriptor, err_stat={err_stat}"
+    assert desc_len == len(tx_data), (
+        f"RX descriptor length mismatch: expected {len(tx_data)}, got {desc_len}"
+    )
 
     # Ensure that irq is low
     await ClockCycles(tb.clk, 10)
-    assert irq.value == 0
+    assert irq.value == 0, f"IRQ expected 0, got {int(irq.value)}"
 
     # Dummy wait
     await ClockCycles(tb.clk, 10)
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -118,7 +124,7 @@ async def test_tx_desc_stat(dut):
 
     # Ensure that irq is low
     await ClockCycles(tb.clk, 10)
-    assert irq.value == 0
+    assert irq.value == 0, f"IRQ expected 0, got {int(irq.value)}"
 
     ## Write data and descriptor
     #await tb.write_csr(tb.reg_map.I3C_EC.TTI.TX_DATA_PORT.base_addr, int2dword(0xDEADBEEF), 4)
@@ -128,15 +134,20 @@ async def test_tx_desc_stat(dut):
     async def i3c_task(evt):
         # First read should ba NACKed. as there is no data in the FIFOs
         response = await i3c_controller.i3c_read(TARGET_ADDRESS, 4)
-        assert response.nack
+        assert response.nack, "Expected NACK but got ACK"
         data = await i3c_controller.i3c_read(TARGET_ADDRESS, 4)
-        assert list(data.data) == [0xEF, 0xBE, 0xAD, 0xDE]
+        assert list(data.data) == [0xEF, 0xBE, 0xAD, 0xDE], f"Data mismatch"
         evt.set()
 
     async def bus_task(evt):
         # Wait for the interrupt
         while irq.value == 0:
             await RisingEdge(tb.clk)
+        # R3: Assert TX_DESC_STAT bit specifically
+        intrs = await get_interrupt_status(tb)
+        assert intrs["TX_DESC_STAT"] == 1, (
+            f"TX_DESC_STAT should be 1 when NACK triggers descriptor request, got {intrs['TX_DESC_STAT']}"
+        )
         # Write data and descriptor
         await tb.write_csr(tb.reg_map.I3C_EC.TTI.TX_DATA_PORT.base_addr, int2dword(0xDEADBEEF), 4)
         await tb.write_csr(tb.reg_map.I3C_EC.TTI.TX_DESC_QUEUE_PORT.base_addr, int2dword(4), 4)
@@ -156,16 +167,25 @@ async def test_tx_desc_stat(dut):
     # Wait for the bus task transfer to complete
     await done_bus.wait()
 
+    # R4: After the read completes, TX_DESC_COMPLETE should fire
+    await ClockCycles(tb.clk, 10)
+    intrs = await get_interrupt_status(tb)
+    assert intrs["TX_DESC_COMPLETE"] == 1, (
+        f"TX_DESC_COMPLETE should be 1 after private read completes, got {intrs['TX_DESC_COMPLETE']}"
+    )
+
     # Clear the interrupt
     csr = tb.reg_map.I3C_EC.TTI.INTERRUPT_STATUS
     await tb.write_csr_field(csr.base_addr, csr.TX_DESC_COMPLETE, 1)
 
     # Ensure that irq is low
     await ClockCycles(tb.clk, 10)
-    assert irq.value == 0
+    assert irq.value == 0, f"IRQ expected 0, got {int(irq.value)}"
 
     # Dummy wait
     await ClockCycles(tb.clk, 10)
+
+    await tb.teardown()
 
 @cocotb.test()
 async def test_ibi_done(dut):
@@ -189,10 +209,10 @@ async def test_ibi_done(dut):
 
     # Ensure interrupt status
     await ClockCycles(tb.clk, 10)
-    assert irq.value == 0
+    assert irq.value == 0, f"IRQ expected 0, got {int(irq.value)}"
 
     intrs = await get_interrupt_status(tb)
-    assert intrs["IBI_DONE"] == 0
+    assert intrs["IBI_DONE"] == 0, f"IBI_DONE expected 0, got {intrs['IBI_DONE']}"
 
     # Send an IBI
     mdb = 0xAA
@@ -201,27 +221,36 @@ async def test_ibi_done(dut):
         await tb.write_csr(tb.reg_map.I3C_EC.TTI.IBI_PORT.base_addr, int2dword(word), 4)
 
     # Wait for the IBI to be serviced
-    await i3c_controller.wait_for_ibi()
+    response = await i3c_controller.wait_for_ibi()
+
+    # R5: Verify IBI response data correctness
+    expected_ibi = bytearray([TARGET_ADDRESS, mdb])
+    assert response == expected_ibi, (
+        f"IBI data mismatch: expected [{' '.join(f'0x{b:02X}' for b in expected_ibi)}], "
+        f"got [{' '.join(f'0x{b:02X}' for b in response)}]"
+    )
 
     # Ensure interrupt status
     await ClockCycles(tb.clk, 10)
-    assert irq.value == 1
+    assert irq.value == 1, f"IRQ expected 1, got {int(irq.value)}"
 
     intrs = await get_interrupt_status(tb)
-    assert intrs["IBI_DONE"] == 1
+    assert intrs["IBI_DONE"] == 1, f"IBI_DONE expected 1, got {intrs['IBI_DONE']}"
 
     # Read LAST_IBI_STATUS, the irq should go low
     dword2int(await tb.read_csr(tb.reg_map.I3C_EC.TTI.STATUS.base_addr, 4))
 
     # Ensure interrupt status
     await ClockCycles(tb.clk, 10)
-    assert irq.value == 0
+    assert irq.value == 0, f"IRQ expected 0, got {int(irq.value)}"
 
     intrs = await get_interrupt_status(tb)
-    assert intrs["IBI_DONE"] == 0
+    assert intrs["IBI_DONE"] == 0, f"IBI_DONE expected 0, got {intrs['IBI_DONE']}"
 
     # Dummy wait
     await ClockCycles(tb.clk, 10)
+
+    await tb.teardown()
 
 
 async def test_interrupt_force(dut, fields):
@@ -237,7 +266,7 @@ async def test_interrupt_force(dut, fields):
 
     # Ensure that irq is low
     await ClockCycles(tb.clk, 10)
-    assert irq.value == 0
+    assert irq.value == 0, f"IRQ expected 0, got {int(irq.value)}"
 
     # Disable the interrupt
     csr = tb.reg_map.I3C_EC.TTI.INTERRUPT_ENABLE
@@ -250,12 +279,12 @@ async def test_interrupt_force(dut, fields):
 
     # Ensure that interrupt does not get asserted
     await ClockCycles(tb.clk, 20)
-    assert irq.value == 0
+    assert irq.value == 0, f"IRQ expected 0, got {int(irq.value)}"
 
     # Ensure that the status is 0
     csr = tb.reg_map.I3C_EC.TTI.INTERRUPT_STATUS
     sts = await tb.read_csr_field(csr.base_addr, getattr(csr, f_sts))
-    assert sts == 0
+    assert sts == 0, f"Status mismatch: expected 0, got {sts}"
 
     # Enable the interrupt
     csr = tb.reg_map.I3C_EC.TTI.INTERRUPT_ENABLE
@@ -273,7 +302,7 @@ async def test_interrupt_force(dut, fields):
     # Ensure that the status is 1
     csr = tb.reg_map.I3C_EC.TTI.INTERRUPT_STATUS
     sts = await tb.read_csr_field(csr.base_addr, getattr(csr, f_sts))
-    assert sts == 1
+    assert sts == 1, f"Status mismatch: expected 1, got {sts}"
 
     # Clear the interrupt
     csr = tb.reg_map.I3C_EC.TTI.INTERRUPT_STATUS
@@ -286,7 +315,7 @@ async def test_interrupt_force(dut, fields):
     # Ensure that the status is 0
     csr = tb.reg_map.I3C_EC.TTI.INTERRUPT_STATUS
     sts = await tb.read_csr_field(csr.base_addr, getattr(csr, f_sts))
-    assert sts == 0
+    assert sts == 0, f"Status mismatch: expected 0, got {sts}"
 
     # Dummy wait
     await ClockCycles(tb.clk, 10)

@@ -23,15 +23,11 @@ from interface import I3CTopTestInterface
 import cocotb
 from cocotb.result import SimTimeoutError
 from cocotb.triggers import ClockCycles, Combine, RisingEdge, Timer
+from common import timeout_task, log_seed
 
 STATIC_ADDR = 0x5A
 VIRT_STATIC_ADDR = 0x5B
 VIRT_DYNAMIC_ADDR = 0x53
-
-
-async def timeout_task(timeout):
-    await Timer(timeout, "us")
-    raise RuntimeError("Test timeout!")
 
 
 async def init_normal_mode(dut, timeout=50):
@@ -40,6 +36,7 @@ async def init_normal_mode(dut, timeout=50):
     No I3C bus transactions needed -- just AXI/CSR access.
     """
     cocotb.log.setLevel(logging.DEBUG)
+    log_seed(dut)
     await cocotb.start(timeout_task(timeout))
 
     tb = I3CTopTestInterface(dut)
@@ -54,6 +51,7 @@ async def init_recovery_mode(dut, timeout=50):
     Initialize DUT and enter recovery mode.
     """
     cocotb.log.setLevel(logging.DEBUG)
+    log_seed(dut)
     await cocotb.start(timeout_task(timeout))
 
     tb = I3CTopTestInterface(dut)
@@ -76,10 +74,10 @@ async def init_recovery_with_i3c(dut, fclk=333.0, fbus=12.5, timeout=200):
     Returns (i3c_controller, tb, recovery) for tests that need I3C transactions.
     """
     cocotb.log.setLevel(logging.DEBUG)
+    log_seed(dut)
     await cocotb.start(timeout_task(timeout))
 
     i3c_controller = I3cController(
-        sda_i=dut.bus_sda,
         sda_o=dut.sda_sim_ctrl_i,
         scl_i=dut.bus_scl,
         scl_o=dut.scl_sim_ctrl_i,
@@ -140,6 +138,8 @@ async def test_normal_read_empty_rx_desc_queue(dut):
     dut._log.info(f"RX_DESC_QUEUE_PORT returned: 0x{data:08X}")
     assert data == 0, f"Expected 0 from empty RX desc queue, got 0x{data:08X}"
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_normal_read_empty_rx_data_port(dut):
@@ -155,6 +155,8 @@ async def test_normal_read_empty_rx_data_port(dut):
     dut._log.info(f"RX_DATA_PORT returned: 0x{data:08X}")
     assert data == 0, f"Expected 0 from empty RX data port, got 0x{data:08X}"
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_normal_read_empty_indirect_fifo_data(dut):
@@ -169,6 +171,8 @@ async def test_normal_read_empty_indirect_fifo_data(dut):
     data = dword2int(await tb.read_csr(addr, 4))
     dut._log.info(f"INDIRECT_FIFO_DATA returned: 0x{data:08X}")
     assert data == 0, f"Expected 0 from empty indirect FIFO, got 0x{data:08X}"
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -211,6 +215,8 @@ async def test_normal_read_empty_all_queues(dut):
 # Part B: Recovery mode -- read empty FIFOs
 # =============================================================================
 
+    await tb.teardown()
+
 @cocotb.test()
 async def test_recovery_read_empty_rx_desc_queue(dut):
     """
@@ -226,6 +232,8 @@ async def test_recovery_read_empty_rx_desc_queue(dut):
     dut._log.info(f"RX_DESC_QUEUE_PORT returned: 0x{data:08X}")
     assert data == 0, f"Expected 0 from empty RX desc queue in recovery, got 0x{data:08X}"
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_recovery_read_empty_rx_data_port(dut):
@@ -240,6 +248,8 @@ async def test_recovery_read_empty_rx_data_port(dut):
     dut._log.info(f"RX_DATA_PORT returned: 0x{data:08X}")
     assert data == 0, f"Expected 0 from empty RX data port in recovery, got 0x{data:08X}"
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_recovery_read_empty_indirect_fifo_data(dut):
@@ -253,6 +263,8 @@ async def test_recovery_read_empty_indirect_fifo_data(dut):
     data = dword2int(await tb.read_csr(addr, 4))
     dut._log.info(f"INDIRECT_FIFO_DATA returned: 0x{data:08X}")
     assert data == 0, f"Expected 0 from empty indirect FIFO in recovery, got 0x{data:08X}"
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -302,6 +314,8 @@ async def test_recovery_read_empty_all_queues(dut):
 # deadlocks the AXI bus and the test times out.
 # =============================================================================
 
+    await tb.teardown()
+
 @cocotb.test()
 async def test_concurrent_recovery_xfer_and_rx_desc_read(dut):
     """
@@ -341,6 +355,8 @@ async def test_concurrent_recovery_xfer_and_rx_desc_read(dut):
     assert hci_version == 0x120, f"HCI_VERSION: expected 0x120, got 0x{hci_version:X}"
     dut._log.info("AXI bus alive after concurrent recovery + RX_DESC read")
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_concurrent_recovery_xfer_and_tx_desc_write(dut):
@@ -378,6 +394,8 @@ async def test_concurrent_recovery_xfer_and_tx_desc_write(dut):
         tb.reg_map.I3CBASE.HCI_VERSION.base_addr, 4))
     assert hci_version == 0x120, f"HCI_VERSION: expected 0x120, got 0x{hci_version:X}"
     dut._log.info("AXI bus alive after concurrent recovery + TX_DESC write")
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -439,8 +457,10 @@ async def test_concurrent_recovery_xfer_and_all_queue_access(dut):
 # Issue a recovery write (INDIRECT_FIFO_DATA) to the virtual target and
 # monitor whether any data transiently appears in the TTI RX data queue.
 # If so, immediately issue an AXI read to RX_DATA_PORT and log the result.
-# This is exploratory: we log findings rather than assert specific values.
+# This test verifies that recovery writes do NOT leak data into the TTI RX queue.
 # =============================================================================
+
+    await tb.teardown()
 
 @cocotb.test()
 async def test_recovery_write_rx_data_observation(dut):
@@ -530,8 +550,16 @@ async def test_recovery_write_rx_data_observation(dut):
         dut._log.info("[SUMMARY] RX_DATA_PORT never had data during recovery write")
     dut._log.info("=" * 60)
 
+    # Recovery writes to the virtual target should NOT leak data into the TTI RX queue
+    assert len(rx_data_seen) == 0, (
+        f"Data leaked into TTI RX queue during recovery write: "
+        f"{len(rx_data_seen)} data word(s) observed"
+    )
+
     # Verify AXI bus is still alive
     hci_version = dword2int(await tb.read_csr(
         tb.reg_map.I3CBASE.HCI_VERSION.base_addr, 4))
     assert hci_version == 0x120, f"HCI_VERSION: expected 0x120, got 0x{hci_version:X}"
     dut._log.info("AXI bus alive after recovery write + RX observation")
+
+    await tb.teardown()

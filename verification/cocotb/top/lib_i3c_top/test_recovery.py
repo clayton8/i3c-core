@@ -20,14 +20,7 @@ VIRT_STATIC_ADDR = 0x5B
 DYNAMIC_ADDR = 0x52
 VIRT_DYNAMIC_ADDR = 0x53
 
-VALID_I3C_ADDRESSES = (
-    [i for i in range(0x03, 0x3E)]
-    + [i for i in range(0x3F, 0x5E)]
-    + [i for i in range(0x5F, 0x6E)]
-    + [i for i in range(0x6F, 0x76)]
-    + [i for i in range(0x77, 0x7A)]
-    + [0x7B, 0x7D]
-)
+from common import VALID_I3C_ADDRESSES, timeout_task, log_seed
 
 ocp_magic_string_as_bytes = [
     0x4F,  # 'O'
@@ -41,11 +34,6 @@ ocp_magic_string_as_bytes = [
 ]
 
 
-async def timeout_task(timeout):
-    await Timer(timeout, "us")
-    raise RuntimeError("Test timeout!")
-
-
 async def initialize(dut, fclk=333.0, fbus=12.5, timeout=50,
                      static_addr=0x5A, virtual_static_addr=0x5B,
                      dynamic_addr=None, virtual_dynamic_addr=None):
@@ -54,6 +42,7 @@ async def initialize(dut, fclk=333.0, fbus=12.5, timeout=50,
     """
 
     cocotb.log.setLevel(logging.DEBUG)
+    log_seed(dut)
 
     # Start the background timeout task
     await cocotb.start(timeout_task(timeout))
@@ -313,6 +302,8 @@ async def test_ri_error_detection(dut):
         int2dword(err_ctrl), 4
     )
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_virtual_overwrite(dut):
@@ -413,6 +404,8 @@ async def test_virtual_overwrite(dut):
         )
 
     dut._log.info("PASS: All oversized writes correctly rejected with Length Error")
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -520,8 +513,10 @@ async def test_virtual_write(dut):
     # is a recovery-only command and the device is not in recovery mode
     protocol_status = (status >> 8) & 0xFF
     assert protocol_status == 0x1, f"Protocol status error: expected 0x1 (Unsupported Command), got 0x{protocol_status:02X}"
-    assert data0 != 0xDDCCBBAA, "INDIRECT_FIFO_CTRL_0 should not have been written (not in recovery mode)"
-    assert data1 != 0x2211, "INDIRECT_FIFO_CTRL_1 should not have been written (not in recovery mode)"
+    assert data0 == 0x0, f"INDIRECT_FIFO_CTRL_0 should remain at reset value 0x0 (not in recovery mode), got 0x{data0:08X}"
+    assert data1 == 0x0, f"INDIRECT_FIFO_CTRL_1 should remain at reset value 0x0 (not in recovery mode), got 0x{data1:08X}"
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -946,6 +941,8 @@ async def test_chained_ri_and_ccc_commands(dut):
         assert fifo_data_final == expected_word_final, (
             f"Final FIFO word {i} mismatch: expected 0x{expected_word_final:08X}, got 0x{fifo_data_final:08X}")
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_ri_error_injection_stress(dut):
@@ -1064,6 +1061,7 @@ async def test_ri_error_injection_stress(dut):
     # =========================================================================
     # Scenario 3: T-bit (parity) error on command byte
     # =========================================================================
+    tb.te_error_monitor.expect_error(2)
     await run_scenario(
         "Scenario 3: T-bit error on command",
         recovery.command_write_tbit_error,
@@ -1084,6 +1082,8 @@ async def test_ri_error_injection_stress(dut):
         [0x10, 0x20, 0x30, 0x40],
         5  # 4th data byte (CMD=0, LenL=1, LenH=2, D0=3, D1=4, D2=5)
     )
+
+    tb.te_error_monitor.clear_expectations()
 
     # =========================================================================
     # Scenario 5: PEC error (incorrect checksum)
@@ -1272,6 +1272,8 @@ async def test_ri_error_injection_stress(dut):
         name for name, result in scenario_results.items() if result != "PASS"
     )
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_indirect_fifo_overflow_pointer(dut):
@@ -1409,6 +1411,8 @@ async def test_indirect_fifo_overflow_pointer(dut):
 
     dut._log.info("TEST PASSED: WRITE_INDEX correctly did not increment for overflow writes")
 
+    await tb.teardown()
+
 @cocotb.test()
 async def test_virtual_write_alternating(dut):
     """
@@ -1442,7 +1446,7 @@ async def test_virtual_write_alternating(dut):
         readback = dword2int(
             await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_RESET.base_addr, 4)
         )
-        assert readback == int.from_bytes(data, byteorder="little")
+        assert readback == int.from_bytes(data, byteorder="little"), f"Readback mismatch: got {readback}"
 
         # Clear device reset CSR
         await tb.write_csr_field(
@@ -1460,10 +1464,10 @@ async def test_virtual_write_alternating(dut):
         # Wait and read data back
         desc = dword2int(await tb.read_csr(tb.reg_map.I3C_EC.TTI.RX_DESC_QUEUE_PORT.base_addr, 4))
         desc = desc & 0xFFFF
-        assert desc == len(data)
+        assert desc == len(data), f"Descriptor mismatch: expected len(data), got {desc}"
 
         readback = dword2int(await tb.read_csr(tb.reg_map.I3C_EC.TTI.RX_DATA_PORT.base_addr, 4))
-        assert readback == int.from_bytes(data, byteorder="little")
+        assert readback == int.from_bytes(data, byteorder="little"), f"Readback mismatch: got {readback}"
 
         # ..........
 
@@ -1473,6 +1477,8 @@ async def test_virtual_write_alternating(dut):
             tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_STATUS_0.base_addr, int2dword(status), 4
         )
         await ClockCycles(tb.clk, 50)
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -1509,8 +1515,8 @@ async def test_write(dut):
 
     # Check
     protocol_status = (status >> 8) & 0xFF
-    assert protocol_status == 0
-    assert data == 0xCCBBAA  # 3 bytes: [0xAA, 0xBB, 0xCC] -> 0x00CCBBAA
+    assert protocol_status == 0, f"Protocol status mismatch: expected 0, got {protocol_status}"
+    assert data == 0xCCBBAA, f"Data mismatch"
 
     # Enter recovery mode (DEV_STATUS = 0x3) before accessing recovery-only commands
     # INDIRECT_FIFO_CTRL is only accessible when in recovery mode
@@ -1543,6 +1549,8 @@ async def test_write(dut):
         f"INDIRECT_FIFO_CTRL_0 mismatch: expected 0x000000AA, got 0x{data0:08X}")
     assert data1 == 0x44332211, (
         f"INDIRECT_FIFO_CTRL_1 mismatch: expected 0x44332211, got 0x{data1:08X}")
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -1579,8 +1587,8 @@ async def test_read_fifo_ctrl(dut):
 
     # Check
     protocol_status = (status >> 8) & 0xFF
-    assert protocol_status == 0
-    assert data == 0xCCBBAA  # 3 bytes: [0xAA, 0xBB, 0xCC] -> 0x00CCBBAA
+    assert protocol_status == 0, f"Protocol status mismatch: expected 0, got {protocol_status}"
+    assert data == 0xCCBBAA, f"Data mismatch"
 
     # Data to be written to INDIRECT_FIFO_CTRL
     fifo_ctrl_data = [random.randint(0, 255) for _ in range(6)]
@@ -1641,6 +1649,8 @@ async def test_read_fifo_ctrl(dut):
         f"AXI FIFO_CTRL_0 mismatch: expected 0x{exp_fifo_ctrl_0:08X}, got 0x{bus_data0:08X}")
     assert exp_fifo_ctrl_1 == bus_data1, (
         f"AXI FIFO_CTRL_1 mismatch: expected 0x{exp_fifo_ctrl_1:08X}, got 0x{bus_data1:08X}")
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -1747,6 +1757,8 @@ async def test_indirect_fifo_write(dut):
     assert (full3, empty3) == (False, True), (
         f"After reset flags wrong: expected (full=False, empty=True), got (full={full3}, empty={empty3})")
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_write_pec(dut):
@@ -1798,6 +1810,8 @@ async def test_write_pec(dut):
         f"DEVICE_RESET should retain previous value after PEC error: expected 0x00ADBEEF, got 0x{data:08X}")
 
     # Wait
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -1887,6 +1901,8 @@ async def test_read(dut):
 
     # Wait
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_read_short(dut):
@@ -1951,6 +1967,8 @@ async def test_read_short(dut):
     assert pec_ok, "PEC check failed"
 
     # Wait
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -2076,6 +2094,8 @@ async def test_read_long(dut):
 
     # Wait
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_virtual_read(dut):
@@ -2157,9 +2177,11 @@ async def test_virtual_read(dut):
             tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_STATUS_0.base_addr, int2dword(status), 4
         )
 
-    assert result
+    assert result, "Test failed — see errors above"
 
     # Wait
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -2241,6 +2263,8 @@ async def test_virtual_read_alternating(dut):
         await tb.write_csr(
             tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_STATUS_0.base_addr, int2dword(status), 4
         )
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -2334,6 +2358,8 @@ async def test_payload_available(dut):
         ), "After reading FIFO, payload_available should be deasserted"
         await RisingEdge(tb.clk)
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_image_activated(dut):
@@ -2377,6 +2403,8 @@ async def test_image_activated(dut):
     assert not bool(
         image_activated.value
     ), "Upon writing 0xFF to RECOVERY_CTRL byte 2 image_activated should be deasserted"
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -2432,6 +2460,8 @@ async def test_indirect_fifo_reset_access(dut):
     assert tx_data_after_reset_as_dwords == received_data, (
         f"FIFO data mismatch after reset:\n  TX: {[hex(w) for w in tx_data_after_reset_as_dwords]}\n  RX: {[hex(w) for w in received_data]}")
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_recovery_flow(dut):
@@ -2475,32 +2505,30 @@ async def test_recovery_flow(dut):
         rx_data, pec_ok = await recovery.command_read(
             VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.PROT_CAP
         )
-        assert pec_ok
+        assert pec_ok, "PEC check failed"
         rx_data, pec_ok = await recovery.command_read(
             VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.DEVICE_ID
         )
-        assert pec_ok
+        assert pec_ok, "PEC check failed"
         rx_data, pec_ok = await recovery.command_read(
             VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.HW_STATUS
         )
-        assert pec_ok
+        assert pec_ok, "PEC check failed"
         # wait for recovery to start
-        while True:
+        MAX_RECOVERY_POLLS = 200
+        for _poll in range(MAX_RECOVERY_POLLS):
             rx_data, pec_ok = await recovery.command_read(
                 VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.DEVICE_STATUS
             )
-            assert pec_ok
+            assert pec_ok, "PEC check failed"
             if rx_data[0] == 0x3:
                 break
+        else:
+            raise AssertionError(f"Recovery mode not entered after {MAX_RECOVERY_POLLS} polls")
         rx_data, pec_ok = await recovery.command_read(
             VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.RECOVERY_STATUS
         )
-        assert pec_ok
-        # # Read INDIRECT_FIFO_STATUS
-        # rx_data, pec_ok = await recovery.command_read(VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.INDIRECT_FIFO_STATUS)
-        # assert pec_ok
-        # xfer_size = bytes2int(rx_data[16:19])
-        # logger.info(f"xfer_size: {xfer_size} (words)")
+        assert pec_ok, "PEC check failed"
 
         data = [0, 0, 0]
         await recovery.command_write(
@@ -2518,7 +2546,7 @@ async def test_recovery_flow(dut):
             await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_STATUS_2.base_addr, 4)
         )
 
-        assert (wrptr, rdptr) == (0, 0)
+        assert (wrptr, rdptr) == (0, 0), f"FIFO state mismatch: expected (0, 0), got {(wrptr, rdptr)}"
 
         # Send firmware chunks
         xfer_size = 4
@@ -2533,11 +2561,12 @@ async def test_recovery_flow(dut):
             logger.info(f"Firmware chunk {data_ptr//(xfer_size*4)} sent.")
 
             # Poll indirect FIFO status
-            while True:
+            MAX_FIFO_POLLS = 500
+            for _poll in range(MAX_FIFO_POLLS):
                 rx_data, pec_ok = await recovery.command_read(
                     VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.INDIRECT_FIFO_STATUS
                 )
-                assert pec_ok
+                assert pec_ok, "PEC check failed"
                 empty = rx_data[0] & 1
 
                 if empty:
@@ -2547,6 +2576,8 @@ async def test_recovery_flow(dut):
                     logger.info("FIFO not empty")
 
                 await Timer(delay, "us")
+            else:
+                raise AssertionError(f"Indirect FIFO not empty after {MAX_FIFO_POLLS} polls")
 
         logger.info("Firmware image sent")
         bfm_done.set()
@@ -2567,7 +2598,8 @@ async def test_recovery_flow(dut):
         for data_ptr in range(0, image_size, xfer_size * 4):
 
             # Poll INDIRECT_FIFO_STATUS
-            while True:
+            MAX_FIFO_POLLS = 500
+            for _poll in range(MAX_FIFO_POLLS):
                 status = dword2int(
                     await tb.read_csr(
                         tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_STATUS_0.base_addr, 4
@@ -2582,6 +2614,8 @@ async def test_recovery_flow(dut):
                     logger.info("FIFO empty")
 
                 await Timer(100, "ns")
+            else:
+                raise AssertionError(f"Indirect FIFO still empty after {MAX_FIFO_POLLS} polls")
 
             # Wait before reading the data so that the BFM has to poll
             await Timer(interval, "us")
@@ -2614,6 +2648,8 @@ async def test_recovery_flow(dut):
     assert image_words == xferd_words, (
         f"Firmware image transfer mismatch:\n  Sent {len(image_words)} words, received {len(xferd_words)} words\n"
         f"  First mismatch at word {next((i for i, (a, b) in enumerate(zip(image_words, xferd_words)) if a != b), 'N/A')}")
+
+    await tb.teardown()
 
 
 def csr_access_test_data(tb):
@@ -2674,8 +2710,8 @@ async def test_ocp_csr_access(dut):
 
     # Check
     protocol_status = (status >> 8) & 0xFF
-    assert protocol_status == 0
-    assert data == b0 << 16 | b1 << 8 | b2
+    assert protocol_status == 0, f"Protocol status mismatch: expected 0, got {protocol_status}"
+    assert data == b0 << 16 | b1 << 8 | b2, f"Data mismatch"
 
     reg_test_data = csr_access_test_data(tb)
 
@@ -2704,6 +2740,8 @@ async def test_ocp_csr_access(dut):
 
     rd_data = await tb.read_csr(recovery_status_addr)
     compare_values(int2dword(exp_recovery_status), rd_data, recovery_status_addr)
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -2878,6 +2916,7 @@ async def test_ri_comprehensive_stress(dut):
 
     # Test 2a: T-bit error on data byte
     dut._log.info("Test 2a: T-bit parity error during write")
+    tb.te_error_monitor.expect_error(2)
     try:
         # Use low-level I3C operations to inject T-bit error
         controller = i3c_controller
@@ -2920,6 +2959,7 @@ async def test_ri_comprehensive_stress(dut):
         dut._log.error(f"  Exception: {e}")
         test_results["2a_tbit_error"] = f"FAIL - {e}"
 
+    tb.te_error_monitor.clear_expectations()
 
     # =========================================================================
     # SECTION 3: Length Mismatch Testing
@@ -3542,6 +3582,8 @@ async def test_ri_comprehensive_stress(dut):
     # Assert overall pass
     assert fail_count == 0, f"{fail_count} tests failed - see log for details"
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_indirect_fifo_large_write(dut):
@@ -3749,6 +3791,8 @@ async def test_indirect_fifo_large_write(dut):
     dut._log.info(f"  Device functional: Yes")
     dut._log.info("  ALL CHECKS PASSED")
     dut._log.info("=" * 60)
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -4073,6 +4117,8 @@ async def test_indirect_fifo_two_writes_overflow(dut):
     dut._log.info("  ALL CHECKS PASSED")
     dut._log.info("=" * 60)
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_indirect_fifo_parity_error(dut):
@@ -4200,6 +4246,8 @@ async def test_indirect_fifo_parity_error(dut):
     dut._log.info("")
     dut._log.info("Sending frame with T-bit parity errors...")
 
+    tb.te_error_monitor.expect_error(2)
+
     controller = i3c_controller
 
     # Take bus control and start the transaction
@@ -4228,6 +4276,7 @@ async def test_indirect_fifo_parity_error(dut):
 
     dut._log.info("Frame transmission complete")
 
+    tb.te_error_monitor.clear_expectations()
 
     # =========================================================================
     # VERIFY FIFO REMAINS EMPTY
@@ -4366,6 +4415,8 @@ async def test_indirect_fifo_parity_error(dut):
     dut._log.info(f"  I3C target functional: Yes (private read OK)")
     dut._log.info("  ALL CHECKS PASSED")
     dut._log.info("=" * 60)
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -4608,6 +4659,8 @@ async def test_write_exceeds_register_size(dut):
     dut._log.info(f"    Protocol error: 0x{prot_error_correct:02X} (expected 0x00) - PASS")
     dut._log.info("=" * 60)
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_ri_length_underrun(dut):
@@ -4776,6 +4829,8 @@ async def test_ri_length_underrun(dut):
     dut._log.info(f"  Protocol error: 0x{protocol_error:02X} (expected 0x03) - PASS")
     dut._log.info(f"  Device still functional: YES")
     dut._log.info("=" * 60)
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -4962,6 +5017,8 @@ async def test_ri_mid_byte_stop(dut):
     dut._log.info(f"  All transactions completed without hanging")
     dut._log.info(f"  Device recovered after each mid-byte stop")
     dut._log.info("=" * 70)
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -5412,6 +5469,8 @@ async def test_ri_read_interrupted_by_ccc(dut):
     dut._log.info("TE0 trigger: Sending 0x7E (I3C reserved) with Read bit set")
     dut._log.info("")
 
+    tb.te_error_monitor.expect_error(0)
+
     # Clear DEVICE_STATUS before test
     await tb.write_csr(
         tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_STATUS_0.base_addr,
@@ -5447,6 +5506,7 @@ async def test_ri_read_interrupted_by_ccc(dut):
     await i3c_controller.send_stop()
     i3c_controller.give_bus_control()
 
+    tb.te_error_monitor.clear_expectations()
 
     # Verify RI protocol error was detected
     status_after_5 = dword2int(
@@ -5498,6 +5558,8 @@ async def test_ri_read_interrupted_by_ccc(dut):
     dut._log.info("  Part 4: Sr + Write to Virtual Target - PASS")
     dut._log.info("  Part 5: Sr + TE0 Error + HDR Exit - PASS")
     dut._log.info("=" * 70)
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -5624,6 +5686,8 @@ async def test_private_read_and_ri_read(dut):
 
     dut._log.info("PASS: Recovery interface read and private read are independent")
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_parity_error_isolation(dut):
@@ -5671,6 +5735,7 @@ async def test_parity_error_isolation(dut):
     # =========================================================================
     dut._log.info("Part 1: RI write with T-bit error on PEC byte")
 
+    tb.te_error_monitor.expect_error(2)
     # Seed the CSR with a known good value first
     await recovery.command_write(
         VIRT_DYNAMIC_ADDR, I3cRecoveryInterface.Command.DEVICE_RESET, [0x11, 0x22, 0x33]
@@ -5810,3 +5875,5 @@ async def test_parity_error_isolation(dut):
     dut._log.info("  Part 4: RI read with T-bit error on write-phase PEC - PASS")
     dut._log.info("  Monitor: No RI writes leaked to TTI - PASS")
     dut._log.info("=" * 70)
+
+    await tb.teardown()

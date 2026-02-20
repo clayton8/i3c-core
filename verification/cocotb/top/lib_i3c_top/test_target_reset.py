@@ -9,6 +9,7 @@ from interface import I3CTopTestInterface
 
 import cocotb
 from cocotb.triggers import ClockCycles, ReadOnly, RisingEdge, Timer
+from common import log_seed
 
 TGT_ADR = 0x5A
 
@@ -42,10 +43,9 @@ async def test_setup(
         system_clock_mhz: System clock frequency in MHz (default 333MHz)
     """
     cocotb.log.setLevel(logging.DEBUG)
+    log_seed(dut)
 
     i3c_controller = I3cController(
-        sda_i=dut.bus_sda,
-        sda_o=dut.sda_sim_ctrl_i,
         scl_i=dut.bus_scl,
         scl_o=dut.scl_sim_ctrl_i,
         debug_state_o=None,
@@ -87,8 +87,8 @@ async def do_pattern_reset(dut, tb, i3c_controller, expect_escalation=False):
     await i3c_controller.send_target_reset_pattern()
 
     # Core should initiate peripheral reset after Target Reset Pattern
-    assert dut.peripheral_reset_o == (not expect_escalation)
-    assert dut.escalated_reset_o == expect_escalation
+    assert dut.peripheral_reset_o == (not expect_escalation), f"Reset output mismatch: expected (not expect_escalation), got {int(dut.peripheral_reset_o)}"
+    assert dut.escalated_reset_o == expect_escalation, f"Reset output mismatch: expected expect_escalation, got {int(dut.escalated_reset_o)}"
     await RisingEdge(tb.clk)
 
     # Indicate that peripheral reset is finished
@@ -97,8 +97,8 @@ async def do_pattern_reset(dut, tb, i3c_controller, expect_escalation=False):
 
     # Peripheral reset should be deasserted at this point
     await ReadOnly()
-    assert dut.peripheral_reset_o == 0
-    assert dut.escalated_reset_o == expect_escalation
+    assert dut.peripheral_reset_o == 0, f"Reset output mismatch: expected 0, got {int(dut.peripheral_reset_o)}"
+    assert dut.escalated_reset_o == expect_escalation, f"Reset output mismatch: expected expect_escalation, got {int(dut.escalated_reset_o)}"
 
     # Clear reset done
     await RisingEdge(tb.clk)
@@ -165,6 +165,8 @@ async def test_target_peripheral_reset(dut):
 
     await do_pattern_reset(dut, tb, i3c_controller)
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_target_escalated_reset(dut):
@@ -185,6 +187,8 @@ async def test_target_escalated_reset(dut):
 # =============================================================================
 # STRESS TESTS
 # =============================================================================
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -213,6 +217,8 @@ async def test_reset_at_min_timing(dut):
     await clear_reset_state(dut, tb)
     dut._log.info("PASS: Reset detected at minimum timing")
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_13_transitions_fails(dut):
@@ -239,6 +245,8 @@ async def test_13_transitions_fails(dut):
 
     dut._log.info("PASS: 13 transitions correctly did not trigger reset")
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_15_transitions_before_scl(dut):
@@ -263,8 +271,10 @@ async def test_15_transitions_before_scl(dut):
     # Let's just verify the behavior
     reset_detected = await wait_for_reset_detection(dut, tb, timeout_cycles=500)
 
-    dut._log.info(f"15 transitions result: reset_detected = {reset_detected}")
-    # For this test, we're documenting behavior - it may or may not trigger
+    assert not reset_detected, "Reset should NOT be detected with 15 transitions (extra transitions invalidate pattern)"
+    dut._log.info("PASS: 15 transitions correctly did not trigger reset")
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -292,6 +302,8 @@ async def test_scl_glitch_during_pattern(dut):
 
     dut._log.info("PASS: SCL glitch correctly prevented reset detection")
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_sda_stable_low_during_await_scl(dut):
@@ -316,6 +328,8 @@ async def test_sda_stable_low_during_await_scl(dut):
     assert no_reset, "Reset should NOT be detected when SDA stable low in AwaitSCL"
 
     dut._log.info("PASS: SDA stable low correctly aborted AwaitSCL")
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -342,6 +356,8 @@ async def test_scl_drops_during_await_sr(dut):
 
     dut._log.info("PASS: SCL drop correctly aborted AwaitSr")
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_scl_drops_during_await_p(dut):
@@ -366,6 +382,8 @@ async def test_scl_drops_during_await_p(dut):
     assert no_reset, "Reset should NOT be detected when SCL drops in AwaitP"
 
     dut._log.info("PASS: SCL drop correctly aborted AwaitP")
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -398,6 +416,8 @@ async def test_back_to_back_resets(dut):
         await ClockCycles(tb.clk, 20)
 
     dut._log.info("PASS: All back-to-back resets detected correctly")
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -435,6 +455,8 @@ async def test_reset_after_failed_pattern(dut):
 
     await clear_reset_state(dut, tb)
     dut._log.info("PASS: FSM recovered and detected valid reset after failed pattern")
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -484,8 +506,10 @@ async def test_first_edge_must_be_falling(dut):
     # So first positive edge doesn't count, meaning we only get 13 valid transitions
     no_reset = await check_no_reset_detection(dut, tb)
 
-    dut._log.info(f"First edge polarity test: no_reset = {no_reset}")
-    # Document behavior - first posedge doesn't count, so we effectively get 13 not 14
+    assert no_reset, "Reset should NOT be detected when first edge is rising (only 13 valid transitions counted)"
+    dut._log.info("PASS: First edge polarity requirement verified — rising start prevents reset")
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -512,6 +536,8 @@ async def test_timing_at_2x_minimum(dut):
 
     await clear_reset_state(dut, tb)
     dut._log.info("PASS: Reset detected at 2x minimum timing")
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -541,8 +567,10 @@ async def test_very_fast_timing_below_spec(dut):
     # This should still be detectable
     reset_detected = await wait_for_reset_detection(dut, tb)
 
-    dut._log.info(f"Fast timing test: reset_detected = {reset_detected}")
-    # Document behavior - may or may not work depending on bus monitor timing
+    assert reset_detected, "Reset should be detected even at fast timing (40ns tDIG_H)"
+    dut._log.info("PASS: Reset detected at fast timing (below spec minimum)")
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -600,3 +628,5 @@ async def test_mixed_valid_and_invalid_patterns(dut):
     await clear_reset_state(dut, tb)
 
     dut._log.info("PASS: All mixed patterns behaved as expected")
+
+    await tb.teardown()

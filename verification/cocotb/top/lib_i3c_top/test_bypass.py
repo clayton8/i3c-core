@@ -17,13 +17,14 @@ from utils import Access, draw_axi_priv_ids, get_axi_ids_seq
 import cocotb
 from cocotb.result import SimTimeoutError
 from cocotb.triggers import ClockCycles, Combine, Event, Join, RisingEdge, Timer
+from common import timeout_task, log_seed
 
 
 async def write_to_indirect_fifo(tb, data=None, awid=None, format="bytes", timeout=1, units="us"):
     """
     Issues a write command to the target
     """
-    assert format in ["bytes", "dwords"]
+    assert format in ["bytes", "dwords"], f"Invalid format: {format}"
     if not data:
         raise ValueError("Data to write to Indirect FIFO must not be 'None'")
 
@@ -50,17 +51,13 @@ async def write_to_indirect_fifo(tb, data=None, awid=None, format="bytes", timeo
         )
 
 
-async def timeout_task(timeout):
-    await Timer(timeout, "us")
-    raise RuntimeError("Test timeout!")
-
-
 async def initialize(dut, timeout=50):
     """
     Common test initialization routine
     """
 
     cocotb.log.setLevel(logging.DEBUG)
+    log_seed(dut)
 
     # Start the background timeout task
     await cocotb.start(timeout_task(timeout))
@@ -165,19 +162,21 @@ async def test_indirect_fifo_write(dut):
     dut._log.info("TX data: " + " ".join([hex(w) for w in tx_data]))
     dut._log.info("Indirect FIFO: " + " ".join([hex(w) for w in rx_words]))
 
-    assert tx_data == rx_words
+    assert tx_data == rx_words, f"Data mismatch"
 
     # Check FIFO pointer progression
-    assert (wrptr0, rdptr0) == (0, 0)
-    assert (wrptr1, rdptr1) == (0, 0)
-    assert (wrptr2, rdptr2) == (0, 0)
-    assert (wrptr3, rdptr3) == (0, 0)
+    assert (wrptr0, rdptr0) == (0, 0), f"FIFO state mismatch: expected (0, 0), got {(wrptr0, rdptr0)}"
+    assert (wrptr1, rdptr1) == (0, 0), f"FIFO state mismatch: expected (0, 0), got {(wrptr1, rdptr1)}"
+    assert (wrptr2, rdptr2) == (0, 0), f"FIFO state mismatch: expected (0, 0), got {(wrptr2, rdptr2)}"
+    assert (wrptr3, rdptr3) == (0, 0), f"FIFO state mismatch: expected (0, 0), got {(wrptr3, rdptr3)}"
 
     # Check empty/full progression
-    assert (full0, empty0) == (False, True)
-    assert (full1, empty1) == (True, False)
-    assert (full2, empty2) == (False, True)
-    assert (full3, empty3) == (False, True)
+    assert (full0, empty0) == (False, True), f"FIFO state mismatch: expected (False, True), got {(full0, empty0)}"
+    assert (full1, empty1) == (True, False), f"FIFO state mismatch: expected (True, False), got {(full1, empty1)}"
+    assert (full2, empty2) == (False, True), f"FIFO state mismatch: expected (False, True), got {(full2, empty2)}"
+    assert (full3, empty3) == (False, True), f"FIFO state mismatch: expected (False, True), got {(full3, empty3)}"
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -204,6 +203,8 @@ async def test_indirect_fifo_overflow(dut):
     except SimTimeoutError:
         assert False, "Write to full Indirect FIFO was rejected while it should be ignored"
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_indirect_fifo_underflow(dut):
@@ -225,6 +226,8 @@ async def test_indirect_fifo_underflow(dut):
         assert False, "Read from empty Indirect FIFO was rejected while it should return 0"
     else:
         assert d == 0, "Read from empty Indirect FIFO did not return 0"
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -293,7 +296,7 @@ async def test_read(dut):
 
     dut._log.info("Received data: " + " ".join([hex(w) for w in recovery_data]))
     dut._log.info("Expected data: " + " ".join([hex(w) for w in prot_cap]))
-    assert recovery_data == prot_cap
+    assert recovery_data == prot_cap, f"Data mismatch"
 
     # Test DEVICE_ID register
     device_id = [random.randint(0, 2**32 - 1) for _ in range(6)]
@@ -340,13 +343,13 @@ async def test_read(dut):
 
     dut._log.info("Received data: " + " ".join([hex(w) for w in recovery_data]))
     dut._log.info("Expected data: " + " ".join([hex(w) for w in device_id]))
-    assert recovery_data == device_id
+    assert recovery_data == device_id, f"Data mismatch"
 
     # Ensure there is access to rest of basic registers
     hw_status = dword2int(
         await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.HW_STATUS.base_addr, 4)
     )
-    assert hw_status == 0x0
+    assert hw_status == 0x0, f"HW_STATUS mismatch: expected 0x0, got {hw_status}"
 
     device_status = [
         dword2int(
@@ -356,7 +359,9 @@ async def test_read(dut):
             await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.DEVICE_STATUS_1.base_addr, 4)
         ),
     ]
-    assert device_status == [0x3, 0x0]  # DEVICE_STATUS_0 was earlier set to 0x3
+    assert device_status == [0x3, 0x0], f"DEVICE_STATUS mismatch: expected [0x3, 0x0], got {device_status}"
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -422,6 +427,8 @@ async def test_payload_available(dut):
         payload_available.value
     ), "After reading INDIRECT_FIFO_DATA over AHB/AXI payload_available should be deasserted"
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_image_activated(dut):
@@ -472,6 +479,8 @@ async def test_image_activated(dut):
     assert not bool(
         image_activated.value
     ), "Upon writing 0xFF to RECOVERY_CTRL byte 2 image_activated should be deasserted"
+
+    await tb.teardown()
 
 
 @cocotb.test()
@@ -558,6 +567,8 @@ async def test_i3c_bus_traffic_during_loopback(dut):
                 payload_data == payload_received
             ), "Reiceved payload data does not match sent data!"
 
+    await tb.teardown()
+
 
 @cocotb.test()
 async def test_recovery_flow(dut):
@@ -578,7 +589,7 @@ async def test_recovery_flow(dut):
         await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_STATUS_4.base_addr, 4)
     )
     # Ensure max transfer size is set to 256 bytes by I3C Core (in dwords)
-    assert max_xfer_size == 256 // 4
+    assert max_xfer_size == 256 // 4, f"Max transfer size mismatch: expected 256 // 4, got {max_xfer_size}"
 
     # Caliptra MCU agent
     async def mcu_agent():
@@ -604,7 +615,7 @@ async def test_recovery_flow(dut):
         recovery_ctrl = dword2int(
             await tb.read_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.RECOVERY_CTRL.base_addr, 4)
         )
-        assert recovery_ctrl == 0
+        assert recovery_ctrl == 0, f"RECOVERY_CTRL mismatch: expected 0, got {recovery_ctrl}"
 
         # Write 0 to Indirect FIFO Control
         await tb.write_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_CTRL_0.base_addr, 0x0, 4)
@@ -652,7 +663,8 @@ async def test_recovery_flow(dut):
                 logger.info("Firmware image sent!")
 
             # Wait until data is read from Indirect FIFO
-            while True:
+            MAX_FIFO_POLLS = 500
+            for _poll in range(MAX_FIFO_POLLS):
                 empty = await tb.read_csr_field(
                     tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_STATUS_0.base_addr,
                     tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_STATUS_0.EMPTY,
@@ -666,6 +678,8 @@ async def test_recovery_flow(dut):
                 # Indirect FIFO is not empty so wait arbitrary number of cycles for other side
                 # to read data
                 await ClockCycles(tb.clk, random.randint(5, 150))
+            else:
+                raise AssertionError(f"Indirect FIFO not empty after {MAX_FIFO_POLLS} polls")
 
         # Activate an image
         logger.info("Activating image...")
@@ -720,7 +734,8 @@ async def test_recovery_flow(dut):
         # Receive the firmware image
         for data_ptr in range(0, image_size // 4, max_xfer_size):
             # Wait for data in Indirect FIFO
-            while True:
+            MAX_FIFO_POLLS = 500
+            for _poll in range(MAX_FIFO_POLLS):
                 full = await tb.read_csr_field(
                     tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_STATUS_0.base_addr,
                     tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_STATUS_0.FULL,
@@ -738,6 +753,8 @@ async def test_recovery_flow(dut):
                 # Indirect FIFO is empty so wait arbitrary number of cycles for other side
                 # to write data
                 await ClockCycles(tb.clk, random.randint(5, 150))
+            else:
+                raise AssertionError(f"Indirect FIFO not full after {MAX_FIFO_POLLS} polls")
 
             # Read data
             dwords_left = min(max_xfer_size, image_size // 4 - data_ptr)
@@ -781,7 +798,9 @@ async def test_recovery_flow(dut):
     await Combine(mcu_done.wait(), rot_done.wait())
 
     # Check if generated image matches received image
-    assert image_dwords == xferd_words
+    assert image_dwords == xferd_words, f"Data mismatch"
+
+    await tb.teardown()
 
 
 def csr_access_test_data(tb, rd_acc=Access.Priv, wr_acc=Access.Priv):
