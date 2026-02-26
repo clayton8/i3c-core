@@ -11,14 +11,18 @@ Checks performed (with spec section references):
   2. Address phase uses Open Drain            -- S5.1.2.2.1
   3. No target arbitration after Repeated Sr  -- S5.1.2.2.4
   4. ACK/NACK bit is Open Drain               -- S5.1.2.2.4, S5.1.2.3.1
-  5. Write-ACK handoff (target releases SDA)  -- S5.1.2.3.1
+  5. Write-ACK handoff (target releases SDA)  -- S5.1.2.3.1, tSCO (Table 87)
   6. IBI-ACK handoff (target takes SDA in PP) -- S5.1.2.3.2
   7. Read data bytes in Push-Pull             -- S5.1.2.3
-  8. T-bit end: target releases to Hi-Z       -- S5.1.2.3.4
-  9. T-bit continue: target releases to Hi-Z  -- S5.1.2.3.4
+  8. T-bit end: target releases to Hi-Z       -- S5.1.2.3.4, tSCO, Figs 150-151
+  9. T-bit continue: target releases to Hi-Z  -- S5.1.2.3.4, tSCO, Fig 152
  10. Bus contention detection                 -- general safety
  11. Target silent on non-matching address     -- S5.1.2
  12. IBI only after START, not after Sr        -- S5.1.6.2
+ 13. Read T-bit in Push-Pull mode             -- S5.1.2.3
+ 14. ENTDAA PID/BCR/DCR in Open Drain mode    -- S5.1.4.2
+ 15. ENTDAA DA handoff (DCR->DA, tSCO)        -- S5.1.2.5.4, Fig 23
+ 16. ENTDAA DA+PAR contention check           -- S5.1.4.2 step 9
 
 Started automatically by I3CTopTestInterface.setup(); raises on violation.
 """
@@ -58,6 +62,10 @@ class I3cBusMonitor:
     """
 
     I3C_BROADCAST_ADDR = 0x7E
+
+    # tSCO max: Clock in to Data Out for Target (Table 86 §6.2)
+    # The Target must change SDA within tSCO of the SCL edge.
+    TSCO_MAX_NS = 12
 
     # Direct GET CCC codes and their expected byte counts
     _GET_CCC_BYTE_COUNTS = {
@@ -126,6 +134,16 @@ class I3cBusMonitor:
         self._prev_scl = 1
         self._prev_sda = 1
         self._bus_active = False       # True between START and STOP
+
+        # --- Check 5: Write-ACK handoff (S5.1.2.3.1) ---
+        # Scheduled tSCO after the ACK's SCL rising edge
+        self._handoff_check_time = None  # sim time (ns) to fire check
+        self._handoff_addr = 0           # address for violation message
+        self._handoff_check_id = "WRITE_ACK_HANDOFF"  # violation tag
+        self._handoff_spec_ref = "S5.1.2.3.1 step 2"  # spec citation
+
+        # --- ENTDAA (S5.1.4.2) ---
+        self._entdaa_bit_count = 0
 
         # --- M1: CCC Response Data Monitor state ---
         self._active_ccc_code = None   # CCC code that persists across Sr
@@ -377,6 +395,8 @@ class I3cBusMonitor:
             self._data_accum = (self._data_accum << 1) | bus_sda
         elif self._phase == BusPhase.CCC_TBIT:
             pass
+        elif self._phase == BusPhase.ENTDAA:
+            self._on_entdaa_rise(bus_sda)
 
     def _on_scl_falling(self, bus_sda):
         """Called on every SCL falling edge."""
@@ -408,6 +428,8 @@ class I3cBusMonitor:
             self._on_ccc_byte_fall()
         elif self._phase == BusPhase.CCC_TBIT:
             self._on_ccc_tbit_fall()
+        elif self._phase == BusPhase.ENTDAA:
+            self._on_entdaa_fall()
 
         self._check_target_silent_nonmatching()
 
@@ -425,6 +447,7 @@ class I3cBusMonitor:
         self._is_addressed_to_dut = False
         self._is_addr_virt = False
         self._is_ibi = False
+        self._dut_drove_addr = False
         self._byte_in_msg = 0
         self._data_accum = 0
 
@@ -442,6 +465,10 @@ class I3cBusMonitor:
         if self._bit_count < 7:
             # Accumulate address bits
             self._addr_accum = (self._addr_accum << 1) | bus_sda
+
+            # Track if DUT is driving during address bits (for IBI detection)
+            if not self._is_repeated_start and self._dut_is_driving():
+                self._dut_drove_addr = True
 
             # Check 2: Address phase must use Open Drain (S5.1.2.2.1)
             # After a START (not Sr), the address is arbitrable --> OD required
@@ -489,9 +516,11 @@ class I3cBusMonitor:
             )
 
             # Detect IBI: target-initiated, addr matches DUT, RnW=1,
-            # and not after Sr
+            # not after Sr, AND DUT was driving address bits (distinguishes
+            # IBI from controller-initiated private read)
             if (not self._is_repeated_start and
-                    self._is_addressed_to_dut and self._rnw == 1):
+                    self._is_addressed_to_dut and self._rnw == 1 and
+                    self._dut_drove_addr):
                 self._is_ibi = True
                 self.stats['ibi_requests'] += 1
                 self._phase = BusPhase.IBI_ADDR_ACK
@@ -502,6 +531,9 @@ class I3cBusMonitor:
         """
         Check 4: ACK/NACK bit -- always Open Drain (S5.1.2.2.4).
         Target drives ACK low in OD; NACK = passive (not driving).
+
+        Check 5 scheduling: If write-ACK, schedule a handoff check at tSCO
+        after this rising edge (S5.1.2.3.1 step 2).
         """
         if self._is_addressed_to_dut or self._is_broadcast:
             if self._dut_is_driving() and self._dut_is_pp():
@@ -511,12 +543,20 @@ class I3cBusMonitor:
                     f"addr=0x{self._addr_accum:02X} (S5.1.2.2.4)"
                 )
 
+        # Check 5: Schedule write-ACK handoff verification at tSCO.
+        # Per S5.1.2.3.1 step 2: "After the I3C Target sees the rising edge
+        # of SCL, it releases the SDA line to High-Z." The release must
+        # occur within tSCO (max 12 ns, Table 86 §6.2).
+        if (self._is_addressed_to_dut or self._is_broadcast) and self._rnw == 0:
+            if bus_sda == 0:  # ACK (Target is driving SDA low)
+                self._handoff_check_time = (
+                    cocotb.utils.get_sim_time('ns') + self.TSCO_MAX_NS
+                )
+                self._handoff_addr = self._addr_accum
+
     def _on_addr_ack_fall(self, bus_sda):
         """
         After ACK, determine next phase based on address and RnW.
-
-        Check 5: Write-ACK handoff -- on SCL rising during ACK, Target should
-        release SDA to Hi-Z so Controller can take over in PP (S5.1.2.3.1).
         """
         acked = (bus_sda == 0)
 
@@ -541,6 +581,13 @@ class I3cBusMonitor:
             return
 
         if self._is_addressed_to_dut or self._is_broadcast:
+            # ENTDAA: Sr + 7'h7E/R ACK → enter DAA data phase (S5.1.4.2)
+            if self._is_entdaa and self._is_broadcast and self._rnw == 1:
+                self._phase = BusPhase.ENTDAA
+                self._entdaa_bit_count = 0
+                self.log.debug("I3cBusMonitor: Entering ENTDAA data phase")
+                return
+
             if self._rnw == 0:
                 # Check if this is a direct CCC write phase (Sr + target_addr/W)
                 if self._active_ccc_code is not None and self._is_repeated_start:
@@ -612,17 +659,32 @@ class I3cBusMonitor:
     def _on_read_tbit_rise(self, bus_sda):
         """
         Check 8/9: T-bit behavior on SCL rising edge (S5.1.2.3.4).
+        Check 13: T-bit must be driven in PP mode (S5.1.2.3).
 
-        After the rising edge, the Target shall release SDA to Hi-Z:
+        After the rising edge, the Target shall release SDA to Hi-Z within
+        tSCO (max 12ns, Table 87 S6.2):
         - T-bit=0 (end): Target sets SDA low on falling, releases on rising
         - T-bit=1 (continue): Target sets SDA high on falling, releases on rising
 
-        In both cases, the Target goes to OD/Hi-Z after the rising edge.
-        We check this condition: on the rising edge, the DUT should still be
-        driving (it hasn't released yet), then it should release.
+        Both cases shown in Figures 150, 151, 152 with tSCO annotated.
         """
-        pass  # The release happens asynchronously after posedge;
-              # we check on the NEXT falling edge below.
+        if self._is_addressed_to_dut:
+            # Check 13: T-bit must be PP (same as read data)
+            if self._dut_is_driving() and self._dut_is_od():
+                self._record_violation(
+                    "READ_TBIT_PP",
+                    f"DUT driving read T-bit in OD mode -- must use PP "
+                    f"(S5.1.2.3, S5.1.2.3.4)"
+                )
+
+            # Check 8/9: Schedule tSCO release check.
+            # Target must release SDA to Hi-Z within tSCO after this rising edge.
+            self._handoff_check_time = (
+                cocotb.utils.get_sim_time('ns') + self.TSCO_MAX_NS
+            )
+            self._handoff_addr = self._addr_accum
+            self._handoff_check_id = "READ_TBIT_RELEASE"
+            self._handoff_spec_ref = "S5.1.2.3.4, Figs 150-152"
 
     def _on_read_tbit_fall(self, bus_sda):
         """
@@ -648,6 +710,63 @@ class I3cBusMonitor:
         self._phase = BusPhase.READ_DATA
         self._bit_count = 0
         self._data_accum = 0
+
+    # --------------------------------------------------------------
+    # ENTDAA data phase (S5.1.4.2)
+    # 64 bits PID/BCR/DCR (Target drives OD) +
+    # 8 bits DA+PAR (Controller drives OD) +
+    # 1 bit ACK/NACK (Target drives OD)
+    # --------------------------------------------------------------
+
+    def _on_entdaa_rise(self, bus_sda):
+        """ENTDAA bit sampling on SCL rising edge.
+
+        Checks:
+        - Bits 0-63 (PID/BCR/DCR): DUT must drive in OD mode (S5.1.4.2).
+        - At bit 63 (last DCR bit): schedule tSCO check for Target release
+          before Controller starts driving DA[6] at bit 64 (S5.1.2.5.4).
+        - Bits 64-71 (DA+PAR): DUT must NOT drive (Controller phase).
+
+        Per Figure 25 the ACK/NACK at bit 72 is explicitly "without Handoff"
+        so no tSCO check is applied there.
+        """
+        bc = self._entdaa_bit_count
+
+        if bc < 64:
+            # PID/BCR/DCR phase: Target drives in Open Drain (S5.1.4.2)
+            if self._dut_is_driving() and self._dut_is_pp():
+                self._record_violation(
+                    "ENTDAA_OD",
+                    f"DUT driving ENTDAA PID/BCR/DCR bit[{bc}] in PP mode "
+                    f"-- must use OD (S5.1.4.2)"
+                )
+
+            if bc == 63:
+                # Last DCR bit sampled -- Target must release within tSCO
+                # so Controller can drive DA[6] at bit 64 (S5.1.2.5.4, Figure 23)
+                self._handoff_check_time = cocotb.utils.get_sim_time('ns') + self.TSCO_MAX_NS
+                self._handoff_addr = self.I3C_BROADCAST_ADDR
+                self._handoff_check_id = "ENTDAA_DA_HANDOFF"
+                self._handoff_spec_ref = "S5.1.4.2 step 9, S5.1.2.5.4"
+
+        elif 64 <= bc < 72:
+            # DA + PAR phase: Controller drives, Target must not drive
+            if self._dut_is_driving():
+                self._record_violation(
+                    "ENTDAA_DA_HANDOFF",
+                    f"DUT driving SDA during ENTDAA DA assignment "
+                    f"bit[{bc - 64}] -- Controller drives DA+PAR, "
+                    f"Target must release (S5.1.4.2 step 9)"
+                )
+
+    def _on_entdaa_fall(self):
+        """ENTDAA bit counting on SCL falling edge."""
+        self._entdaa_bit_count += 1
+        if self._entdaa_bit_count >= 73:
+            # Round complete (ACK/NACK received)
+            # Phase will be reset by Sr/P detection
+            self.log.debug("I3cBusMonitor: ENTDAA round complete (73 bits)")
+            self._phase = BusPhase.IDLE
 
     # --------------------------------------------------------------
     # IBI phases
@@ -712,12 +831,17 @@ class I3cBusMonitor:
             self._bit_count = 0
 
     def _on_ccc_tbit_fall(self):
-        """After CCC T-bit, check for ENTHDR, track CCC code, and await next byte or Sr/P."""
+        """After CCC T-bit, check for ENTHDR/ENTDAA, track CCC code, and await next byte or Sr/P."""
         if self._byte_in_msg == 0:
             # First CCC byte is the command code
             self._ccc_code = self._data_accum & 0xFF
             self._active_ccc_code = self._ccc_code
             self._ccc_defining_byte = None
+
+            # ENTDAA (0x07): enter DAA mode on next Sr+7E/R
+            if self._ccc_code == 0x07:
+                self._is_entdaa = True
+                self.log.debug("I3cBusMonitor: ENTDAA CCC detected")
 
             # ENTHDR0-ENTHDR7 (0x20-0x27): bus enters HDR mode after this frame
             if 0x20 <= self._ccc_code <= 0x27:
@@ -952,6 +1076,7 @@ class I3cBusMonitor:
         """SDA falling while SCL high --> START or Repeated START."""
         is_sr = self._bus_active
         self._bus_active = True
+        self._handoff_check_time = None  # Clear pending handoff check
 
         if is_sr:
             self.log.debug(f"I3cBusMonitor: Repeated START detected, was in {self._phase.name}")
@@ -981,6 +1106,7 @@ class I3cBusMonitor:
         """SDA rising while SCL high --> STOP."""
         self.log.debug(f"I3cBusMonitor: STOP detected")
         self.stats['stops_detected'] += 1
+        self._handoff_check_time = None  # Clear pending handoff check
 
         # M1/M2/M3: Check CCC completion on STOP
         self._check_ccc_completion()
@@ -1050,6 +1176,24 @@ class I3cBusMonitor:
 
             self._prev_scl = scl
             self._prev_sda = sda
+
+            # Handoff tSCO deadline check (generic for write-ACK and ENTDAA)
+            # Fires tSCO (max 12 ns) after the relevant SCL rising edge.
+            # By this time the Target must have released SDA to Hi-Z.
+            if self._handoff_check_time is not None:
+                now_ns = cocotb.utils.get_sim_time('ns')
+                if now_ns >= self._handoff_check_time:
+                    if self._dut_is_driving():
+                        self._record_violation(
+                            self._handoff_check_id,
+                            f"DUT still driving SDA (sda_oe=1) "
+                            f"{self.TSCO_MAX_NS}ns after SCL rising edge "
+                            f"-- Target must release SDA to Hi-Z within "
+                            f"tSCO (max {self.TSCO_MAX_NS}ns, Table 86 "
+                            f"S6.2, {self._handoff_spec_ref}) "
+                            f"addr=0x{self._handoff_addr:02X}"
+                        )
+                    self._handoff_check_time = None
 
     def report(self):
         """Print monitoring summary."""
