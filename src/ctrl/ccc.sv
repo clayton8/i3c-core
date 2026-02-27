@@ -1051,7 +1051,7 @@ module ccc
       //   - NACKed: Wait for bus condition (not addressed, unsupported cmd)
       TxTargetAddrAck: begin
         tx_req_ccc.req_valid = 1'b1;
-        // Spec §5.1.2.3.1: Write-direction ACKs require Target to release SDA on SCL rising edge.
+        // Spec 5.1.2.3.1: Write-direction ACKs require Target to release SDA on SCL rising edge.
         // NACKs and read-direction ACKs use RawBit (no release needed).
         tx_req_ccc.req_type  = (addr_ack && ~target_rnw) ? AckHandoff : RawBit;
         tx_req_ccc.data[7]   = ~addr_ack;  // Send ACK (0) or NACK (1)
