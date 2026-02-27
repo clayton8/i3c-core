@@ -267,7 +267,8 @@ module controller_standby_i3c
 
   // TE0 error signals
   logic te0_enable;
-  logic te0_err;
+  logic te0_err;          // TE0 from target FSM (non-CCC address phase)
+  logic te0_err_combined; // Combined TE0 (CCC + target FSM) from xccc module
 
   // CCC parity error signals (for Protocol Error Report)
   logic te1_err_ccc;      // CCC command parity error (TE1)
@@ -451,6 +452,7 @@ module controller_standby_i3c
 
     .te0_enable_o(te0_enable),
     .te0_err_i   (te0_err),
+    .te0_err_o   (te0_err_combined),
     .te1_err_o   (te1_err_ccc),
     .te2_err_ccc_o(te2_err_ccc),
     .te3_err_o   (te3_err_ccc),
@@ -622,7 +624,8 @@ module controller_standby_i3c
   assign protocol_err_o = te1_err_ccc | te2_err_ccc | te2_err_priv_wr | framing_err_ccc;
 
   // Individual TE error outputs for interrupt reporting
-  assign te0_err_o = te0_err;
+  // te0_err_combined already includes both CCC-originated and target-FSM-originated TE0
+  assign te0_err_o = te0_err_combined;
   assign te1_err_o = te1_err_ccc;
   assign te2_err_o = te2_err_ccc | te2_err_priv_wr;
   assign te3_err_o = te3_err_ccc;
