@@ -37,13 +37,14 @@ module ccc_fsm_tracker (
       8'd10: return "RxData";
       8'd11: return "RxDataTbit";
       8'd12: return "TxData";
-      8'd13: return "TxDataTbit";
-      8'd14: return "WaitForBusCond";
-      8'd15: return "WaitForENTDAAEnd";
-      8'd16: return "NextCCC";
-      8'd17: return "DoneCCC";
-      8'd18: return "HandleTargetENTDAA";
-      8'd19: return "HandleVirtualTargetENTDAA";
+      8'd13: return "TxDataTbitCont";
+      8'd14: return "TxDataTbitEnd";
+      8'd15: return "WaitForBusCond";
+      8'd16: return "WaitForENTDAAEnd";
+      8'd17: return "NextCCC";
+      8'd18: return "DoneCCC";
+      8'd19: return "HandleTargetENTDAA";
+      8'd20: return "HandleVirtualTargetENTDAA";
       default: begin
         string name;
         $sformat(name, "UNKNOWN(%0d)", s);
