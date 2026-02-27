@@ -102,9 +102,10 @@ module ccc
     // Target Error Signals 
     // =========================================================================
     output logic te0_enable_o,
-    input  logic te0_err_i,
-    output logic te1_err_o,      // CCC command parity error (TE1)
-    output logic te2_err_ccc_o,  // CCC data parity error (TE2)
+    input  logic te0_err_i,       // TE0 from target FSM (non-CCC address phase)
+    output logic te0_err_o,       // Combined TE0 error (CCC + target FSM) for interrupt reporting
+    output logic te1_err_o,       // CCC command parity error (TE1)
+    output logic te2_err_ccc_o,   // CCC data parity error (TE2)
     output logic te3_err_o,      // ENTDAA PID mismatch (TE3)
     output logic te4_err_o,      // ENTDAA BCR/DCR mismatch (TE4)
     output logic te5_err_o,      // Broadcast/Direct DA mismatch (TE5)
@@ -778,6 +779,7 @@ module ccc
 
   // Protocol Error outputs for interrupt reporting
   // These pass through the error pulses (already gated by detection enables in FSM)
+  assign te0_err_o = te0_err;
   assign te1_err_o = te1_err;
   assign te2_err_ccc_o = te2_err;
   assign te3_err_o = te3_err;
