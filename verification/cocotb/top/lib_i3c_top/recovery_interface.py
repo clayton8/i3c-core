@@ -94,8 +94,7 @@ class RecoveryInterface:
         if stop:
             raise RecoveryException
 
-        # Compute reference PEC checksum
-        # FIXME: Supposedly I3C address should be included in PEC calculation as well
+        # Compute reference PEC checksum (CRC-8 over LEN+DATA, address excluded per design)
         pec_calc = int(self.pec_calc.checksum(bytes(len_bytes + data)))
 
         # Return the data and received PEC validity
@@ -124,7 +123,7 @@ class RecoveryInterface:
             if force_pec_error:
                 pec = random.randint(0, 255)
             else:
-                # FIXME: Supposedly I3C address should be included in PEC calculation as well
+                # CRC-8 over CMD+LEN+DATA, address excluded per design
                 pec = int(self.pec_calc.checksum(bytes(xfer)))
             xfer.append(pec)
 
@@ -144,7 +143,7 @@ class RecoveryInterface:
             if force_pec_error:
                 pec = random.randint(0, 255)
             else:
-                # FIXME: Supposedly I3C address should be included in PEC calculation as well
+                # CRC-8 over CMD only, address excluded per design
                 pec = int(self.pec_calc.checksum(bytes(xfer)))
             xfer.append(pec)
 

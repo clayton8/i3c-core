@@ -142,6 +142,11 @@ class I3cBusMonitor:
         self._handoff_check_id = "WRITE_ACK_HANDOFF"  # violation tag
         self._handoff_spec_ref = "S5.1.2.3.1 step 2"  # spec citation
 
+        # --- Check 6: IBI ACK takeover (S5.1.2.3.2) ---
+        # After IBI ACK, Target must drive SDA Low in PP within tSCO
+        self._ibi_takeover_check_time = None  # sim time (ns) to fire check
+        self._ibi_takeover_addr = 0            # address for violation message
+
         # --- ENTDAA (S5.1.4.2) ---
         self._entdaa_bit_count = 0
 
@@ -774,11 +779,27 @@ class I3cBusMonitor:
 
     def _on_ibi_ack_rise(self, bus_sda):
         """
-        IBI ACK phase on SCL rising.
-        Controller ACKs/NACKs the IBI request.
-        ACK/NACK is driven by Controller in OD.
+        Check 4b: IBI ACK/NACK bit -- always Open Drain (S5.1.6.2).
+        Controller drives ACK low in OD; NACK = passive (not driving).
+
+        Check 6 scheduling: If ACKed (SDA=0), schedule a tSCO handoff check
+        for the Target→PP transition to MDB (S5.1.2.3.2).
         """
-        pass
+        # OD mode check: DUT should not be driving PP during IBI ACK/NACK
+        if self._dut_is_driving() and self._dut_is_pp():
+            self._record_violation(
+                "IBI_ACK_OD",
+                f"DUT using PP during IBI ACK/NACK (must be OD) (S5.1.6.2)"
+            )
+
+        # Schedule IBI-ACK takeover check: if ACKed, Target must drive
+        # SDA Low in PP within tSCO to send MDB (S5.1.2.3.2 step 2)
+        acked = (bus_sda == 0)
+        if acked:
+            self._ibi_takeover_check_time = (
+                cocotb.utils.get_sim_time('ns') + self.TSCO_MAX_NS
+            )
+            self._ibi_takeover_addr = self._addr_accum
 
     def _on_ibi_ack_fall(self, bus_sda):
         """
@@ -1044,11 +1065,13 @@ class I3cBusMonitor:
             return  # Signal access failure — skip check
 
     def _check_addr_ccc_csr(self, ccc):
-        """M2: After address CCC, verify DUT address CSRs match expected state."""
-        # Address CSR checking is best done at the test level since the monitor
-        # doesn't have full context of what addresses should be assigned.
-        # The monitor tracks the CCC and provides the data for test-level checks.
-        # For now, log the address CCC completion for debug visibility.
+        """M2: Log address CCC completion for debug visibility.
+
+        NOTE: Address CSR verification is intentionally deferred to the test
+        level. The monitor lacks context about expected address assignments
+        (e.g., which addresses were requested via SETDASA/SETNEWDA). Tests
+        should read DAT entries directly to verify CSR consistency.
+        """
         if ccc == 0x06:  # RSTDAA
             self.log.debug("I3cBusMonitor: RSTDAA completed")
         elif ccc == 0x29:  # SETAASA
@@ -1077,6 +1100,7 @@ class I3cBusMonitor:
         is_sr = self._bus_active
         self._bus_active = True
         self._handoff_check_time = None  # Clear pending handoff check
+        self._ibi_takeover_check_time = None  # Clear pending IBI takeover check
 
         if is_sr:
             self.log.debug(f"I3cBusMonitor: Repeated START detected, was in {self._phase.name}")
@@ -1107,6 +1131,7 @@ class I3cBusMonitor:
         self.log.debug(f"I3cBusMonitor: STOP detected")
         self.stats['stops_detected'] += 1
         self._handoff_check_time = None  # Clear pending handoff check
+        self._ibi_takeover_check_time = None  # Clear pending IBI takeover check
 
         # M1/M2/M3: Check CCC completion on STOP
         self._check_ccc_completion()
@@ -1194,6 +1219,23 @@ class I3cBusMonitor:
                             f"addr=0x{self._handoff_addr:02X}"
                         )
                     self._handoff_check_time = None
+
+            # IBI ACK takeover check (S5.1.2.3.2 step 2)
+            # After IBI ACK, Target must drive SDA Low in PP within tSCO.
+            if self._ibi_takeover_check_time is not None:
+                now_ns = cocotb.utils.get_sim_time('ns')
+                if now_ns >= self._ibi_takeover_check_time:
+                    if not (self._dut_is_driving() and self._dut_is_pp()):
+                        self._record_violation(
+                            "IBI_ACK_HANDOFF",
+                            f"DUT not driving SDA in PP "
+                            f"{self.TSCO_MAX_NS}ns after ACK rising edge "
+                            f"-- Target must take over SDA in Push-Pull "
+                            f"within tSCO (max {self.TSCO_MAX_NS}ns, "
+                            f"Table 87 S6.2, S5.1.2.3.2) "
+                            f"addr=0x{self._ibi_takeover_addr:02X}"
+                        )
+                    self._ibi_takeover_check_time = None
 
     def report(self):
         """Print monitoring summary."""

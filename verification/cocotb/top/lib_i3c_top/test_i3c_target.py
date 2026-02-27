@@ -343,7 +343,7 @@ async def test_i3c_target_read_empty(dut):
 async def test_i3c_target_read_to_multiple_targets(dut):
 
     # Setup
-    i3c_controller, i3c_target, tb = await test_setup(dut, fclk=100, virtual_static_addr=None)
+    i3c_controller, i3c_target, tb = await test_setup(dut, virtual_static_addr=None)
 
     # Generates a randomized transfer and puts it into the TTI TX queue
     async def make_transfer(min_len=1, max_len=16):
@@ -1323,15 +1323,12 @@ async def test_priv_write_sr_mid_byte(dut):
 
 # =============================================================================
 # Scenario C: STOP during T-bit (RxPWriteTbit)
-# BLOCKED BY DESIGN BUG: see verification/bugs/stop_during_tbit.md
 # =============================================================================
 
     await tb.teardown()
 @cocotb.test()
 async def test_priv_write_stop_during_tbit(dut):
     """
-    BLOCKED BY DESIGN BUG: see verification/bugs/stop_during_tbit.md
-
     8-byte private write. After 5 complete bytes+T-bits, send 8 data bits of
     byte 6 (no T-bit), then STOP fires while FSM is in RxPWriteTbit.
 
@@ -1339,10 +1336,6 @@ async def test_priv_write_stop_during_tbit(dut):
     T-bit parity. A STOP during the T-bit means parity was never checked, so
     the byte shall NOT be pushed to the RX queue. An RX descriptor shall be
     generated for the 5 previously completed bytes.
-
-    RTL bug: rx_fifo_wvalid_raw fires on any exit from RxPWriteTbit (including
-    STOP override), pushing the unchecked byte. rx_last_byte_o does not fire
-    because state_q != RxPWriteData, so no descriptor is generated.
     """
     i3c_controller, _, tb = await test_setup(dut)
     await _enable_rx_interrupt(tb)
@@ -1412,23 +1405,17 @@ async def test_priv_write_stop_during_tbit(dut):
 
 # =============================================================================
 # Scenario D: Sr during T-bit (RxPWriteTbit)
-# BLOCKED BY DESIGN BUG: see verification/bugs/sr_during_tbit.md
 # =============================================================================
 
     await tb.teardown()
 @cocotb.test()
 async def test_priv_write_sr_during_tbit(dut):
     """
-    BLOCKED BY DESIGN BUG: see verification/bugs/sr_during_tbit.md
-
     8-byte private write. After 5 complete bytes+T-bits, send 8 data bits of
     byte 6, then Sr fires while FSM is in RxPWriteTbit.
 
     Per spec (Sec.5.1.2.3.3): Same as Scenario C — byte shall not be pushed
     without T-bit parity check. Descriptor shall be generated for 5 bytes.
-
-    RTL bug: Same as Scenario C — rx_fifo_wvalid_raw fires spuriously,
-    rx_last_byte_o does not fire, no descriptor generated.
     """
     i3c_controller, _, tb = await test_setup(dut)
     await _enable_rx_interrupt(tb)

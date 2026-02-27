@@ -405,7 +405,6 @@ async def test_ibi_refuse_no_retry_on_rstart(dut):
     # DUT re-arbitrates IBI on the fresh START, and the collision byte
     # (0xFC & 0xB5 = 0xB4 ≡ {0x5A, W}) coincidentally matches the DUT's own
     # address, triggering a phantom write and TE2 parity error.
-    # See verification/bugs/rxfbytearb_collision.md.
     await set_ibi_enable(tb, False)
     await Timer(2, "us")  # drain any in-flight IBI NACK+STOP
 
@@ -1140,6 +1139,8 @@ async def test_ibi_accept_no_mdb_stop(dut):
         f"target should report a non-zero error status"
     )
 
+    await tb.teardown()
+
 
 # =============================================================================
 # Test 18: BCR[2]=0 not supported — Sr without reading MDB (Flow 8)
@@ -1188,6 +1189,8 @@ async def test_ibi_accept_no_mdb_sr_ccc(dut):
         f"LAST_IBI_STATUS=0 (success) but MDB was never read — "
         f"target should report a non-zero error status"
     )
+
+    await tb.teardown()
 
 
 # =============================================================================
@@ -1347,14 +1350,9 @@ async def test_ibi_retry_ctr_fw_reset(dut):
 
     await tb.teardown()
 
-@cocotb.test(skip=True)
+@cocotb.test()
 async def test_ibi_multiple_arb_losses(dut):
     """
-    FIXME: IBI_QUEUE_RST only empties the FIFO; it does not reset
-    descriptor_ibi (which stays in WriteMdb with old MDB/data latched).
-    Needs design decision: should IBI_QUEUE_RST also reset descriptor_ibi,
-    or should FW recovery be: reset retry counter → let old IBI succeed?
-
     CP25/CP4/CP10: Force multiple consecutive IBI failures to exhaust the
     retry counter. retry_num=2 allows 3 attempts total (cnt 0,1,2);
     3 NACKs should exhaust retries → IbiFailureRetry(3).
@@ -1473,9 +1471,6 @@ async def test_rxfbytearb_collision_blind_drive(dut):
     and processes the controller's valid byte (addr 0x5A, Write).  Since
     0x5A matches the DUT's own address, the DUT ACKs and accepts the
     private write data.  After Bus Available the DUT retries IBI.
-
-    See verification/bugs/rxfbytearb_collision.md for analysis of the
-    original blind-drive version of this test (TB bug, not RTL bug).
     """
     i3c_controller, _, tb = await test_setup(dut)
     await init_ibi(i3c_controller, tb)
@@ -1521,14 +1516,9 @@ async def test_rxfbytearb_collision_blind_drive(dut):
 
     await tb.teardown()
 
-@cocotb.test(skip=True)
+@cocotb.test()
 async def test_ibi_flush_from_idle_interrupt_flood(dut):
     """
-    FIXME: IBI_QUEUE_RST only empties the FIFO; it does not reset
-    descriptor_ibi (which stays in WriteMdb with old MDB/data latched).
-    Needs design decision: should IBI_QUEUE_RST also reset descriptor_ibi,
-    or should FW recovery be: reset retry counter → let old IBI succeed?
-
     Provoke IbiFailureRetry while the target FSM is in Idle.
 
     i3c_target_fsm.sv:463-469: In Idle, when ibi_pending && !ibi_can_retry,
@@ -1614,17 +1604,15 @@ async def test_ibi_flush_from_idle_interrupt_flood(dut):
     # Phase 3: Assertions — correct spec behavior
     # -----------------------------------------------------------------
     assert status_we_count <= 1, (
-        f"DESIGN BUG: ibi_status_we_o asserted {status_we_count} times in 500 "
+        f"ibi_status_we_o asserted {status_we_count} times in 500 "
         f"cycles (expected ≤ 1).  descriptor_ibi.state_q = {desc_state}. "
         f"Flush from Idle/IbiFailureRetry was ignored or not handled atomically, "
-        f"causing ibi_status_we_o flood. "
-        f"See verification/bugs/ibi_flush_idle_interrupt_flood.md"
+        f"causing ibi_status_we_o flood."
     )
 
     assert desc_state == 0, (
-        f"DESIGN BUG: descriptor_ibi stuck in state {desc_state} (expected "
-        f"Idle=0) after second IbiFailureRetry. "
-        f"See verification/bugs/ibi_flush_idle_interrupt_flood.md"
+        f"descriptor_ibi stuck in state {desc_state} (expected "
+        f"Idle=0) after second IbiFailureRetry."
     )
 
     # -----------------------------------------------------------------
@@ -1646,5 +1634,7 @@ async def test_ibi_flush_from_idle_interrupt_flood(dut):
     await check_ibi_status(tb, 0, "clean IBI after counter reset")
 
     await ClockCycles(tb.clk, 10)
+
+    await tb.teardown()
 
 

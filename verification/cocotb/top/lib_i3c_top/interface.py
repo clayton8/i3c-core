@@ -98,7 +98,5 @@ class I3CTopTestInterface:
             self.te_error_monitor.check()
         if self.te2_integrity_monitor:
             self.te2_integrity_monitor.check()
-        if self.bus_monitor and self.bus_monitor.violations:
-            self.dut._log.warning(
-                f"I3cBusMonitor: {len(self.bus_monitor.violations)} violation(s)"
-            )
+        if self.bus_monitor:
+            self.bus_monitor.check()

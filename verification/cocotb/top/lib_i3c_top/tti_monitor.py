@@ -12,7 +12,7 @@ on violation to fail the test.
 """
 
 import cocotb
-from cocotb.triggers import RisingEdge, FallingEdge, First
+from cocotb.triggers import RisingEdge, First
 
 
 class TtiQueueMonitor:
@@ -39,6 +39,14 @@ class TtiQueueMonitor:
         self._rx_data_write_r = tti.rx_data_queue_write_r
         self._recovery_pending = rec.recovery_pending
 
+        # Resolve clock for re-sampling
+        if hasattr(dut, 'aclk'):
+            self._clk = dut.aclk
+        elif hasattr(dut, 'hclk'):
+            self._clk = dut.hclk
+        else:
+            self._clk = None
+
     async def run(self):
         """Main monitor loop — start with cocotb.start_soon().
 
@@ -53,13 +61,16 @@ class TtiQueueMonitor:
                 RisingEdge(self._rx_data_write_r),
             )
 
+            # Re-sample on the next clock edge to confirm recovery_pending
+            # is truly stable-high (not just de-asserting on this same edge)
+            if self._clk is not None:
+                await RisingEdge(self._clk)
+
             desc_w = int(self._rx_desc_write_r.value)
             data_w = int(self._rx_data_write_r.value)
             rec_pending = int(self._recovery_pending.value)
 
-            # Only fire if rec_pending is not de-asserted at the very same time/edge
-            if rec_pending and not(FallingEdge(self._recovery_pending)):
-                # RI write leaked through to TTI interrupt path
+            if rec_pending and (desc_w or data_w):
                 sig = []
                 if desc_w:
                     sig.append("rx_desc_queue_write_r")

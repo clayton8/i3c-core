@@ -2111,8 +2111,8 @@ async def test_ccc_setdasa_padding_err(dut):
     # Framing error counter should have incremented exactly once
     framing_cnt = await tb.read_csr_field(framing_cnt_addr, framing_cnt_field)
     assert framing_cnt == 1, (
-        f"DESIGN BUG: Framing error count should be exactly 1 after one event, "
-        f"got {framing_cnt}. See verification/bugs/te_counter_level_sensitive.md"
+        f"Framing error count should be exactly 1 after one event, "
+        f"got {framing_cnt}"
     )
 
     # Clear status
@@ -2204,8 +2204,8 @@ async def test_ccc_te2_parity(dut):
 
     te2_cnt = await tb.read_csr_field(te2_cnt_addr, te2_cnt_field)
     assert te2_cnt == 1, (
-        f"DESIGN BUG: TE2 error count should be exactly 1 after one event, "
-        f"got {te2_cnt}. See verification/bugs/te_counter_level_sensitive.md"
+        f"TE2 error count should be exactly 1 after one event, "
+        f"got {te2_cnt}"
     )
 
     # Clear status
@@ -2528,24 +2528,16 @@ async def test_ccc_entdaa_arb_lost(dut):
 
 
 # =============================================================================
-# GETSTATUS Sr Abort: Protocol Error cleared prematurely
-# BLOCKED BY DESIGN BUG: see verification/bugs/getstatus_sr_abort.md
+# GETSTATUS Sr Abort: Protocol Error must not be cleared prematurely
 # =============================================================================
 
     await tb.teardown()
 @cocotb.test()
 async def test_ccc_getstatus_sr_abort_clears_protocol_err(dut):
     """
-    BLOCKED BY DESIGN BUG: see verification/bugs/getstatus_sr_abort.md
-
     Per spec (Sec.5.1.9.2.1): A Target shall only clear its Protocol Error status
     after a successful GETSTATUS where the Controller reads ALL bytes. If the
     Controller aborts GETSTATUS after byte 0, the error must NOT be cleared.
-
-    RTL bug (ccc.sv:1153): set_tx_data_complete fires on Sr abort in TxDataTbit,
-    setting tx_data_complete even though not all bytes were sent. If STOP follows
-    before TxTargetAddrAck clears it, get_status_done_o fires (ccc.sv:1271-1272),
-    and controller_standby.sv:286 clears err_o prematurely.
     """
     log = logging.getLogger("test_ccc_getstatus_sr_abort")
 
@@ -2618,23 +2610,15 @@ async def test_ccc_getstatus_sr_abort_clears_protocol_err(dut):
 
 
 # =============================================================================
-# SETMWL Sr Abort: CCC FSM misinterprets post-Sr data
-# BLOCKED BY DESIGN BUG: see verification/bugs/setmwl_sr_abort.md
+# SETMWL Sr Abort: Partial data must not corrupt CSRs
 # =============================================================================
 
     await tb.teardown()
 @cocotb.test()
 async def test_ccc_setmwl_sr_abort_during_data(dut):
     """
-    BLOCKED BY DESIGN BUG: see verification/bugs/setmwl_sr_abort.md
-
     Per spec (Sec.5.1.9.2.1): If a Controller aborts a SET CCC mid-data, the Target
     shall handle the termination gracefully. Partial data should NOT corrupt CSRs.
-
-    RTL bug (ccc.sv:1096-1101): The CCC FSM has no bus_rstart_det_i handling in
-    RxData or RxDataTbit states. When Sr fires during RxData, the request drops
-    for 1 cycle then re-asserts, causing the bus_rx_flow to read post-Sr address
-    bytes as CCC data. This can write garbled values to MWL/MRL CSRs.
     """
     log = logging.getLogger("test_ccc_setmwl_sr_abort")
 

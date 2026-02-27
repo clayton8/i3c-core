@@ -930,6 +930,8 @@ async def test_axi_filtering(dut):
         await tb.write_csr(addr, int2dword(wdata), 4, awid=awid)
         _ = await tb.read_csr(addr, arid=arid)
 
+    await tb.teardown()
+
 
 async def init_i3c_recovery(dut, timeout=50):
     fbus = 12.5
@@ -1023,6 +1025,8 @@ async def test_ocp_csr_access(dut, enable_bypass):
         await tb.read_csr(tb.reg_map.I3C_EC.SOCMGMTIF.REC_INTF_REG_W1C_ACCESS.base_addr)
     )
     assert rd_data == 0, "W1C bypass register should not store written values"
+
+    await tb.teardown()
 
 
 @cocotb.test()
