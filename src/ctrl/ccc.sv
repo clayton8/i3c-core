@@ -1051,7 +1051,9 @@ module ccc
       //   - NACKed: Wait for bus condition (not addressed, unsupported cmd)
       TxTargetAddrAck: begin
         tx_req_ccc.req_valid = 1'b1;
-        tx_req_ccc.req_type  = RawBit;
+        // Spec §5.1.2.3.1: Write-direction ACKs require Target to release SDA on SCL rising edge.
+        // NACKs and read-direction ACKs use RawBit (no release needed).
+        tx_req_ccc.req_type  = (addr_ack && ~target_rnw) ? AckHandoff : RawBit;
         tx_req_ccc.data[7]   = ~addr_ack;  // Send ACK (0) or NACK (1)
 
         if (bus_tx_rsp_i.done) begin
@@ -1081,8 +1083,6 @@ module ccc
             state_d = WaitForBusCond;
           end else begin
             // ACKed SET command (including SETDASA): Target receives data
-            // We must overwrite the tx_request used above to handle the write handoff properly
-            tx_req_ccc.req_type = AckHandoff;
             state_d = RxData;
           end
         end
