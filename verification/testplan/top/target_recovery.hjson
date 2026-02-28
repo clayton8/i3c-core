@@ -498,5 +498,221 @@
       tests: ["parity_error_isolation"]
       tags: ["top"]
     }
+    {
+      name: recovery_readonly_write_error
+      desc:
+        '''
+        Coverage: recovery_handler readonly_err=1, unsupported_err=0.
+        Sends WRITE commands to read-only registers (PROT_CAP, DEVICE_ID,
+        DEVICE_STATUS, HW_STATUS) and verifies PROT_ERROR=READONLY.
+        Also tests readonly_err_det_en toggle for suppression.
+        '''
+      tests: ["recovery_readonly_write_error"]
+      tags: ["top"]
+    }
+    {
+      name: recovery_read_write_phase_parity
+      desc:
+        '''
+        Coverage: RxLenH parity error on write-phase PEC.
+        Sends a recovery READ command with a T-bit parity error on the PEC byte
+        of the write phase. Recovery receiver detects error in RxLenH and
+        transitions to Error.
+        '''
+      tests: ["recovery_read_write_phase_parity"]
+      tags: ["top"]
+    }
+    {
+      name: recovery_write_pec_tbit_error
+      desc:
+        '''
+        Coverage: RxPec parity error on descriptor.
+        Sends a recovery WRITE command where the PEC byte has a T-bit parity
+        error. Verifies the error is detected in RxPec state.
+        '''
+      tests: ["recovery_write_pec_tbit_error"]
+      tags: ["top"]
+    }
+    {
+      name: recovery_all_det_en_toggle
+      desc:
+        '''
+        Coverage: Toggle all *_det_en_i signals.
+        For each error detection enable bit in TARGET_ERR_CTRL: disable det_en
+        and trigger error (verify not flagged), enable det_en and trigger error
+        (verify flagged).
+        '''
+      tests: ["recovery_all_det_en_toggle"]
+      tags: ["top"]
+    }
+    {
+      name: recovery_read_abort_at_len
+      desc:
+        '''
+        Coverage: TxLenL/TxLenH bus_rstart_i -> Done.
+        Aborts a recovery READ at different points in the response length
+        transmission using command_read_abort.
+        '''
+      tests: ["recovery_read_abort_at_len"]
+      tags: ["top"]
+    }
+    {
+      name: recovery_premature_sr_in_header
+      desc:
+        '''
+        Coverage: Premature stop in RxCmd/RxLenL via bus_rstart_i.
+        Sends partial recovery command headers with Sr at unexpected points
+        during RxCmd and RxLenL states.
+        '''
+      tests: ["recovery_premature_sr_in_header"]
+      tags: ["top"]
+    }
+    {
+      name: recovery_queue_resets
+      desc:
+        '''
+        Coverage: Toggle reg_rst_i, reg_rst_we_o, reg_rst_data_o on all queues.
+        Exercises all RESET_CONTROL queue reset bits to toggle the reg_rst
+        signals on every queue (IBI, RX desc, RX data, TX data).
+        '''
+      tests: ["recovery_queue_resets"]
+      tags: ["top"]
+    }
+    {
+      name: recovery_hdr_mode_abort
+      desc:
+        '''
+        Coverage: in_hdr_mode_i override -> Error.
+        Triggers TE0 error during an active recovery transaction to force
+        in_hdr_mode_i=1 while the recovery FSM is in an active state.
+        Recovers via HDR exit.
+        '''
+      tests: ["recovery_hdr_mode_abort"]
+      tags: ["top"]
+    }
+    {
+      name: recovery_length_det_en_toggle
+      desc:
+        '''
+        Coverage: length error detection enable combinations.
+        Tests length_err_det_en=0 (error suppressed), length_err_det_en=1
+        with underrun (error detected), and correct length (no error).
+        '''
+      tests: ["recovery_length_det_en_toggle"]
+      tags: ["top"]
+    }
+    {
+      name: recovery_queue_thresholds
+      desc:
+        '''
+        Coverage: Toggle threshold input signals on all queues.
+        Writes non-default values to QUEUE_THLD_CTRL and DATA_BUFFER_THLD_CTRL
+        to toggle start_thrld_i and ready_thrld_i on all queues.
+        '''
+      tests: ["recovery_queue_thresholds"]
+      tags: ["top"]
+    }
+    {
+      name: recovery_write_premature_stop_in_data
+      desc:
+        '''
+        Coverage: Premature stop in RxData and RxPec with length underrun.
+        Sends a recovery WRITE with premature STOP during data or PEC phase,
+        verifying correct error handling.
+        '''
+      tests: ["recovery_write_premature_stop_in_data"]
+      tags: ["top"]
+    }
+    {
+      name: recovery_indirect_fifo_overflow
+      desc:
+        '''
+        Coverage: Toggle indirect_fifo_overflow_err_det_en_i and
+        rx_fifo_overflow_err_det_en_i.
+        Writes more data to INDIRECT_FIFO_DATA than the FIFO can hold to
+        trigger overflow, with det_en toggled.
+        '''
+      tests: ["recovery_indirect_fifo_overflow"]
+      tags: ["top"]
+    }
+    {
+      name: recovery_ibi_queue_full
+      desc:
+        '''
+        Coverage: Toggle ibi_queue.full_o.
+        Fills the IBI queue (depth=64) by writing MDB-only IBI descriptors
+        without triggering IBI acceptance. Verifies queue fills and device
+        remains functional after reset.
+        '''
+      tests: ["recovery_ibi_queue_full"]
+      tags: ["top"]
+    }
+    {
+      name: recovery_bypass_fifo_done
+      desc:
+        '''
+        Coverage: Bypass path to Done in ExecFifoWrite.
+        Enables bypass mode, writes data to INDIRECT_FIFO via recovery
+        interface, then asserts REC_PAYLOAD_DONE to trigger the bypass
+        exit path from ExecFifoWrite.
+        '''
+      tests: ["recovery_bypass_fifo_done"]
+      tags: ["top"]
+    }
+    {
+      name: recovery_hdr_abort_per_state
+      desc:
+        '''
+        Coverage: in_hdr_mode_i Error from ExecCsrWrite, TxData, TxLenH,
+        TxLenL, TxPec.
+        Uses TE0 injection to force the recovery FSM into Error from specific
+        Tx states during READ responses.
+        '''
+      tests: ["recovery_hdr_abort_per_state"]
+      tags: ["top"]
+    }
+    {
+      name: recovery_read_abort_txlenl
+      desc:
+        '''
+        Coverage: TxLenL bus_rstart_i -> Done.
+        Sends Sr immediately after the read address ACK, before the target
+        finishes transmitting the LEN_L byte.
+        '''
+      tests: ["recovery_read_abort_txlenl"]
+      tags: ["top"]
+    }
+    {
+      name: recovery_bypass_fifo_race
+      desc:
+        '''
+        Coverage: Bypass ExecFifoWrite -> Done.
+        Enables bypass mode, sends a large INDIRECT_FIFO_DATA write via I3C,
+        then races to set REC_PAYLOAD_DONE via CSR before the normal dcnt
+        path completes.
+        '''
+      tests: ["recovery_bypass_fifo_race"]
+      tags: ["top"]
+    }
+    {
+      name: recovery_readonly_write_irq
+      desc:
+        '''
+        Verifies that writing to a read-only recovery register triggers the
+        RI_READONLY_ERR interrupt output (irq_o toggle 0->1->0).
+        '''
+      tests: ["recovery_readonly_write_irq"]
+      tags: ["top"]
+    }
+    {
+      name: recovery_unsupported_cmd_irq
+      desc:
+        '''
+        Verifies that sending an unsupported command code triggers the
+        RI_UNSUPPORTED_ERR interrupt output (irq_o toggle 0->1->0).
+        '''
+      tests: ["recovery_unsupported_cmd_irq"]
+      tags: ["top"]
+    }
   ]
 }

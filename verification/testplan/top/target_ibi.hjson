@@ -292,5 +292,51 @@
       tests: ["ibi_multi_queue_mixed_abort"]
       tags: ["top"]
     }
+    {
+      name: ibi_rxfbytearb_wins_arbitration
+      desc:
+        '''
+        Coverage: i3c_target_fsm.sv RxFByteArb -> IbiReadAck.
+        DUT has low address (0x10), wins IBI arbitration during a
+        controller-initiated Start. FSM enters RxFByteArb and drives the
+        IBI address, winning arbitration.
+        '''
+      tests: ["ibi_rxfbytearb_wins_arbitration"]
+      tags: ["top"]
+    }
+    {
+      name: ibi_inhibit_retry_release
+      desc:
+        '''
+        Coverage: i3c_target_fsm.sv InhibitRetry -> InhibitNone transition.
+        With retry_num=0, a single NACK exhausts retries. FW resets the retry
+        counter to release inhibit. DUT retries and succeeds.
+        '''
+      tests: ["ibi_inhibit_retry_release"]
+      tags: ["top"]
+    }
+    {
+      name: ibi_rxfbytearb_retry_exhausted
+      desc:
+        '''
+        Coverage: i3c_target_fsm.sv RxFByteArb -> RxFByte.
+        Start with retry_num=7, NACK the DUT, then change retry_num=0 via CSR.
+        Now ibi_can_retry is false, so RxFByteArb falls through to RxFByte.
+        '''
+      tests: ["ibi_rxfbytearb_retry_exhausted"]
+      tags: ["top"]
+    }
+    {
+      name: ibi_arb_lost_in_drive_addr
+      desc:
+        '''
+        Coverage: i3c_target_fsm.sv IbiDriveAddr -> WaitRestart.
+        DUT has a high address (0x60). It enters IbiDriveAddr via
+        bus_available. A background task forces arbitration loss by driving SDA
+        low, causing the FSM to transition to WaitRestart.
+        '''
+      tests: ["ibi_arb_lost_in_drive_addr"]
+      tags: ["top"]
+    }
   ]
 }

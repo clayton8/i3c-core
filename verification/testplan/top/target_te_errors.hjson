@@ -89,5 +89,52 @@
       tests: ["te_counter_per_event"]
       tags: ["top"]
     }
+    {
+      name: te0_during_ccc_repeated_start
+      desc:
+        '''
+        Coverage: i3c_target_fsm.sv in_hdr_mode_i override from CheckSByte.
+        Trigger TE0 from RxSByteRepeated state via S+7E/W -> ACK -> Sr -> 7E/R.
+        FSM enters CheckSByte then transitions to InHDRMode via in_hdr_mode_i
+        override. Recovers via HDR timeout.
+        '''
+      tests: ["te0_during_ccc_repeated_start"]
+      tags: ["top"]
+    }
+    {
+      name: ri_interrupt_force_all
+      desc:
+        '''
+        Tests interrupt FORCE mechanism for all RI error interrupt instances.
+        For each RI error type (readonly, unsupported, rx_fifo_overflow,
+        indirect_fifo_overflow): disable interrupt and force (verify no effect),
+        enable and force (verify status set and irq_o high), clear and verify
+        irq_o low.
+        '''
+      tests: ["ri_interrupt_force_all"]
+      tags: ["top"]
+    }
+    {
+      name: ri_rx_fifo_overflow_irq
+      desc:
+        '''
+        Verifies that RX FIFO overflow triggers the RI_RX_FIFO_OVERFLOW_ERR
+        interrupt output (irq_o toggle 0->1->0) when both DET_EN and INTR_EN
+        are enabled.
+        '''
+      tests: ["ri_rx_fifo_overflow_irq"]
+      tags: ["top"]
+    }
+    {
+      name: ri_indirect_fifo_overflow_irq
+      desc:
+        '''
+        Verifies that INDIRECT FIFO overflow triggers the
+        RI_INDIRECT_FIFO_OVERFLOW_ERR interrupt output (irq_o toggle 0->1->0)
+        when both DET_EN and INTR_EN are enabled.
+        '''
+      tests: ["ri_indirect_fifo_overflow_irq"]
+      tags: ["top"]
+    }
   ]
 }
