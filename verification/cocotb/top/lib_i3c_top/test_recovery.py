@@ -7383,8 +7383,13 @@ async def test_recovery_ibi_queue_full(dut):
 
     # Do NOT enable IBI acceptance on the controller -- we want the queue
     # to fill without any IBIs being dequeued.
-    # Do NOT enable IBI on the target TTI (IBI_EN=0) so the target FSM
-    # does not try to send IBIs on the bus.
+    # Explicitly disable IBI_EN so the target FSM does not try to send
+    # IBIs on the bus (IBI_EN resets to 1).
+    await tb.write_csr_field(
+        tb.reg_map.I3C_EC.TTI.CONTROL.base_addr,
+        tb.reg_map.I3C_EC.TTI.CONTROL.IBI_EN,
+        0,
+    )
 
     # Read IBI queue depth
     ibi_depth = dword2int(
@@ -7677,7 +7682,11 @@ async def test_recovery_hdr_abort_per_state(dut):
         for i in range(min(3, length)):
             byte, _ = await controller.recv_byte_t_bit(stop=False)
 
-        # Now inject TE0: Sr + 0x7E/R while still in TxData
+        # End the read via T-bit to regain SDA control, then inject TE0.
+        # The T-bit abort generates Sr so the controller owns SDA.
+        byte, _ = await controller.recv_byte_t_bit(stop=True)
+
+        # Now inject TE0: Sr + 0x7E/R (recovery FSM still in a Tx state)
         await controller.send_start()
         await controller.write_addr_header(0x7E, read=True)
 
@@ -7730,7 +7739,11 @@ async def test_recovery_hdr_abort_per_state(dut):
         for i in range(length):
             byte, _ = await controller.recv_byte_t_bit(stop=False)
 
-        # Now FSM should be in TxPec. Inject TE0.
+        # End the read via T-bit to regain SDA control, then inject TE0.
+        # The DUT is now in TxPec. The T-bit abort generates Sr.
+        byte, _ = await controller.recv_byte_t_bit(stop=True)
+
+        # Now inject TE0: Sr + 0x7E/R
         await controller.send_start()
         await controller.write_addr_header(0x7E, read=True)
 
@@ -7795,10 +7808,11 @@ async def test_recovery_read_abort_txlenl(dut):
     ))
 
     # =========================================================================
-    # Attempt 1: Sr immediately after read ACK (zero delay)
-    # The recovery FSM transitions TxDesc -> TxLenL when tx_desc_ready_i
-    # fires. If we send Sr before that transition, we hit TxDesc -> Error.
-    # If after, we hit TxLenL -> Done. Try with increasing delays.
+    # Abort read at different points using T-bit mechanism.
+    # The T-bit abort on the first byte (LEN_L) generates Sr, which the
+    # recovery FSM sees as bus_rstart_i.  Varying clock-cycle delays after
+    # the ACK races with tx_desc_ready_i and may hit TxDesc, TxLenL, or
+    # TxLenH -> Done.
     # =========================================================================
     for delay_cycles in [0, 2, 5, 10, 20]:
         dut._log.info(f"Attempt with {delay_cycles} cycle delay after ACK")
@@ -7818,19 +7832,17 @@ async def test_recovery_read_abort_txlenl(dut):
         ack = await controller.write_addr_header(VIRT_DYNAMIC_ADDR, read=True)
 
         if ack:
-            if delay_cycles == 0:
-                # Strategy A: Immediately send Sr without reading any bytes.
-                # Pull SCL low first to freeze target, then Sr.
-                await controller.send_start()
-            else:
-                # Strategy B: Read partial byte, then abort.
-                # Use recv_byte_t_bit(stop=True) on the FIRST byte (LEN_L).
-                # The T-bit abort generates Sr during/after LEN_L transmission.
-                # This races with tx_data_ready_i -- may hit TxLenL or TxLenH.
-                try:
-                    _, _ = await controller.recv_byte_t_bit(stop=True)
-                except Exception:
-                    pass
+            # Wait the requested number of clock cycles after ACK
+            if delay_cycles > 0:
+                await ClockCycles(tb.clk, delay_cycles)
+
+            # Abort via T-bit on the first byte (LEN_L).
+            # recv_byte_t_bit(stop=True) reads the full byte then generates
+            # Sr through the T-bit end-of-data mechanism.
+            try:
+                _, _ = await controller.recv_byte_t_bit(stop=True)
+            except Exception:
+                pass
 
         # Clean up with STOP
         await controller.send_stop(pull_scl_low=False)
