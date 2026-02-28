@@ -354,6 +354,7 @@ module i3c
   logic                               tti_ibi_rvalid;
   logic                               tti_ibi_rready;
   logic [        TtiIbiDataWidth-1:0] tti_ibi_rdata;
+  logic                               csr_tti_ibi_reg_rst;
 
   // FUTUREFIX: Not needed for v1p5: i3c_fsm_en_i and i3c_fsm_idle_o are used exclusively by the
   // active controller path (flow_active.sv). They were moved from top-level I/O to internal
@@ -1005,7 +1006,6 @@ module i3c
   logic                          csr_tti_ibi_ack;
   logic [      CsrDataWidth-1:0] csr_tti_ibi_data;
   logic [   TtiIbiThldWidth-1:0] csr_tti_ibi_ready_thld;
-  logic                          csr_tti_ibi_reg_rst;
   logic                          csr_tti_ibi_reg_rst_we;
   logic                          csr_tti_ibi_reg_rst_data;
 
