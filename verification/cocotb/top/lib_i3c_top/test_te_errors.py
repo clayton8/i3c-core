@@ -1098,3 +1098,91 @@ async def test_te_counter_per_event(dut):
     tb.te_error_monitor.check()
 
     await tb.teardown()
+
+
+# =============================================================================
+# Coverage: CheckSByte -> InHDRMode via in_hdr_mode_i override (line 834)
+# Covers FSM override from CheckSByte state
+# =============================================================================
+
+@cocotb.test()
+async def test_te0_during_ccc_repeated_start(dut):
+    """
+    Coverage: i3c_target_fsm.sv line 834 (in_hdr_mode_i override from CheckSByte).
+
+    Trigger a TE0 error from the RxSByteRepeated state:
+    1. S + 7E/W (broadcast) -> target ACKs -> FSM enters RxSByte
+    2. Repeated Start -> FSM enters RxSByteRepeated
+    3. 7E/R (TE0-triggering address) -> bus_addr_valid fires, te0_err_o fires,
+       state_d = CheckSByte
+    4. Next cycle: FSM in CheckSByte, in_hdr_mode_i=1 -> override at line 834
+       fires -> state_d = InHDRMode
+
+    This exercises the only TESTABLE path for the in_hdr_mode_i override
+    from a state other than CheckFByte or DoCCC.
+    """
+    (STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR) = \
+        random.sample(VALID_I3C_ADDRESSES, 4)
+
+    i3c_controller, i3c_target, tb = await test_setup(
+        dut, STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR,
+        hdr_timeout_en=True, hdr_timeout_cycles=TEST_HDR_TIMEOUT_CYCLES)
+    tb.te_error_monitor.expect_error(0)
+
+    # Enable TE0 interrupt
+    te0_en_field = tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_ENABLE.TE0_ERR_EN
+    await tb.write_csr_field(
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_ENABLE.base_addr, te0_en_field, 1)
+    # Clear stale status and counter
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.base_addr, int2dword(0xFFFFFFFF), 4)
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_CNT_TE0.base_addr, int2dword(0), 4)
+
+    # Pause VIP target so it doesn't interfere
+    i3c_target.monitor_enable.clear()
+    await i3c_target.monitor_idle.wait()
+    i3c_target.sda_o.value = 1
+    i3c_target.scl_o.value = 1
+
+    # Raw protocol: S + 7E/W -> ACK -> Sr -> 7E/R (TE0 trigger)
+    # This puts the FSM through: RxFByte -> CheckFByte -> TxAckFByte ->
+    # RxSByte -> (Sr) RxSByteRepeated -> CheckSByte -> InHDRMode
+    await i3c_controller.take_bus_control()
+    await i3c_controller.send_start()
+    # Send 7E/W (broadcast address, write) -- target ACKs
+    await i3c_controller.write_addr_header(0x7E)
+    # Send Repeated Start
+    await i3c_controller.send_start()
+    # Send 7E/R (broadcast address, read) -- this is the TE0 trigger
+    await i3c_controller.write_addr_header(0x7E, read=True)
+
+    # Target is now in HDR error mode
+    await ClockCycles(tb.clk, 10)
+    assert_fsm_in_hdr_mode(dut)
+
+    # Recover via HDR timeout
+    await hold_bus_high(i3c_controller, i3c_target, tb, TEST_HDR_TIMEOUT_CYCLES + 50)
+    assert_fsm_idle(dut)
+
+    await i3c_controller.send_stop()
+    i3c_controller.give_bus_control()
+
+    # Re-enable VIP target
+    i3c_target.monitor_enable.set()
+
+    # Verify TE0 error registers
+    te0_cnt = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.TTI.TARGET_ERR_CNT_TE0.base_addr, 4)) & 0xFF
+    te0_stat = await tb.read_csr_field(
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.base_addr,
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.TE0_ERR_STAT)
+    dut._log.info(f"TE0 counter={te0_cnt}, status={te0_stat}")
+    assert te0_cnt >= 1, f"Expected TE0 counter >= 1, got {te0_cnt}"
+    assert te0_stat == 1, f"Expected TE0_ERR_STAT=1, got {te0_stat}"
+
+    await verify_target_responsive(i3c_controller, DYNAMIC_ADDR)
+    tb.te_error_monitor.check()
+
+    await tb.teardown()
+
