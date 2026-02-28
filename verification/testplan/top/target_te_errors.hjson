@@ -89,5 +89,30 @@
       tests: ["te_counter_per_event"]
       tags: ["top"]
     }
+    {
+      name: te0_during_ccc_repeated_start
+      desc:
+        '''
+        Coverage: i3c_target_fsm.sv line 834 (in_hdr_mode_i override from CheckSByte).
+        Trigger a TE0 error from the RxSByteRepeated state by sending
+        Sr + 7E/R after a broadcast CCC. Exercises the CheckSByte ->
+        InHDRMode override path and verifies HDR timeout recovery.
+        '''
+      tests: ["te0_during_ccc_repeated_start"]
+      tags: ["top"]
+    }
+    {
+      name: ri_interrupt_force_all
+      desc:
+        '''
+        Tests interrupt FORCE mechanism for all RI error interrupt instances.
+        For each RI error type (readonly, unsupported, rx_fifo_overflow,
+        indirect_fifo_overflow): disables interrupt and forces (verifies no
+        effect), then enables and forces (verifies status set and irq_o HIGH),
+        then clears status (verifies irq_o LOW).
+        '''
+      tests: ["ri_interrupt_force_all"]
+      tags: ["top"]
+    }
   ]
 }

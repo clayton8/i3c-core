@@ -498,5 +498,236 @@
       tests: ["parity_error_isolation"]
       tags: ["top"]
     }
+    {
+      name: recovery_readonly_write_error
+      desc:
+        '''
+        Coverage target: Conditional 7.7 (line 1713: readonly_err=1, unsupported_err=0).
+        Sends a WRITE command to read-only registers (PROT_CAP, DEVICE_ID,
+        HW_STATUS, etc.) and verifies readonly_err is raised.
+        '''
+      tests: ["recovery_readonly_write_error"]
+      tags: ["top"]
+    }
+    {
+      name: recovery_read_write_phase_parity
+      desc:
+        '''
+        Coverage target: Lines 664-665 (RxLenH parity error on write-phase PEC),
+        Conditional 7.1 (a=1,b=1,c=1). Injects T-bit parity errors during
+        the write-phase PEC byte of a recovery transfer.
+        '''
+      tests: ["recovery_read_write_phase_parity"]
+      tags: ["top"]
+    }
+    {
+      name: recovery_write_pec_tbit_error
+      desc:
+        '''
+        Coverage target: Lines 717-718 (RxPec parity error on descriptor),
+        Conditional 7.5. Injects T-bit parity error on PEC byte during
+        recovery write.
+        '''
+      tests: ["recovery_write_pec_tbit_error"]
+      tags: ["top"]
+    }
+    {
+      name: recovery_all_det_en_toggle
+      desc:
+        '''
+        Coverage target: Section 8.0 -- toggle all *_det_en_i signals.
+        For each error detection enable bit in TARGET_ERR_CTRL, toggles
+        and verifies gating of RI error detection.
+        '''
+      tests: ["recovery_all_det_en_toggle"]
+      tags: ["top"]
+    }
+    {
+      name: recovery_read_abort_at_len
+      desc:
+        '''
+        Coverage targets: Line 817 (TxLenL bus_rstart_i -> Done, ID 5.4),
+        Line 831 (TxLenH bus_rstart_i -> Done, ID 5.5).
+        Aborts a recovery read at the length phase with Sr.
+        '''
+      tests: ["recovery_read_abort_at_len"]
+      tags: ["top"]
+    }
+    {
+      name: recovery_premature_sr_in_header
+      desc:
+        '''
+        Coverage target: Conditional 7.4 (lines 619/637: premature stop in
+        RxCmd/RxLenL via bus_rstart_i). Sends Sr during the command/length
+        header of a recovery transfer.
+        '''
+      tests: ["recovery_premature_sr_in_header"]
+      tags: ["top"]
+    }
+    {
+      name: recovery_queue_resets
+      desc:
+        '''
+        Coverage targets: Toggle 1.5/1.6 (ibi_queue reg_rst_i, reg_rst_we_o,
+        reg_rst_data_o), Toggle 3.4 (rx_desc_reg_rst_data_o).
+        Exercises queue reset paths for IBI and RX descriptor queues.
+        '''
+      tests: ["recovery_queue_resets"]
+      tags: ["top"]
+    }
+    {
+      name: recovery_hdr_mode_abort
+      desc:
+        '''
+        Coverage target: Line 589 (in_hdr_mode_i override -> Error),
+        Conditional 7.6, FSM 6.1. Triggers HDR mode entry during a
+        recovery transfer and verifies abort behavior.
+        '''
+      tests: ["recovery_hdr_mode_abort"]
+      tags: ["top"]
+    }
+    {
+      name: recovery_length_det_en_toggle
+      desc:
+        '''
+        Coverage target: Conditional 7.2 (line 711 combinations).
+        Tests length error detection enable with various combinations
+        of det_en and length mismatch conditions.
+        '''
+      tests: ["recovery_length_det_en_toggle"]
+      tags: ["top"]
+    }
+    {
+      name: recovery_queue_thresholds
+      desc:
+        '''
+        Coverage targets: Toggle 1.4 (ibi_queue read_thrld_i),
+        Toggle 3.2/3.3 (RX desc start_thrld_i, ready_thrld_i).
+        Exercises queue threshold signals by filling queues to
+        various levels.
+        '''
+      tests: ["recovery_queue_thresholds"]
+      tags: ["top"]
+    }
+    {
+      name: recovery_write_premature_stop_in_data
+      desc:
+        '''
+        Coverage target: Conditional 7.2 (line 711: premature stop in RxPec
+        with length underrun), line 689 (premature stop in RxData).
+        Sends STOP mid-data during a recovery write transfer.
+        '''
+      tests: ["recovery_write_premature_stop_in_data"]
+      tags: ["top"]
+    }
+    {
+      name: recovery_indirect_fifo_overflow
+      desc:
+        '''
+        Coverage target: Toggle indirect_fifo_overflow_err_det_en_i,
+        rx_fifo_overflow_err_det_en_i (Section 8.0 coverage).
+        Triggers FIFO overflow conditions with detection enables toggled.
+        '''
+      tests: ["recovery_indirect_fifo_overflow"]
+      tags: ["top"]
+    }
+    {
+      name: recovery_ibi_queue_full
+      desc:
+        '''
+        Coverage target: Toggle 1.1 (ibi_queue.full_o).
+        Fills the IBI queue (depth=64) by writing MDB-only IBI descriptors
+        and verifies the full_o signal toggles.
+        '''
+      tests: ["recovery_ibi_queue_full"]
+      tags: ["top"]
+    }
+    {
+      name: recovery_bypass_fifo_done
+      desc:
+        '''
+        Coverage target: Conditional 7.3 (line 781: bypass path to Done
+        in ExecFifoWrite). Exercises the bypass FIFO path to Done state.
+        '''
+      tests: ["recovery_bypass_fifo_done"]
+      tags: ["top"]
+    }
+    {
+      name: recovery_hdr_abort_per_state
+      desc:
+        '''
+        Coverage target: FSM 6.1 (in_hdr_mode_i Error from ExecCsrWrite,
+        TxData, TxLenH, TxLenL, TxPec). Triggers HDR mode abort from
+        multiple recovery handler FSM states.
+        '''
+      tests: ["recovery_hdr_abort_per_state"]
+      tags: ["top"]
+    }
+    {
+      name: recovery_read_abort_txlenl
+      desc:
+        '''
+        Coverage target: Line 817 (TxLenL bus_rstart_i -> Done), FSM ID 5.4/6.2.
+        Sends Sr immediately after the read address ACK, before the target
+        transmits TxLenL, to exercise early abort path.
+        '''
+      tests: ["recovery_read_abort_txlenl"]
+      tags: ["top"]
+    }
+    {
+      name: recovery_bypass_fifo_race
+      desc:
+        '''
+        Coverage target: Conditional 7.3 (line 781: bypass ExecFifoWrite -> Done).
+        Enables bypass mode, sends a large INDIRECT_FIFO_DATA write via I3C,
+        and exercises the bypass-to-Done race condition.
+        '''
+      tests: ["recovery_bypass_fifo_race"]
+      tags: ["top"]
+    }
+    {
+      name: recovery_readonly_write_irq
+      desc:
+        '''
+        Verifies that writing to a read-only recovery register triggers the
+        RI_READONLY_ERR interrupt output (irq_o toggle 0->1->0). Covers xtti
+        coverage IDs 2.1, 2.2, 2.3 for xintr_ri_readonly.
+        '''
+      tests: ["recovery_readonly_write_irq"]
+      tags: ["top"]
+    }
+    {
+      name: recovery_unsupported_cmd_irq
+      desc:
+        '''
+        Verifies that sending an unsupported command code triggers the
+        RI_UNSUPPORTED_ERR interrupt output (irq_o toggle 0->1->0). Covers
+        xtti coverage IDs for xintr_ri_unsupported.
+        '''
+      tests: ["recovery_unsupported_cmd_irq"]
+      tags: ["top"]
+    }
+    {
+      name: ri_rx_fifo_overflow_irq
+      desc:
+        '''
+        Verifies that RX FIFO overflow triggers the RI_RX_FIFO_OVERFLOW_ERR
+        interrupt output (irq_o toggle 0->1->0) when both DET_EN and INTR_EN
+        are enabled.
+        '''
+      tests: ["ri_rx_fifo_overflow_irq"]
+      tags: ["top"]
+    }
+    {
+      name: ri_indirect_fifo_overflow_irq
+      desc:
+        '''
+        Verifies that INDIRECT FIFO overflow triggers the
+        RI_INDIRECT_FIFO_OVERFLOW_ERR interrupt output (irq_o toggle 0->1->0)
+        when both DET_EN and INTR_EN are enabled.
+        '''
+      tests: ["ri_indirect_fifo_overflow_irq"]
+      tags: ["top"]
+    }
   ]
 }

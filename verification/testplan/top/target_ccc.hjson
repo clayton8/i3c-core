@@ -538,5 +538,191 @@
       tests: ["ccc_getstatus_sr_abort_clears_protocol_err"]
       tags: ["top"]
     }
+    {
+      name: ccc_entdaa_virtual_only
+      desc:
+        '''
+        Coverage: ccc.sv line 930, FSM RxCmdTbit -> HandleVirtualTargetENTDAA.
+        Boot with main target already having a dynamic address (via boot_init).
+        Only virtual target participates in ENTDAA.
+        '''
+      tests: ["ccc_entdaa_virtual_only"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_entdaa_main_only
+      desc:
+        '''
+        Coverage: FSM HandleTargetENTDAA -> WaitForENTDAAEnd (ccc.sv line 959),
+        Conditional 4.3 (entdaa_needs_virt_addr=0). Issue ENTDAA when only the
+        main target needs an address and the virtual target already has one.
+        '''
+      tests: ["ccc_entdaa_main_only"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_entdaa_both_addressed
+      desc:
+        '''
+        Coverage: FSM RxCmdTbit -> WaitForENTDAAEnd (ccc.sv line 931).
+        Boot with both targets already having dynamic addresses. Issue ENTDAA
+        again and verify targets skip directly to WaitForENTDAAEnd.
+        '''
+      tests: ["ccc_entdaa_both_addressed"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_te0_reserved_addr_direct
+      desc:
+        '''
+        Coverage: Toggle is_te0_err_condition, te0_err_ccc (ccc.sv:769, 1060-1061).
+        Send a direct CCC where the target address phase uses 7h7E/R (reserved
+        broadcast address) to trigger TE0 error in CCC context.
+        '''
+      tests: ["ccc_te0_reserved_addr_direct"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_direct_chain_7e_termination
+      desc:
+        '''
+        Coverage: ccc.sv lines 1066-1067 (target_addr_matches_rsvd -> NextCCC).
+        After a direct GET CCC response, send Sr + 7E/W instead of STOP to
+        chain into the next CCC frame.
+        '''
+      tests: ["ccc_direct_chain_7e_termination"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_all_det_en_toggle
+      desc:
+        '''
+        Coverage: All *_det_en_i toggle coverage (IDs 8.0).
+        For TE0, TE1, TE2, TE5: toggle the detection enable CSR, inject
+        the corresponding error, and verify gating behavior.
+        '''
+      tests: ["ccc_all_det_en_toggle"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_te2_direct_def_byte_tbit
+      desc:
+        '''
+        Coverage: ccc.sv lines 1025-1026, FSM RxDirectDefByteTbit -> DoneCCC,
+        WaitDirectRstart -> RxDirectDefByteTbit, Conditional 4.1.
+        Inject T-bit parity error on direct CCC defining byte.
+        '''
+      tests: ["ccc_te2_direct_def_byte_tbit"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_direct_extra_data_before_addr
+      desc:
+        '''
+        Coverage: ccc.sv line 1028, FSM WaitDirectRstart -> RxDirectDefByteTbit,
+        FSM RxDirectDefByteTbit -> WaitDirectRstart.
+        Send extra data bytes before the target address in a direct CCC.
+        '''
+      tests: ["ccc_direct_extra_data_before_addr"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_te2_data_byte_direct_set
+      desc:
+        '''
+        Coverage: FSM RxDataTbit -> DoneCCC (ccc.sv:1104-1108).
+        Send a direct SET CCC (SETMWL) and inject T-bit parity error on the
+        data byte to trigger TE2 error.
+        '''
+      tests: ["ccc_te2_data_byte_direct_set"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_entdaa_te3_det_en_toggle
+      desc:
+        '''
+        Coverage: Toggle te3_err_det_en_i in ccc_entdaa (ID 3.4).
+        Inject TE3 (bad address parity during ENTDAA) with te3_err_det_en=0
+        then with te3_err_det_en=1 and verify gating behavior.
+        '''
+      tests: ["ccc_entdaa_te3_det_en_toggle"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_stop_mid_transfer
+      desc:
+        '''
+        Coverage: Multiple FSM -> DoneCCC transitions via STOP override.
+        IDs: 2.1b (RxDefByte), 2.1c (RxDefByteOrBusCond), 2.1h (WaitDirectRstart),
+        2.1e (TxData), 2.1f (TxDataTbitCont), 2.1g (TxDataTbitEnd).
+        Sends STOP at various CCC phases to exercise abort paths.
+        '''
+      tests: ["ccc_stop_mid_transfer"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_entdaa_stop_in_waitstart
+      desc:
+        '''
+        Coverage: ENTDAA FSM WaitStart -> Done (ccc_entdaa.sv).
+        Issue ENTDAA CCC byte, then STOP immediately before Sr+7E/R.
+        '''
+      tests: ["ccc_entdaa_stop_in_waitstart"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_entdaa_stop_in_sendidbit
+      desc:
+        '''
+        Coverage: ENTDAA FSM SendIDBit -> Done (ccc_entdaa.sv).
+        Start ENTDAA, let Sr+7E/R complete and begin ID bit transmission,
+        then issue STOP mid-ID.
+        '''
+      tests: ["ccc_entdaa_stop_in_sendidbit"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_entdaa_stop_in_receiveaddr
+      desc:
+        '''
+        Coverage: ENTDAA FSM ReceiveAddr -> Done (ccc_entdaa.sv).
+        Start ENTDAA, complete ID bit transmission (64 bits), then issue
+        STOP during address reception.
+        '''
+      tests: ["ccc_entdaa_stop_in_receiveaddr"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_stop_during_target_read
+      desc:
+        '''
+        Coverage: TxData->DoneCCC (2.1e), TxDataTbitCont->DoneCCC (2.1f),
+        TxDataTbitEnd->DoneCCC (2.1g), TxTargetAddrAck->DoneCCC (2.4).
+        Issues STOP during the target read (GET CCC) phase at various points.
+        '''
+      tests: ["ccc_stop_during_target_read"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_entdaa_stop_in_ackrsvdbyte
+      desc:
+        '''
+        Coverage: ENTDAA FSM AckRsvdByte->Done (6.1).
+        Issue STOP during the reserved byte ACK phase of ENTDAA.
+        '''
+      tests: ["ccc_entdaa_stop_in_ackrsvdbyte"]
+      tags: ["top"]
+    }
+    {
+      name: ccc_entdaa_stop_in_sendnack
+      desc:
+        '''
+        Coverage: ENTDAA FSM SendNack->Done (6.1).
+        Inject TE4 (7E/W instead of 7E/R) so target NACKs. ENTDAA FSM enters
+        SendNack state, then issue STOP.
+        '''
+      tests: ["ccc_entdaa_stop_in_sendnack"]
+      tags: ["top"]
+    }
   ]
 }

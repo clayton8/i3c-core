@@ -251,5 +251,52 @@
       tests: ["ibi_flush_from_idle_interrupt_flood"]
       tags: ["top"]
     }
+    {
+      name: ibi_rxfbytearb_wins_arbitration
+      desc:
+        '''
+        Coverage: i3c_target_fsm.sv line 622.
+        RxFByteArb -> IbiReadAck when the DUT wins IBI arbitration during a
+        controller-initiated Start. Verifies the DUT correctly transitions
+        to IBI servicing when it wins address arbitration.
+        '''
+      tests: ["ibi_rxfbytearb_wins_arbitration"]
+      tags: ["top"]
+    }
+    {
+      name: ibi_inhibit_retry_release
+      desc:
+        '''
+        Coverage: i3c_target_fsm.sv line 448.
+        InhibitRetry -> InhibitNone transition in the ibi_inhibit mini-FSM.
+        Verifies that after an arbitration loss sets ibi_inhibit, the inhibit
+        is released after Bus Available and the IBI retries successfully.
+        '''
+      tests: ["ibi_inhibit_retry_release"]
+      tags: ["top"]
+    }
+    {
+      name: ibi_rxfbytearb_retry_exhausted
+      desc:
+        '''
+        Coverage: i3c_target_fsm.sv lines 626-628.
+        RxFByteArb -> RxFByte when ibi_can_retry is false. Exercises the
+        path where the IBI retry counter is exhausted during arbitration.
+        '''
+      tests: ["ibi_rxfbytearb_retry_exhausted"]
+      tags: ["top"]
+    }
+    {
+      name: ibi_arb_lost_in_drive_addr
+      desc:
+        '''
+        Coverage: i3c_target_fsm.sv lines 526-528.
+        IbiDriveAddr -> WaitRestart when arbitration_lost_i fires.
+        Verifies that losing arbitration during IBI address drive causes
+        a transition to WaitRestart and eventual retry.
+        '''
+      tests: ["ibi_arb_lost_in_drive_addr"]
+      tags: ["top"]
+    }
   ]
 }
