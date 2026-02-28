@@ -656,6 +656,13 @@ async def test_i3c_target_writes_and_reads(dut):
         tb.reg_map.I3C_EC.TTI.TX_DESC_QUEUE_PORT.base_addr, int2dword(tx_data_len), 4
     )
 
+    # Enable RX descriptor interrupt so INTERRUPT_STATUS reflects arrival
+    await tb.write_csr_field(
+        tb.reg_map.I3C_EC.TTI.INTERRUPT_ENABLE.base_addr,
+        tb.reg_map.I3C_EC.TTI.INTERRUPT_ENABLE.RX_DESC_STAT_EN,
+        1,
+    )
+
     # Send Private Write on I3C
     test_data = [[0xAA, 0x00, 0xBB, 0xCC, 0xDD], [0xDE, 0xAD, 0xBA, 0xBE]]
     for test_vec in test_data:
@@ -677,6 +684,8 @@ async def test_i3c_target_writes_and_reads(dut):
         if timeout > TIMEOUT_THRESHOLD:
             wait_irq = False
             dut._log.debug(":::Timeout cancelled polling:::")
+
+    assert irq != 0, "Interrupt never fired within TIMEOUT_THRESHOLD cycles"
 
     # Read data
     recv_data = []

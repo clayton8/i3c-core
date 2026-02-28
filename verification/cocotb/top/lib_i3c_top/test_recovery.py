@@ -3111,7 +3111,7 @@ async def test_ri_comprehensive_stress(dut):
                 dut._log.info(f"  Received byte: 0x{byte:02X}, stop={tgt_stop}")
             except Exception as read_err:
                 dut._log.info(f"  Read failed with exception: {read_err}")
-            test_results["4_s_not_sr"] = "PASS - ACK but likely invalid data"
+            test_results["4_s_not_sr"] = "FAIL - target ACKed invalid S-not-Sr read"
 
         dut._log.info(f"  Sending STOP condition")
         await controller.send_stop()
