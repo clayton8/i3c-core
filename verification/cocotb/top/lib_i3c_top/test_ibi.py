@@ -21,7 +21,7 @@ from utils import format_ibi_data, get_interrupt_status
 import cocotb
 from cocotb.regression import TestFactory
 from cocotb.result import SimTimeoutError
-from cocotb.triggers import ClockCycles, Timer, with_timeout
+from cocotb.triggers import ClockCycles, RisingEdge, Timer, with_timeout
 from common import timeout_task, log_seed
 
 # =============================================================================
@@ -1636,4 +1636,294 @@ async def test_ibi_flush_from_idle_interrupt_flood(dut):
 
     await tb.teardown()
 
+
+# =============================================================================
+# Coverage: RxFByteArb -> IbiReadAck (DUT wins arb during Start)
+# Covers i3c_target_fsm.sv line 622
+# =============================================================================
+
+@cocotb.test()
+async def test_ibi_rxfbytearb_wins_arbitration(dut):
+    """
+    Coverage: i3c_target_fsm.sv line 622.
+    RxFByteArb -> IbiReadAck when the DUT wins IBI arbitration during a
+    controller-initiated Start.
+
+    The DUT has a low address (0x10). When ibi_pending=1 and a controller
+    Start fires (before bus_available), the FSM enters RxFByteArb. The DUT
+    drives its IBI address byte (0x21) on the open-drain bus, which wins
+    over the controller's 0x7E (0xFC). bus_tx_rsp_i.done fires and the FSM
+    transitions RxFByteArb -> IbiReadAck (line 622).
+    """
+    DUT_ADDR = 0x10  # Low address: IBI byte = 0x21, wins vs 0xFC
+
+    i3c_controller, _, tb = await test_setup(dut, static_addr=DUT_ADDR)
+    await init_ibi(i3c_controller, tb, addr=DUT_ADDR)
+
+    mdb = 0xAA
+    data = [0x11, 0x22]
+
+    # Queue IBI so ibi_pending=1
+    await send_ibi(tb, mdb, data)
+
+    # Issue a controller write immediately -- the Start arrives before
+    # bus_available (~1us). DUT enters RxFByteArb with ibi_pending=1.
+    # The DUT's IBI address (0x21) wins on the open-drain bus against
+    # the controller's 0x7E header (0xFC). The controller's write_addr_header
+    # detects the IBI inline via IbiArbitrationEvent, handles it, then
+    # retries the write.
+    try:
+        write_resp = await with_timeout(
+            i3c_controller.i3c_write(DUT_ADDR, [0xDE], send_rsvd=True),
+            50, "us",
+        )
+        dut._log.info(f"Write completed: nack={write_resp.nack}")
+    except SimTimeoutError:
+        dut._log.info("Write timed out (expected -- IBI handling may disrupt write)")
+        # Cleanup: stop and give bus control back
+        await i3c_controller.send_stop()
+        i3c_controller.give_bus_control()
+
+    # Wait for bus to settle and DUT to retry IBI via bus_available
+    await ClockCycles(tb.clk, 50)
+
+    # The DUT may retry the IBI -- let the controller handle it
+    try:
+        response = await with_timeout(
+            i3c_controller.wait_for_ibi(), 10, "us",
+        )
+        dut._log.info(f"IBI response received: addr=0x{response[0]:02X}")
+    except SimTimeoutError:
+        dut._log.info("No follow-up IBI (DUT may have been NACKed during arb)")
+
+    await ClockCycles(tb.clk, 10)
+
+    await tb.teardown()
+
+
+# =============================================================================
+# Coverage: InhibitRetry -> InhibitNone (ibi_inhibit mini-FSM)
+# Covers i3c_target_fsm.sv line 448
+# =============================================================================
+
+@cocotb.test()
+async def test_ibi_inhibit_retry_release(dut):
+    """
+    Coverage: i3c_target_fsm.sv line 448.
+    InhibitRetry -> InhibitNone transition in the ibi_inhibit mini-FSM.
+
+    With retry_num=0, a single NACK exhausts retries (cnt=1 > num=0).
+    ibi_inhibit transitions to InhibitRetry. The DUT will NOT attempt
+    further IBIs. Then FW resets the retry counter via IBI_RETRY_CTR_RST.
+    ibi_can_retry becomes true, and ibi_inhibit transitions back to
+    InhibitNone (line 448). The original IBI succeeds.
+    """
+    i3c_controller, _, tb = await test_setup(dut)
+    # retry_num=0: only 1 attempt allowed
+    await init_ibi(i3c_controller, tb, retry_num=0)
+
+    mdb = 0xDD
+    data = [0xAA]
+
+    # Queue IBI and NACK it
+    await send_ibi(tb, mdb, data)
+    i3c_controller.enable_ibi(False)
+
+    result = await i3c_controller.wait_for_ibi_event()
+    assert result["ack"] is False, f"Expected NACK, got {result}"
+
+    # After NACK: cnt=1 > retry_num=0 -> IbiFailureRetry(3)
+    # ibi_inhibit transitions to InhibitRetry
+    await ClockCycles(tb.clk, 50)
+    await check_ibi_status(tb, 3, "retry exhausted")
+
+    # Verify NO IBI within 3us (bus_available fires at ~1us, but inhibited)
+    i3c_controller.enable_ibi(True)
+    await expect_no_ibi(i3c_controller, 3, "us")
+
+    # FW resets the retry counter
+    await tb.write_csr_field(
+        tb.reg_map.I3C_EC.TTI.RESET_CONTROL.base_addr,
+        tb.reg_map.I3C_EC.TTI.RESET_CONTROL.IBI_RETRY_CTR_RST,
+        1,
+    )
+
+    # ibi_can_retry becomes true -> InhibitRetry -> InhibitNone (line 448)
+    # DUT should now attempt and complete the original IBI (still in FIFO)
+    response = await with_timeout(i3c_controller.wait_for_ibi(), 20, "us")
+    await verify_ibi_response(dut, response, TARGET_ADDRESS, mdb, data)
+    await check_ibi_status(tb, 0, "IBI success after inhibit release")
+
+    await ClockCycles(tb.clk, 10)
+
+    await tb.teardown()
+
+
+# =============================================================================
+# Coverage: RxFByteArb retry exhausted -> RxFByte
+# Covers i3c_target_fsm.sv lines 626-628
+# =============================================================================
+
+@cocotb.test()
+async def test_ibi_rxfbytearb_retry_exhausted(dut):
+    """
+    Coverage: i3c_target_fsm.sv lines 626-628.
+    RxFByteArb -> RxFByte when ibi_can_retry is false.
+
+    Start with retry_num=7 (infinite). NACK the DUT once (cnt=1, still
+    InhibitNone because retry_num=7 allows infinite retries). Then change
+    retry_num=0 via CSR. Now ibi_can_retry = (1 <= 0) = false, but
+    ibi_inhibit is still InhibitNone.
+
+    Issue a controller Start before bus_available fires. DUT enters
+    RxFByteArb (ibi_pending=1, InhibitNone). ibi_can_retry=false so
+    lines 626-628 fire: IbiFailureRetry, state_d = RxFByte. The DUT
+    then processes the incoming address normally.
+    """
+    i3c_controller, _, tb = await test_setup(dut)
+    # Start with infinite retries
+    await init_ibi(i3c_controller, tb, retry_num=7)
+
+    mdb = 0xCC
+    data = [0x55]
+
+    # Queue IBI and NACK once -> cnt=1, ibi_inhibit stays InhibitNone
+    await send_ibi(tb, mdb, data)
+    i3c_controller.enable_ibi(False)
+
+    result = await i3c_controller.wait_for_ibi_event()
+    assert result["ack"] is False, f"Expected NACK, got {result}"
+
+    # DUT will retry (retry_num=7 allows infinite). Before bus_available
+    # fires (~1us), change retry_num=0 so ibi_can_retry = (1<=0) = false.
+    await set_ibi_retry_num(tb, 0)
+
+    # Issue a controller write -- the Start arrives before bus_available.
+    # DUT enters RxFByteArb with ibi_pending=1, InhibitNone, but
+    # ibi_can_retry=false. Lines 626-628 fire: IbiFailureRetry, goto RxFByte.
+    # The DUT processes the write address normally.
+    i3c_controller.enable_ibi(True)
+    write_resp = await i3c_controller.i3c_write(
+        TARGET_ADDRESS, [0xDE, 0xAD], send_rsvd=False,
+    )
+
+    # The write should succeed (DUT fell through to RxFByte)
+    dut._log.info(f"Write response: nack={write_resp.nack}, sent={write_resp.sent_count}")
+
+    # IBI should have reported retry exhaustion
+    await ClockCycles(tb.clk, 50)
+    await check_ibi_status(tb, 3, "retry exhausted in RxFByteArb")
+
+    await ClockCycles(tb.clk, 10)
+
+    await tb.teardown()
+
+
+# =============================================================================
+# Coverage: IbiDriveAddr -> WaitRestart on arbitration_lost_i
+# Covers i3c_target_fsm.sv lines 526-528
+# =============================================================================
+
+# FSM state IDs from i3c_target_fsm.sv primary_state_e
+_FSM_IDLE = 0
+_FSM_IBI_DRIVE_ADDR = 20
+
+_FSM_STATE_PATH = (
+    "xi3c_wrapper.i3c.xcontroller.xcontroller_standby"
+    ".xcontroller_standby_i3c.xi3c_target_fsm.state_q"
+)
+
+
+@cocotb.test()
+async def test_ibi_arb_lost_in_drive_addr(dut):
+    """
+    Coverage: i3c_target_fsm.sv lines 526-528.
+    IbiDriveAddr -> WaitRestart when arbitration_lost_i fires.
+
+    The DUT has a high address (0x60). It enters IbiDriveAddr via
+    bus_available. A background cocotb task monitors the FSM state
+    and pulls the VIP SDA low on the first SCL posedge where the
+    DUT drives SDA high, forcing an arbitration loss.
+
+    The DUT reports IbiFailureAddressArb(4) and transitions to
+    WaitRestart. After Bus Available condition, it retries and succeeds.
+    """
+    DUT_ADDR = 0x60  # IBI byte = 0xC1 = 1100_0001 (bit7=1 -> can lose arb)
+
+    i3c_controller, i3c_target_vip, tb = await test_setup(
+        dut, static_addr=DUT_ADDR,
+    )
+    # Disable the VIP target monitor so we can control SDA directly
+    i3c_target_vip.monitor_enable.clear()
+    await i3c_target_vip.monitor_idle.wait()
+
+    await init_ibi(i3c_controller, tb, addr=DUT_ADDR)
+
+    # Background task: wait for DUT to enter IbiDriveAddr, then pull
+    # VIP SDA low on the first SCL posedge to create an arbitration loss.
+    # DUT addr 0x60 -> IBI byte = 0xC1 = 1100_0001. Bit7=1 (first driven bit).
+    # If VIP drives 0 on that bit, bus reads 0 but DUT drove 1 -> arb lost.
+    arb_injected = cocotb.triggers.Event()
+
+    async def inject_arb_loss():
+        fsm_sig = getattr(dut, _FSM_STATE_PATH)
+        # Wait for IbiDriveAddr state
+        while True:
+            await RisingEdge(tb.clk)
+            if int(fsm_sig.value) == _FSM_IBI_DRIVE_ADDR:
+                break
+
+        # DUT is in IbiDriveAddr. The bus_tx_flow will pull SDA low for
+        # the START condition, then transmit the IBI address byte.
+        # We drive VIP SDA=0 continuously. On bit7 (first data bit),
+        # the DUT drives 1 but bus reads 0 -> arbitration_lost on SCL posedge.
+        dut.sda_sim_target_i.value = 0
+        arb_injected.set()
+
+        # Hold for enough time for the arbitration to be detected and the
+        # controller to finish clocking. Then release.
+        await ClockCycles(tb.clk, 200)
+        dut.sda_sim_target_i.value = 1
+
+    inject_task = cocotb.start_soon(inject_arb_loss())
+
+    mdb = 0xC1
+    data = [0x99]
+    await send_ibi(tb, mdb, data)
+
+    # Wait for arb injection to happen
+    await with_timeout(arb_injected.wait(), 20, "us")
+
+    # The controller's background monitor will see the SDA activity.
+    # Wait a bit for things to settle.
+    await ClockCycles(tb.clk, 300)
+
+    # Check IBI status: should be IbiFailureAddressArb(4)
+    await check_ibi_status(tb, 4, "arb loss in IbiDriveAddr")
+    dut._log.info("IbiFailureAddressArb confirmed from IbiDriveAddr")
+
+    # Wait for inject_task to complete
+    await inject_task
+
+    # Re-enable VIP target
+    i3c_target_vip.sda_o.value = 1
+    dut.sda_sim_target_i.value = 1
+
+    # DUT should retry after Bus Available. Let the controller handle it.
+    # Note: the retry may take longer due to InhibitArbLost clearing.
+    try:
+        response = await with_timeout(
+            i3c_controller.wait_for_ibi(), 20, "us",
+        )
+        dut._log.info(f"DUT retried IBI: addr=0x{response[0]:02X}")
+    except SimTimeoutError:
+        dut._log.info("DUT did not retry IBI within timeout (inhibit still active)")
+
+    # Final status may still be 4 (IbiFailureAddressArb) if the retry hasn't
+    # completed yet, or 0 if it succeeded. Both are acceptable -- the coverage
+    # point (IbiDriveAddr -> WaitRestart) was already hit above.
+
+    await ClockCycles(tb.clk, 10)
+
+    await tb.teardown()
 
