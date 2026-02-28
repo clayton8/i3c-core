@@ -3803,3 +3803,219 @@ async def test_ccc_entdaa_stop_in_receiveaddr(dut):
     assert responses[0][0] == True, "Target should ACK GETBCR after ENTDAA ReceiveAddr STOP recovery"
 
     await tb.teardown()
+
+
+# =============================================================================
+# Coverage gap tests: STOP during target-driven CCC phases
+#
+# These tests issue real bus-level STOP while the target is driving SDA.
+# The bus monitor's contention check is temporarily suppressed since the
+# Controller owns SCL and CAN issue STOP at any time per the I3C spec.
+# The momentary drive fight is expected on a real bus.
+# =============================================================================
+
+
+@cocotb.test()
+async def test_ccc_stop_during_target_read(dut):
+    """
+    Coverage: TxData->DoneCCC (2.1e), TxDataTbitCont->DoneCCC (2.1f),
+              TxDataTbitEnd->DoneCCC (2.1g), TxTargetAddrAck->DoneCCC (2.4).
+
+    Issues real bus-level STOP during target-driven read phases. The bus
+    monitor BUS_CONTENTION check is suppressed since this is an intentional
+    Controller abort (Controller owns SCL per I3C spec).
+    """
+    log = logging.getLogger("test_ccc_stop_during_target_read")
+
+    (STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR) = \
+        random.sample(VALID_I3C_ADDRESSES, 4)
+
+    i3c_controller, _, tb = await test_setup(
+        dut, STATIC_ADDR, VIRT_STATIC_ADDR,
+        dynamic_addr=DYNAMIC_ADDR, virtual_dynamic_addr=VIRT_DYNAMIC_ADDR)
+    await ClockCycles(tb.clk, 50)
+
+    # ---- Sub-test A: TxTargetAddrAck -> DoneCCC ----
+    # Send direct CCC, after target ACKs the address, issue STOP immediately
+    log.info("Sub-test A: STOP in TxTargetAddrAck")
+    if tb.bus_monitor:
+        tb.bus_monitor.suppress_check("BUS_CONTENTION")
+    await i3c_controller.take_bus_control()
+    await i3c_controller.send_start()
+    await i3c_controller.write_addr_header(0x7E)
+    await i3c_controller.send_byte_tbit(CCC.DIRECT.GETBCR)
+    await i3c_controller.send_start()
+    # write_addr_header sends 8 bits + waits for ACK -- STOP right after
+    ack = await i3c_controller.write_addr_header(DYNAMIC_ADDR, read=True)
+    await i3c_controller.send_stop()
+    i3c_controller.give_bus_control()
+    if tb.bus_monitor:
+        tb.bus_monitor.unsuppress_check("BUS_CONTENTION")
+    await ClockCycles(tb.clk, 50)
+
+    responses = await i3c_controller.i3c_ccc_read(
+        ccc=CCC.DIRECT.GETBCR, addr=DYNAMIC_ADDR, count=1)
+    assert responses[0][0] == True, "Recovery failed after TxTargetAddrAck STOP"
+    log.info("Sub-test A: PASS")
+
+    # ---- Sub-test B: TxData -> DoneCCC ----
+    # Send multi-byte GET, STOP immediately after target starts transmitting
+    log.info("Sub-test B: STOP in TxData")
+    if tb.bus_monitor:
+        tb.bus_monitor.suppress_check("BUS_CONTENTION")
+    await i3c_controller.take_bus_control()
+    await i3c_controller.send_start()
+    await i3c_controller.write_addr_header(0x7E)
+    await i3c_controller.send_byte_tbit(CCC.DIRECT.GETPID)
+    await i3c_controller.send_start()
+    ack = await i3c_controller.write_addr_header(DYNAMIC_ADDR, read=True)
+    # Target is now driving data -- STOP immediately
+    await i3c_controller.send_stop()
+    i3c_controller.give_bus_control()
+    if tb.bus_monitor:
+        tb.bus_monitor.unsuppress_check("BUS_CONTENTION")
+    await ClockCycles(tb.clk, 50)
+
+    responses = await i3c_controller.i3c_ccc_read(
+        ccc=CCC.DIRECT.GETBCR, addr=DYNAMIC_ADDR, count=1)
+    assert responses[0][0] == True, "Recovery failed after TxData STOP"
+    log.info("Sub-test B: PASS")
+
+    # ---- Sub-test C: TxDataTbitEnd -> DoneCCC ----
+    # Single-byte GET, read the byte, STOP during the end T-bit
+    log.info("Sub-test C: STOP in TxDataTbitEnd")
+    if tb.bus_monitor:
+        tb.bus_monitor.suppress_check("BUS_CONTENTION")
+    await i3c_controller.take_bus_control()
+    await i3c_controller.send_start()
+    await i3c_controller.write_addr_header(0x7E)
+    await i3c_controller.send_byte_tbit(CCC.DIRECT.GETBCR)
+    await i3c_controller.send_start()
+    ack = await i3c_controller.write_addr_header(DYNAMIC_ADDR, read=True)
+    (byte_val, _) = await i3c_controller.recv_byte_t_bit(stop=False)
+    # After reading 1 byte + T-bit, STOP
+    await i3c_controller.send_stop()
+    i3c_controller.give_bus_control()
+    if tb.bus_monitor:
+        tb.bus_monitor.unsuppress_check("BUS_CONTENTION")
+    await ClockCycles(tb.clk, 50)
+
+    responses = await i3c_controller.i3c_ccc_read(
+        ccc=CCC.DIRECT.GETBCR, addr=DYNAMIC_ADDR, count=1)
+    assert responses[0][0] == True, "Recovery failed after TxDataTbitEnd STOP"
+    log.info("Sub-test C: PASS")
+
+    # ---- Sub-test D: TxDataTbitCont -> DoneCCC ----
+    # Multi-byte GET (GETMRL=3), read 1 byte, STOP during continuation T-bit
+    log.info("Sub-test D: STOP in TxDataTbitCont")
+    if tb.bus_monitor:
+        tb.bus_monitor.suppress_check("BUS_CONTENTION")
+    await i3c_controller.take_bus_control()
+    await i3c_controller.send_start()
+    await i3c_controller.write_addr_header(0x7E)
+    await i3c_controller.send_byte_tbit(CCC.DIRECT.GETMRL)
+    await i3c_controller.send_start()
+    ack = await i3c_controller.write_addr_header(DYNAMIC_ADDR, read=True)
+    (byte_val, _) = await i3c_controller.recv_byte_t_bit(stop=False)
+    # After 1 of 3 bytes, STOP -- T-bit was continuation
+    await i3c_controller.send_stop()
+    i3c_controller.give_bus_control()
+    if tb.bus_monitor:
+        tb.bus_monitor.unsuppress_check("BUS_CONTENTION")
+    await ClockCycles(tb.clk, 50)
+
+    responses = await i3c_controller.i3c_ccc_read(
+        ccc=CCC.DIRECT.GETBCR, addr=DYNAMIC_ADDR, count=1)
+    assert responses[0][0] == True, "Recovery failed after TxDataTbitCont STOP"
+    log.info("Sub-test D: PASS")
+
+    await tb.teardown()
+
+
+@cocotb.test()
+async def test_ccc_entdaa_stop_in_ackrsvdbyte(dut):
+    """
+    Coverage: ENTDAA FSM AckRsvdByte->Done (6.1).
+
+    Issue STOP during the reserved byte ACK phase of ENTDAA.
+    """
+    log = logging.getLogger("test_ccc_entdaa_stop_in_ackrsvdbyte")
+
+    (STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR) = \
+        random.sample(VALID_I3C_ADDRESSES, 4)
+
+    i3c_controller, _, tb = await test_setup(
+        dut, STATIC_ADDR, VIRT_STATIC_ADDR)
+    await ClockCycles(tb.clk, 50)
+
+    # Raw ENTDAA: S + 7E/W + 0x07 + Sr + 7E/R + ACK bit → STOP during ACK
+    log.info("ENTDAA with STOP during AckRsvdByte")
+    if tb.bus_monitor:
+        tb.bus_monitor.suppress_check("BUS_CONTENTION")
+        tb.bus_monitor.suppress_check("ENTDAA_DA_HANDOFF")
+    await i3c_controller.take_bus_control()
+    await i3c_controller.send_start()
+    await i3c_controller.write_addr_header(0x7E)
+    await i3c_controller.send_byte_tbit(0x07)  # ENTDAA CCC
+    await i3c_controller.send_start()
+    # 7E/R -- target ACKs in AckRsvdByte state
+    ack = await i3c_controller.write_addr_header(0x7E, read=True)
+    # STOP right after ACK (target is in AckRsvdByte or just transitioned)
+    await i3c_controller.send_stop()
+    i3c_controller.give_bus_control()
+    if tb.bus_monitor:
+        tb.bus_monitor.unsuppress_check("BUS_CONTENTION")
+        tb.bus_monitor.unsuppress_check("ENTDAA_DA_HANDOFF")
+    await ClockCycles(tb.clk, 50)
+
+    # Recovery
+    results = await i3c_controller.i3c_entdaa(
+        addrs_to_assign=[DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR])
+    await ClockCycles(tb.clk, 50)
+
+    responses = await i3c_controller.i3c_ccc_read(
+        ccc=CCC.DIRECT.GETBCR, addr=DYNAMIC_ADDR, count=1)
+    assert responses[0][0] == True, \
+        "Recovery failed after ENTDAA AckRsvdByte STOP"
+
+    await tb.teardown()
+
+
+@cocotb.test()
+async def test_ccc_entdaa_stop_in_sendnack(dut):
+    """
+    Coverage: ENTDAA FSM SendNack->Done (6.1).
+
+    Inject TE4 (7E/W instead of 7E/R) so target NACKs. ENTDAA FSM enters
+    SendNack. Then issue STOP.
+    """
+    log = logging.getLogger("test_ccc_entdaa_stop_in_sendnack")
+
+    (STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR) = \
+        random.sample(VALID_I3C_ADDRESSES, 4)
+
+    i3c_controller, _, tb = await test_setup(
+        dut, STATIC_ADDR, VIRT_STATIC_ADDR)
+    tb.te_error_monitor.expect_error(4)
+    await ClockCycles(tb.clk, 50)
+
+    # The i3c_entdaa method with inject_te4 already handles STOP at end.
+    # The target will NACK and the BFM sends STOP -- SendNack->Done is hit.
+    log.info("ENTDAA with TE4 injection (target NACKs in SendNack)")
+    results = await i3c_controller.i3c_entdaa(
+        addrs_to_assign=[DYNAMIC_ADDR], inject_te4_invalid_rsvd=True)
+    await ClockCycles(tb.clk, 50)
+
+    assert results[0]["ack"] == False, "Target should NACK TE4 invalid reserved byte"
+
+    # Recovery
+    results = await i3c_controller.i3c_entdaa(
+        addrs_to_assign=[DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR])
+    await ClockCycles(tb.clk, 50)
+
+    responses = await i3c_controller.i3c_ccc_read(
+        ccc=CCC.DIRECT.GETBCR, addr=DYNAMIC_ADDR, count=1)
+    assert responses[0][0] == True, \
+        "Recovery failed after ENTDAA SendNack STOP"
+
+    await tb.teardown()
