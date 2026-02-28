@@ -1186,3 +1186,122 @@ async def test_te0_during_ccc_repeated_start(dut):
 
     await tb.teardown()
 
+
+
+
+# =============================================================================
+# RI Interrupt Force Tests (xtti coverage gaps)
+# =============================================================================
+
+# RI error types: (INTR_ENABLE field, INTR_FORCE field, INTR_STATUS field,
+#                  DET_EN field or None, DET_EN register or None)
+# For xintr_ri_readonly and xintr_ri_unsupported, sts_ena_i comes from
+# INTR_ENABLE (no separate DET_EN). For the FIFO overflow instances,
+# sts_ena_i comes from TARGET_ERR_CTRL DET_EN.
+RI_ERROR_FORCE_TYPES = [
+    # (enable_field, force_field, status_field, det_en_field_or_None)
+    ("RI_READONLY_ERR_EN", "RI_READONLY_ERR_FORCE",
+     "RI_READONLY_ERR_STAT", None),
+    ("RI_UNSUPPORTED_ERR_EN", "RI_UNSUPPORTED_ERR_FORCE",
+     "RI_UNSUPPORTED_ERR_STAT", None),
+    ("RI_RX_FIFO_OVERFLOW_ERR_EN", "RI_RX_FIFO_OVERFLOW_ERR_FORCE",
+     "RI_RX_FIFO_OVERFLOW_ERR_STAT", "RI_RX_FIFO_OVERFLOW_ERR_DET_EN"),
+    ("RI_INDIRECT_FIFO_OVERFLOW_ERR_EN", "RI_INDIRECT_FIFO_OVERFLOW_ERR_FORCE",
+     "RI_INDIRECT_FIFO_OVERFLOW_ERR_STAT", "RI_INDIRECT_FIFO_OVERFLOW_ERR_DET_EN"),
+]
+
+
+@cocotb.test()
+async def test_ri_interrupt_force_all(dut):
+    """
+    Tests interrupt FORCE mechanism for all RI error interrupt instances.
+
+    Covers xtti coverage IDs:
+      - 1.2: irq_force_i toggle for xintr_ri_indirect_fifo_overflow
+      - 3.1: irq_force_i toggle for xintr_ri_rx_fifo_overflow
+
+    Also exercises force for xintr_ri_readonly and xintr_ri_unsupported
+    for completeness. For each RI error type:
+      1. Disable the interrupt, force it, verify status is NOT set
+      2. Enable the interrupt (+ DET_EN for FIFO types), force it,
+         verify status IS set and irq_o goes HIGH
+      3. Clear status, verify irq_o goes LOW
+    """
+    log = logging.getLogger("test_ri_interrupt_force_all")
+
+    (STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR) = \
+        random.sample(VALID_I3C_ADDRESSES, 4)
+    _, _, tb = await test_setup(
+        dut, STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR)
+
+    irq = dut.xi3c_wrapper.irq_o
+    force_addr = tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_FORCE.base_addr
+    enable_addr = tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_ENABLE.base_addr
+    status_addr = tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.base_addr
+    ctrl_addr = tb.reg_map.I3C_EC.TTI.TARGET_ERR_CTRL.base_addr
+
+    # Clear all status first
+    await tb.write_csr(status_addr, int2dword(0xFFFFFFFF), 4)
+    await ClockCycles(tb.clk, 5)
+
+    for en_name, force_name, stat_name, det_en_name in RI_ERROR_FORCE_TYPES:
+        log.info(f"=== Testing FORCE for {force_name} ===")
+
+        en_field = _get_field(tb, "TARGET_ERR_INTR_ENABLE", en_name)
+        force_field = _get_field(tb, "TARGET_ERR_INTR_FORCE", force_name)
+        stat_field = _get_field(tb, "TARGET_ERR_INTR_STATUS", stat_name)
+
+        # --- Part A: Disable the interrupt, force it, verify no effect ---
+        await tb.write_csr_field(enable_addr, en_field, 0)
+        if det_en_name:
+            det_en_field = _get_field(tb, "TARGET_ERR_CTRL", det_en_name)
+            await tb.write_csr_field(ctrl_addr, det_en_field, 0)
+        await ClockCycles(tb.clk, 5)
+
+        # Force: write 1 then 0
+        await tb.write_csr_field(force_addr, force_field, 1)
+        await tb.write_csr_field(force_addr, force_field, 0)
+        await ClockCycles(tb.clk, 10)
+
+        stat = await tb.read_csr_field(status_addr, stat_field)
+        assert stat == 0, (
+            f"{stat_name} should be 0 when ENABLE=0, got {stat}")
+        log.info(f"  Part A: ENABLE=0 -> FORCE has no effect on status: OK")
+
+        # --- Part B: Enable the interrupt (+ DET_EN), force it ---
+        await tb.write_csr_field(enable_addr, en_field, 1)
+        if det_en_name:
+            det_en_field = _get_field(tb, "TARGET_ERR_CTRL", det_en_name)
+            await tb.write_csr_field(ctrl_addr, det_en_field, 1)
+        await ClockCycles(tb.clk, 5)
+
+        # Force: write 1 then 0
+        await tb.write_csr_field(force_addr, force_field, 1)
+        await tb.write_csr_field(force_addr, force_field, 0)
+        await ClockCycles(tb.clk, 10)
+
+        # Verify status bit is set
+        stat = await tb.read_csr_field(status_addr, stat_field)
+        assert stat == 1, (
+            f"{stat_name} should be 1 after FORCE with ENABLE=1, got {stat}")
+
+        # Verify irq_o is HIGH (may need to wait a cycle)
+        await ClockCycles(tb.clk, 5)
+        assert irq.value == 1, (
+            f"irq_o should be HIGH after FORCE {force_name}, got {int(irq.value)}")
+        log.info(f"  Part B: ENABLE=1 -> FORCE sets status and irq_o=1: OK")
+
+        # --- Part C: Clear status, verify irq_o goes LOW ---
+        await tb.write_csr_field(status_addr, stat_field, 1)
+        await ClockCycles(tb.clk, 10)
+
+        stat = await tb.read_csr_field(status_addr, stat_field)
+        assert stat == 0, (
+            f"{stat_name} should be 0 after W1C, got {stat}")
+        assert irq.value == 0, (
+            f"irq_o should be LOW after clearing {stat_name}, got {int(irq.value)}")
+        log.info(f"  Part C: W1C clears status and irq_o=0: OK")
+
+    log.info("test_ri_interrupt_force_all PASSED")
+
+    await tb.teardown()

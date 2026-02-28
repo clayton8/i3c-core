@@ -7988,3 +7988,403 @@ async def test_recovery_bypass_fifo_race(dut):
     dut._log.info(f"Bypass FIFO race test PASS ({len(data)} bytes)")
 
     await tb.teardown()
+
+
+
+# =============================================================================
+# xtti coverage gap tests: RI interrupt output path verification
+# =============================================================================
+
+
+@cocotb.test()
+async def test_recovery_readonly_write_irq(dut):
+    """
+    Verifies that writing to a read-only recovery register triggers the
+    RI_READONLY_ERR interrupt output (irq_o toggle 0->1->0).
+
+    Covers xtti coverage IDs 2.1, 2.2, 2.3:
+      - xintr_ri_readonly: irq_i, sts_o, sts_we_o, sts_i, sts_ena_i, irq_o
+
+    The interrupt instance has sig_ena_i hardwired to '1, so irq_o fires
+    as soon as status is set. We enable sts_ena_i (RI_READONLY_ERR_EN)
+    and trigger the error by writing to PROT_CAP (cmd=34, read-only).
+    """
+
+    i3c_controller, i3c_target, tb, recovery = await initialize(dut, timeout=100)
+
+    # Set virtual device dynamic address
+    await i3c_controller.i3c_ccc_write(
+        ccc=CCC.DIRECT.SETDASA, directed_data=[(VIRT_STATIC_ADDR, [VIRT_DYNAMIC_ADDR << 1])]
+    )
+
+    irq = dut.xi3c_wrapper.irq_o
+
+    # Enable RI_READONLY_ERR_EN in TARGET_ERR_INTR_ENABLE (bit [10])
+    current_enable = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_ENABLE.base_addr, 4)
+    )
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_ENABLE.base_addr,
+        int2dword(current_enable | (1 << 10)), 4
+    )
+
+    # Ensure RI_READONLY_ERR_DET_EN is set in TARGET_ERR_CTRL (bit [9])
+    current_ctrl = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.TTI.TARGET_ERR_CTRL.base_addr, 4)
+    )
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_CTRL.base_addr,
+        int2dword(current_ctrl | (1 << 9)), 4
+    )
+
+    # Clear any existing interrupt status
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.base_addr, int2dword(0xFFFFFFFF), 4
+    )
+    await ClockCycles(tb.clk, 10)
+
+    # Verify irq is LOW initially
+    assert irq.value == 0, f"IRQ expected 0 initially, got {int(irq.value)}"
+
+    # Trigger readonly error: write to PROT_CAP (cmd=34, read-only register)
+    dut._log.info("Sending WRITE to read-only register PROT_CAP (cmd=34)...")
+    await recovery.command_write(
+        VIRT_DYNAMIC_ADDR, 34, [0xAA, 0xBB]
+    )
+    await ClockCycles(tb.clk, 20)
+
+    # Wait for irq_o to go HIGH
+    irq_seen = False
+    for _ in range(200):
+        await RisingEdge(tb.clk)
+        if irq.value == 1:
+            irq_seen = True
+            break
+    assert irq_seen, "irq_o never went HIGH after readonly error"
+    dut._log.info("PASS: irq_o went HIGH after readonly error")
+
+    # Verify RI_READONLY_ERR_STAT is set (bit [10])
+    intr_status = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.base_addr, 4)
+    )
+    readonly_stat = (intr_status >> 10) & 0x1
+    dut._log.info(f"TARGET_ERR_INTR_STATUS = 0x{intr_status:08X}, RI_READONLY_ERR_STAT = {readonly_stat}")
+    assert readonly_stat == 1, "RI_READONLY_ERR_STAT should be set"
+
+    # Clear the status (W1C bit [10])
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.base_addr, int2dword(1 << 10), 4
+    )
+    await ClockCycles(tb.clk, 10)
+
+    # Verify irq_o goes LOW
+    assert irq.value == 0, f"irq_o should be LOW after clearing status, got {int(irq.value)}"
+    dut._log.info("PASS: irq_o went LOW after clearing status (toggle 0->1->0 verified)")
+
+    await tb.teardown()
+
+
+@cocotb.test()
+async def test_recovery_unsupported_cmd_irq(dut):
+    """
+    Verifies that sending an unsupported command code triggers the
+    RI_UNSUPPORTED_ERR interrupt output (irq_o toggle 0->1->0).
+
+    Covers xtti coverage ID 4.1:
+      - xintr_ri_unsupported: sts_o, sts_we_o, sts_i, sts_ena_i, irq_o
+
+    The interrupt instance has sig_ena_i hardwired to '1. We enable
+    sts_ena_i (RI_UNSUPPORTED_ERR_EN) and send cmd=0 (invalid).
+    """
+
+    i3c_controller, i3c_target, tb, recovery = await initialize(dut, timeout=100)
+
+    # Set virtual device dynamic address
+    await i3c_controller.i3c_ccc_write(
+        ccc=CCC.DIRECT.SETDASA, directed_data=[(VIRT_STATIC_ADDR, [VIRT_DYNAMIC_ADDR << 1])]
+    )
+
+    irq = dut.xi3c_wrapper.irq_o
+
+    # Enable RI_UNSUPPORTED_ERR_EN in TARGET_ERR_INTR_ENABLE (bit [11])
+    current_enable = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_ENABLE.base_addr, 4)
+    )
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_ENABLE.base_addr,
+        int2dword(current_enable | (1 << 11)), 4
+    )
+
+    # Ensure RI_UNSUPPORTED_ERR_DET_EN is set in TARGET_ERR_CTRL (bit [10])
+    current_ctrl = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.TTI.TARGET_ERR_CTRL.base_addr, 4)
+    )
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_CTRL.base_addr,
+        int2dword(current_ctrl | (1 << 10)), 4
+    )
+
+    # Clear any existing interrupt status
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.base_addr, int2dword(0xFFFFFFFF), 4
+    )
+    await ClockCycles(tb.clk, 10)
+
+    # Verify irq is LOW initially
+    assert irq.value == 0, f"IRQ expected 0 initially, got {int(irq.value)}"
+
+    # Trigger unsupported error: send invalid command code 0
+    dut._log.info("Sending WRITE with unsupported command code 0...")
+    await recovery.command_write_invalid_command(VIRT_DYNAMIC_ADDR, 0x00)
+    await ClockCycles(tb.clk, 20)
+
+    # Wait for irq_o to go HIGH
+    irq_seen = False
+    for _ in range(200):
+        await RisingEdge(tb.clk)
+        if irq.value == 1:
+            irq_seen = True
+            break
+    assert irq_seen, "irq_o never went HIGH after unsupported command error"
+    dut._log.info("PASS: irq_o went HIGH after unsupported command error")
+
+    # Verify RI_UNSUPPORTED_ERR_STAT is set (bit [11])
+    intr_status = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.base_addr, 4)
+    )
+    unsupported_stat = (intr_status >> 11) & 0x1
+    dut._log.info(f"TARGET_ERR_INTR_STATUS = 0x{intr_status:08X}, RI_UNSUPPORTED_ERR_STAT = {unsupported_stat}")
+    assert unsupported_stat == 1, "RI_UNSUPPORTED_ERR_STAT should be set"
+
+    # Clear the status (W1C bit [11])
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.base_addr, int2dword(1 << 11), 4
+    )
+    await ClockCycles(tb.clk, 10)
+
+    # Verify irq_o goes LOW
+    assert irq.value == 0, f"irq_o should be LOW after clearing status, got {int(irq.value)}"
+    dut._log.info("PASS: irq_o went LOW after clearing status (toggle 0->1->0 verified)")
+
+    await tb.teardown()
+
+
+@cocotb.test()
+async def test_ri_rx_fifo_overflow_irq(dut):
+    """
+    Verifies that RX FIFO overflow triggers the RI_RX_FIFO_OVERFLOW_ERR
+    interrupt output (irq_o toggle 0->1->0) when both DET_EN and INTR_EN
+    are enabled.
+
+    Covers xtti coverage ID 3.2:
+      - xintr_ri_rx_fifo_overflow: irq_o toggle
+
+    Existing test_indirect_fifo_large_write verifies the status bit but
+    does NOT enable INTR_EN, so irq_o never fires. This test enables both
+    DET_EN (sts_ena_i) and INTR_EN (sig_ena_i) to close the toggle gap.
+    """
+
+    i3c_controller, i3c_target, tb, recovery = await initialize(dut, timeout=500)
+
+    # Set virtual device dynamic address
+    await i3c_controller.i3c_ccc_write(
+        ccc=CCC.DIRECT.SETDASA, directed_data=[(VIRT_STATIC_ADDR, [VIRT_DYNAMIC_ADDR << 1])]
+    )
+
+    irq = dut.xi3c_wrapper.irq_o
+
+    # Enable RI_RX_FIFO_OVERFLOW_ERR_DET_EN in TARGET_ERR_CTRL (bit [11])
+    current_ctrl = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.TTI.TARGET_ERR_CTRL.base_addr, 4)
+    )
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_CTRL.base_addr,
+        int2dword(current_ctrl | (1 << 11)), 4
+    )
+
+    # Enable RI_RX_FIFO_OVERFLOW_ERR_EN in TARGET_ERR_INTR_ENABLE (bit [12])
+    current_enable = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_ENABLE.base_addr, 4)
+    )
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_ENABLE.base_addr,
+        int2dword(current_enable | (1 << 12)), 4
+    )
+
+    # Clear any existing interrupt status
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.base_addr, int2dword(0xFFFFFFFF), 4
+    )
+
+    # Reset INDIRECT_FIFO
+    await tb.write_csr_field(
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_CTRL_0.base_addr,
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_CTRL_0.RESET,
+        0x1,
+    )
+    await ClockCycles(tb.clk, 10)
+
+    # Verify irq is LOW initially
+    assert irq.value == 0, f"IRQ expected 0 initially, got {int(irq.value)}"
+
+    # Trigger RX FIFO overflow: write 300 bytes (exceeds FIFO capacity)
+    large_data = [(i & 0xFF) for i in range(300)]
+    dut._log.info("Sending 300-byte write to INDIRECT_FIFO_DATA to trigger RX FIFO overflow...")
+    try:
+        await recovery.command_write(
+            VIRT_DYNAMIC_ADDR,
+            I3cRecoveryInterface.Command.INDIRECT_FIFO_DATA,
+            large_data
+        )
+    except Exception as e:
+        dut._log.info(f"Large write raised exception (expected): {e}")
+
+    await ClockCycles(tb.clk, 20)
+
+    # Wait for irq_o to go HIGH
+    irq_seen = False
+    for _ in range(200):
+        await RisingEdge(tb.clk)
+        if irq.value == 1:
+            irq_seen = True
+            break
+    assert irq_seen, "irq_o never went HIGH after RX FIFO overflow"
+    dut._log.info("PASS: irq_o went HIGH after RX FIFO overflow")
+
+    # Verify RI_RX_FIFO_OVERFLOW_ERR_STAT is set (bit [12])
+    intr_status = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.base_addr, 4)
+    )
+    rx_overflow_stat = (intr_status >> 12) & 0x1
+    dut._log.info(f"TARGET_ERR_INTR_STATUS = 0x{intr_status:08X}, RI_RX_FIFO_OVERFLOW_ERR_STAT = {rx_overflow_stat}")
+    assert rx_overflow_stat == 1, "RI_RX_FIFO_OVERFLOW_ERR_STAT should be set"
+
+    # Clear the status (W1C bit [12])
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.base_addr, int2dword(1 << 12), 4
+    )
+    await ClockCycles(tb.clk, 10)
+
+    # Verify irq_o goes LOW
+    assert irq.value == 0, f"irq_o should be LOW after clearing status, got {int(irq.value)}"
+    dut._log.info("PASS: irq_o went LOW after clearing status (toggle 0->1->0 verified)")
+
+    await tb.teardown()
+
+
+@cocotb.test()
+async def test_ri_indirect_fifo_overflow_irq(dut):
+    """
+    Verifies that INDIRECT FIFO overflow triggers the
+    RI_INDIRECT_FIFO_OVERFLOW_ERR interrupt output (irq_o toggle 0->1->0)
+    when both DET_EN and INTR_EN are enabled.
+
+    Covers xtti coverage ID 1.1:
+      - xintr_ri_indirect_fifo_overflow: irq_o toggle
+
+    Two writes totaling 300 bytes (48 + 252) exceed the 256-byte FIFO.
+    """
+
+    i3c_controller, i3c_target, tb, recovery = await initialize(dut, timeout=500)
+
+    # Set virtual device dynamic address
+    await i3c_controller.i3c_ccc_write(
+        ccc=CCC.DIRECT.SETDASA, directed_data=[(VIRT_STATIC_ADDR, [VIRT_DYNAMIC_ADDR << 1])]
+    )
+
+    irq = dut.xi3c_wrapper.irq_o
+
+    # Enable RI_INDIRECT_FIFO_OVERFLOW_ERR_DET_EN in TARGET_ERR_CTRL (bit [12])
+    current_ctrl = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.TTI.TARGET_ERR_CTRL.base_addr, 4)
+    )
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_CTRL.base_addr,
+        int2dword(current_ctrl | (1 << 12)), 4
+    )
+
+    # Enable RI_INDIRECT_FIFO_OVERFLOW_ERR_EN in TARGET_ERR_INTR_ENABLE (bit [13])
+    current_enable = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_ENABLE.base_addr, 4)
+    )
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_ENABLE.base_addr,
+        int2dword(current_enable | (1 << 13)), 4
+    )
+
+    # Clear any existing interrupt status
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.base_addr, int2dword(0xFFFFFFFF), 4
+    )
+
+    # Reset INDIRECT_FIFO
+    await tb.write_csr_field(
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_CTRL_0.base_addr,
+        tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_CTRL_0.RESET,
+        0x1,
+    )
+    await ClockCycles(tb.clk, 10)
+
+    # Verify irq is LOW initially
+    assert irq.value == 0, f"IRQ expected 0 initially, got {int(irq.value)}"
+
+    # Write 1: 48 bytes -- fills FIFO partially
+    write1_data = [(i & 0xFF) for i in range(48)]
+    dut._log.info("WRITE 1: 48 bytes to INDIRECT_FIFO_DATA...")
+    await recovery.command_write(
+        VIRT_DYNAMIC_ADDR,
+        I3cRecoveryInterface.Command.INDIRECT_FIFO_DATA,
+        write1_data
+    )
+    await ClockCycles(tb.clk, 20)
+
+    # Verify no overflow yet
+    intr_status = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.base_addr, 4)
+    )
+    indirect_overflow_stat = (intr_status >> 13) & 0x1
+    assert indirect_overflow_stat == 0, "No overflow expected after 48-byte write"
+
+    # Write 2: 252 bytes -- total 300 > 256, triggers INDIRECT FIFO overflow
+    write2_data = [((48 + i) & 0xFF) for i in range(252)]
+    dut._log.info("WRITE 2: 252 bytes to INDIRECT_FIFO_DATA (overflow expected)...")
+    try:
+        await recovery.command_write(
+            VIRT_DYNAMIC_ADDR,
+            I3cRecoveryInterface.Command.INDIRECT_FIFO_DATA,
+            write2_data
+        )
+    except Exception as e:
+        dut._log.info(f"Write 2 raised exception (expected for overflow): {e}")
+
+    await ClockCycles(tb.clk, 20)
+
+    # Wait for irq_o to go HIGH
+    irq_seen = False
+    for _ in range(200):
+        await RisingEdge(tb.clk)
+        if irq.value == 1:
+            irq_seen = True
+            break
+    assert irq_seen, "irq_o never went HIGH after INDIRECT FIFO overflow"
+    dut._log.info("PASS: irq_o went HIGH after INDIRECT FIFO overflow")
+
+    # Verify RI_INDIRECT_FIFO_OVERFLOW_ERR_STAT is set (bit [13])
+    intr_status = dword2int(
+        await tb.read_csr(tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.base_addr, 4)
+    )
+    indirect_overflow_stat = (intr_status >> 13) & 0x1
+    dut._log.info(f"TARGET_ERR_INTR_STATUS = 0x{intr_status:08X}, RI_INDIRECT_FIFO_OVERFLOW_ERR_STAT = {indirect_overflow_stat}")
+    assert indirect_overflow_stat == 1, "RI_INDIRECT_FIFO_OVERFLOW_ERR_STAT should be set"
+
+    # Clear the status (W1C bit [13])
+    await tb.write_csr(
+        tb.reg_map.I3C_EC.TTI.TARGET_ERR_INTR_STATUS.base_addr, int2dword(1 << 13), 4
+    )
+    await ClockCycles(tb.clk, 10)
+
+    # Verify irq_o goes LOW
+    assert irq.value == 0, f"irq_o should be LOW after clearing status, got {int(irq.value)}"
+    dut._log.info("PASS: irq_o went LOW after clearing status (toggle 0->1->0 verified)")
+
+    await tb.teardown()
