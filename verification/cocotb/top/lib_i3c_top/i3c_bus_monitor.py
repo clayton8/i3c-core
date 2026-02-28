@@ -99,6 +99,7 @@ class I3cBusMonitor:
         # Violation tracking
         self.violations = []
         self.violation_count = 0
+        self._suppressed_checks = set()  # Check IDs to suppress (e.g. "BUS_CONTENTION")
 
         # Statistics
         self.stats = {
@@ -223,13 +224,30 @@ class I3cBusMonitor:
             self._task = None
 
     def _record_violation(self, check_id, message):
-        """Record a violation and raise immediately to fail the test."""
+        """Record a violation and raise immediately to fail the test.
+
+        If check_id is in _suppressed_checks, the violation is logged as a
+        warning but not recorded and no exception is raised. This allows
+        tests to intentionally violate bus protocol (e.g. STOP during
+        target-driven read) without triggering the monitor.
+        """
         time_ns = cocotb.utils.get_sim_time('ns')
         full_msg = f"[{check_id}] @{time_ns}ns phase={self._phase.name}: {message}"
+        if check_id in self._suppressed_checks:
+            self.log.warning(f"I3cBusMonitor SUPPRESSED: {full_msg}")
+            return
         self.violations.append(full_msg)
         self.violation_count += 1
         self.log.error(f"I3cBusMonitor VIOLATION: {full_msg}")
         raise AssertionError(full_msg)
+
+    def suppress_check(self, check_id):
+        """Suppress a specific check ID. Use for intentional protocol violations."""
+        self._suppressed_checks.add(check_id)
+
+    def unsuppress_check(self, check_id):
+        """Re-enable a previously suppressed check ID."""
+        self._suppressed_checks.discard(check_id)
 
     def check(self):
         """End-of-test check: assert no violations were recorded.
