@@ -119,7 +119,7 @@ regfile BaseRegs #(
                 1 - Big Endian";
             sw = r;
             hw = na;
-            reset = Data_endianness;
+            reset = 1'b0; // FUTUREFIX: was `Data_endianness`
         } DATA_BYTE_ORDER_MODE[4:4];
         field {
             name = "AUTOCMD_DATA_RPT";
@@ -130,7 +130,7 @@ regfile BaseRegs #(
                 1 - separated reporting";
             sw = AUTOCMD_separated_reporting_dynamic ? rw : r;
             hw = AUTOCMD_separated_reporting_dynamic ? r : na;
-            reset = AUTOCMD_separated_reporting_support;
+            reset = 1'b0; // FUTUREFIX: was `AUTOCMD_separated_reporting_support`
         } AUTOCMD_DATA_RPT[3:3];
         field {
             name = "IBA_INCLUDE";
@@ -178,7 +178,7 @@ regfile BaseRegs #(
                 1 - controller supports scatter-gather";
             sw = r;
             hw = na;
-            reset = DEV_CTX_SG_support;
+            reset = 1'b0; // FUTUREFIX: was `DEV_CTX_SG_support`
         } SG_CAPABILITY_DC_EN[30:30];
         field {
             name = "SG_CAPABILITY_IBI_EN";
@@ -189,7 +189,7 @@ regfile BaseRegs #(
                 1 - controller supports scatter-gather";
             sw = r;
             hw = na;
-            reset = DEV_IBI_SG_support && DMA_support;
+            reset = 1'b0; // FUTUREFIX: was `DEV_IBI_SG_support && DMA_support`
         } SG_CAPABILITY_IBI_EN[29:29];
         field {
             name = "SG_CAPABILITY_CR_EN";
@@ -200,7 +200,7 @@ regfile BaseRegs #(
                 1 - controller supports scatter-gather";
             sw = r;
             hw = na;
-            reset = DEV_CR_SG_support && DMA_support;
+            reset = 1'b0; // FUTUREFIX: was `DEV_CR_SG_support && DMA_support`
         } SG_CAPABILITY_CR_EN[28:28];
         field {
             name = "CMD_SIZE";
@@ -211,7 +211,7 @@ regfile BaseRegs #(
                 all other reserved.";
             sw = r;
             hw = na;
-            reset = CMD_size_reset;
+            reset = 2'b0; // FUTUREFIX: was `CMD_size_reset`
         } CMD_SIZE[21:20];
         field {
             name = "SCHEDULED_COMMANDS_EN";
@@ -222,7 +222,7 @@ regfile BaseRegs #(
                 1 - supported";
             sw =  r;
             hw = na;
-            reset = Scheduled_commands_support;
+            reset = 1'b0; // FUTUREFIX: was `Scheduled_commands_support`
         } SCHEDULED_COMMANDS_EN[13:13];
         field {
             name = "IBI_CREDIT_COUNT_EN";
@@ -233,7 +233,7 @@ regfile BaseRegs #(
                 1 - supported";
             sw = r;
             hw = na;
-            reset = IBI_credit_count_support;
+            reset = 1'b0; // FUTUREFIX: was `IBI_credit_count_support`
         } IBI_CREDIT_COUNT_EN[12:12];
         field {
             name = "IBI_DATA_ABORT_EN";
@@ -244,7 +244,7 @@ regfile BaseRegs #(
                 1 - supported";
             sw = r;
             hw = na;
-            reset = IBI_data_abort_support;
+            reset = 1'b0; // FUTUREFIX: was `IBI_data_abort_support`
         } IBI_DATA_ABORT_EN[11:11];
         field {
             name = "CMD_CCC_DEFBYTE";
@@ -266,7 +266,7 @@ regfile BaseRegs #(
                 1 - supported";
             sw = r;
             hw = na ;
-            reset = HDR_TS_support;
+            reset = 1'b0; // FUTUREFIX: was `HDR_TS_support`
         } HDR_TS_EN[7:7];
         field {
             name = "HDR_DDR_EN";
@@ -277,7 +277,7 @@ regfile BaseRegs #(
                 1 - supported";
             sw = r;
             hw = na ;
-            reset = HDR_DDR_support;
+            reset = 1'b0; // FUTUREFIX: was `HDR_DDR_support`
         } HDR_DDR_EN[6:6];
         field {
             name = "STANDBY_CR_CAP";
@@ -288,7 +288,7 @@ regfile BaseRegs #(
                 1- supported, this controller can hand off I3C to secondary controller";
             sw = r;
             hw = na;
-            reset = Handoff_support;
+            reset = 1'b0; // FUTUREFIX: was `Handoff_support`
         } STANDBY_CR_CAP[5:5];
         field {
             name = "AUTO_COMMAND";
@@ -299,7 +299,7 @@ regfile BaseRegs #(
                 1 - supported";
             sw = r;
             hw = na;
-            reset = IBI_auto_command_support;
+            reset = 1'b0; // FUTUREFIX: was `IBI_auto_command_support`
         } AUTO_COMMAND[3:3];
         field {
             name = "COMBO_COMMAND";
@@ -310,7 +310,7 @@ regfile BaseRegs #(
                 1 - supported";
             sw = r;
             hw = na;
-            reset = Combo_command_support;
+            reset = 1'b0; // FUTUREFIX: was `Combo_command_support`
         } COMBO_COMMAND [2:2];
     } HC_CAPABILITIES @ 0xC;
     reg {
@@ -554,14 +554,14 @@ regfile BaseRegs #(
                 1:15 - reserved.";
             sw = r;
             hw = na;
-            reset = DAT_entry_size;
+            reset = 4'h0; // FUTUREFIX: was `DAT_entry_size`
         } ENTRY_SIZE[31:28];
         field {
             name = "TABLE_SIZE";
             desc = "Max number of DAT entries.";
             sw = r;
             hw = na;
-            reset = DAT_table_size;
+            reset = 7'h7F; // FUTUREFIX: was `DAT_table_size`
         } TABLE_SIZE[18:12];
         field {
             name = "TABLE_OFFSET";
@@ -582,7 +582,7 @@ regfile BaseRegs #(
                 1:15 - Reserved.";
             sw = r;
             hw = na;
-            reset = DCT_entry_size;
+            reset = 4'h0; // FUTUREFIX: was `DCT_entry_size`
         } ENTRY_SIZE[31:28];
         field {
             name = "TABLE_INDEX";
@@ -597,14 +597,14 @@ regfile BaseRegs #(
             desc = "Max number of DCT entries.";
             sw = r;
             hw = na;
-            reset = DCT_table_size;
+            reset = 7'h7F; // FUTUREFIX: was `DCT_table_size`
         } TABLE_SIZE[18:12];
         field {
             name = "TABLE_OFFSET";
             desc = "DCT entry offset in respect to BASE address.";
             sw = r;
             hw = na;
-            reset = DCT_offset;
+            reset = 12'h800; // FUTUREFIX: was `DCT_offset`
         } TABLE_OFFSET[11:0];
     } DCT_SECTION_OFFSET @ 0x34;
     reg {
@@ -614,7 +614,7 @@ regfile BaseRegs #(
             desc = "DMA ring headers section offset. Invalid if 0.";
             sw = r;
             hw = na;
-            reset = Ring_offset;
+            reset = 16'h0000; // FUTUREFIX: was `Ring_offset`
         } SECTION_OFFSET[15:0];
     } RING_HEADERS_SECTION_OFFSET @ 0x38;
     reg {
@@ -624,7 +624,7 @@ regfile BaseRegs #(
             desc = "PIO section offset. Invalid if 0.";
             sw = r;
             hw = na;
-            reset = PIO_offset;
+            reset = 16'h0080; // FUTUREFIX: was `PIO_offset`
         } SECTION_OFFSET[15:0];
     } PIO_SECTION_OFFSET @ 0x3C;
     reg {
@@ -634,7 +634,7 @@ regfile BaseRegs #(
             desc = "Extended Capabilities section offset. Invalid if 0.";
             sw = r;
             hw = na;
-            reset = Ext_offset;
+            reset = 16'h0100; // FUTUREFIX: was `Ext_offset`
         } SECTION_OFFSET[15:0];
     } EXT_CAPS_SECTION_OFFSET @ 0x40;
     reg {
@@ -644,7 +644,7 @@ regfile BaseRegs #(
             desc = "Bitmask of supported MIPI commands.";
             sw = r;
             hw = na;
-            reset = MIPI_commands;
+            reset = 15'h0035; // FUTUREFIX: was `MIPI_commands`
         } MIPI_CMDS_SUPPORTED[15:1];
         field {
             name = "ICC_SUPPORT";

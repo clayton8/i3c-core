@@ -131,28 +131,28 @@ regfile PIORegs #(
             desc = "TX queue size is equal to 2^(N+1), where N is this field value";
             sw = r;
             hw = na;
-            reset = tx_fifo_size;
+            reset = 8'h05; // FUTUREFIX: was `tx_fifo_size`
         } TX_DATA_BUFFER_SIZE[31:24];
         field {
             name = "RX_DATA_BUFFER_SIZE";
             desc = "RX queue size is equal to 2^(N+1), where N is this field value";
             sw = r;
             hw = na;
-            reset = rx_fifo_size;
+            reset = 8'h05; // FUTUREFIX: was `rx_fifo_size`
         } RX_DATA_BUFFER_SIZE[23:16];
         field {
             name = "IBI_STATUS_SIZE";
             desc = "IBI Queue size is equal to N";
             sw = r;
             hw = na;
-            reset = ibi_fifo_size;
+            reset = 8'h40; // FUTUREFIX: was `ibi_fifo_size`
         } IBI_STATUS_SIZE[15:8];
         field {
             name = "CR_QUEUE_SIZE";
             desc = "Command/Response queue size is equal to N";
             sw = r;
             hw = na;
-            reset = cmd_fifo_size;
+            reset = 8'h40; // FUTUREFIX: was `cmd_fifo_size`
         } CR_QUEUE_SIZE[7:0];
     } QUEUE_SIZE @ 0x18;
     reg {
@@ -162,7 +162,7 @@ regfile PIORegs #(
             desc = "1 indicates that IBI queue size is equal to 8*IBI_STATUS_SIZE";
             sw = r;
             hw = na;
-            reset = ext_ibi_size;
+            reset = 1'b0; // FUTUREFIX: was `ext_ibi_size`
         } EXT_IBI_QUEUE_EN[28:28];
         field {
             name = "ALT_RESP_QUEUE_EN";
@@ -170,14 +170,14 @@ regfile PIORegs #(
                 ALT_RESP_QUEUE_SIZE contains response queue size";
             sw = r;
             hw = na;
-            reset = cmd_fifo_size != resp_fifo_size;
+            reset = 1'b0; // FUTUREFIX: was `cmd_fifo_size != resp_fifo_size`
         } ALT_RESP_QUEUE_EN[24:24];
         field {
             name = "ALT_RESP_QUEUE_SIZE";
             desc = "Valid only if ALT_RESP_QUEUE_EN is set. Contains response queue size";
             sw = r;
             hw = na;
-            reset = resp_fifo_size;
+            reset = 8'h40; // FUTUREFIX: was `resp_fifo_size`
         } ALT_RESP_QUEUE_SIZE[7:0];
     } ALT_QUEUE_SIZE @ 0x1C;
     reg {
