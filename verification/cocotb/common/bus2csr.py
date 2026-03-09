@@ -21,7 +21,7 @@ from reg_map import reg_map
 import cocotb
 from cocotb.clock import Clock
 from cocotb.handle import SimHandleBase
-from cocotb.triggers import ClockCycles, RisingEdge, Timer, with_timeout
+from cocotb.triggers import ClockCycles, Lock, RisingEdge, Timer, with_timeout
 
 
 # Helpers
@@ -134,6 +134,9 @@ class AHBTestInterface(FrontBusTestInterface):
         # Cocotb-ahb-specific construct for simulation purposes
         self.wrapper = InterconnectWrapper()
 
+        # Serialize AHB bus access; SimSimpleManager is not reentrant
+        self._bus_lock = Lock()
+
     async def register_test_interfaces(self, *args, **kw):
         # Clocks & resets
         self.AHBManager.register_clock(self.clk).register_reset(self.rst_n, True)
@@ -161,9 +164,10 @@ class AHBTestInterface(FrontBusTestInterface):
         """Send a read request & await the response for 'timeout' in 'units'."""
         if arid:
             self.dut._log.debug(f"AHB doesn't support user id, ignoring arid={arid}")
-        self.AHBManager.read(addr, size)
-        await with_timeout(self.AHBManager.transfer_done(), timeout, units)
-        read = self.AHBManager.get_rsp(addr, self.data_byte_width)
+        async with self._bus_lock:
+            self.AHBManager.read(addr, size)
+            await with_timeout(self.AHBManager.transfer_done(), timeout, units)
+            read = self.AHBManager.get_rsp(addr, self.data_byte_width)
         return read
 
     async def write_csr(
@@ -184,8 +188,9 @@ class AHBTestInterface(FrontBusTestInterface):
             data = data + [0 for _ in range(size - data_len)]
         # Write strobe is not supported by DUT's AHB-Lite; enable all bytes
         strb = [1 for _ in range(size)]
-        self.AHBManager.write(addr, len(strb), data, strb)
-        await with_timeout(self.AHBManager.transfer_done(), timeout, units)
+        async with self._bus_lock:
+            self.AHBManager.write(addr, len(strb), data, strb)
+            await with_timeout(self.AHBManager.transfer_done(), timeout, units)
 
 
 # Generic axi2csr test interface

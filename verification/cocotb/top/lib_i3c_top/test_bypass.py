@@ -453,7 +453,8 @@ async def test_image_activated(dut):
         tb.reg_map.I3C_EC.SOCMGMTIF.REC_INTF_REG_W1C_ACCESS.RECOVERY_CTRL_ACTIVATE_REC_IMG,
         0xF,
     )
-    await RisingEdge(tb.clk)
+    # Wait for register propagation: SoC Mgmt swmod -> RECOVERY_CTRL latch -> combinational output
+    await ClockCycles(tb.clk, 2)
 
     # Check if image_activated is asserted
     assert bool(
@@ -474,6 +475,8 @@ async def test_image_activated(dut):
         tb.reg_map.I3C_EC.SECFWRECOVERYIF.RECOVERY_CTRL.ACTIVATE_REC_IMG,
         0xFF,
     )
+    # Wait for register propagation through CSR pipeline
+    await ClockCycles(tb.clk, 2)
 
     # Check if image_activated is deasserted
     assert not bool(
@@ -618,8 +621,8 @@ async def test_recovery_flow(dut):
         assert recovery_ctrl == 0, f"RECOVERY_CTRL mismatch: expected 0, got {recovery_ctrl}"
 
         # Write 0 to Indirect FIFO Control
-        await tb.write_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_CTRL_0.base_addr, 0x0, 4)
-        await tb.write_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_CTRL_1.base_addr, 0x0, 4)
+        await tb.write_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_CTRL_0.base_addr, int2dword(0x0), 4)
+        await tb.write_csr(tb.reg_map.I3C_EC.SECFWRECOVERYIF.INDIRECT_FIFO_CTRL_1.base_addr, int2dword(0x0), 4)
 
         # Write 1 to Indirect FIFO Control Reset field
         await tb.write_csr_field(
