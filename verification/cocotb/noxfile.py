@@ -304,6 +304,12 @@ def i2c_target_fsm_verify(session, test_group, test_name, coverage, simulator):
         "test_target_reset",
         "test_ccc",
         "test_csr_access",
+        "test_bypass",
+        "test_empty_queue_read",
+        "test_ibi",
+        "test_ibi_multi_queue",
+        "test_te_errors",
+        "test_tsco_violation",
     ],
 )
 @nox.parametrize("coverage", coverage_types)
@@ -326,6 +332,11 @@ def i3c_ahb_verify(session, test_group, test_name, coverage, simulator):
         "test_ccc",
         "test_csr_access",
         "test_bypass",
+        "test_empty_queue_read",
+        "test_ibi",
+        "test_ibi_multi_queue",
+        "test_te_errors",
+        "test_tsco_violation",
     ],
 )
 @nox.parametrize("coverage", coverage_types)
