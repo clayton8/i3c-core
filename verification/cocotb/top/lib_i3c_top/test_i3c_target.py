@@ -1352,7 +1352,7 @@ async def test_priv_write_stop_during_tbit(dut):
 
     # Use byte value with LSB=0 so SDA is LOW after 8th data bit
     complete_data = [0xDE, 0xAD, 0xBE, 0xEF, 0xCA]
-    abort_byte = 0xFE  # bits: 11111110, LSB=0 → SDA=0 after 8 data bits
+    abort_byte = 0xFE  # bits: 11111110, LSB=0 -> SDA=0 after 8 data bits
 
     await i3c_controller.take_bus_control()
     await i3c_controller.send_start()
@@ -1370,11 +1370,11 @@ async def test_priv_write_stop_during_tbit(dut):
 
     # SCL is HIGH, SDA is LOW (abort_byte LSB=0).
     # Create STOP without providing a SCL posedge for the T-bit:
-    # SDA LOW→HIGH while SCL is HIGH = STOP condition.
+    # SDA LOW->HIGH while SCL is HIGH = STOP condition.
     # The bus_rx_flow never gets a SCL posedge for the T-bit, so bus_rx_rsp.done
     # does NOT fire. The FSM is in RxPWriteTbit when bus_stop_det_i fires.
     await Timer(1, "ns")
-    i3c_controller.sda = 1  # SDA rising → STOP detected by bus_monitor
+    i3c_controller.sda = 1  # SDA rising -> STOP detected by bus_monitor
     await Timer(100, "ns")
 
     # Fix BFM state to reflect bus idle
@@ -1432,7 +1432,7 @@ async def test_priv_write_sr_during_tbit(dut):
 
     complete_data = [0xDE, 0xAD, 0xBE, 0xEF, 0xCA]
     # Use byte value with LSB=1 so SDA is HIGH after 8th data bit
-    abort_byte = 0xAB  # bits: 10101011, LSB=1 → SDA=1 after 8 data bits
+    abort_byte = 0xAB  # bits: 10101011, LSB=1 -> SDA=1 after 8 data bits
 
     await i3c_controller.take_bus_control()
     await i3c_controller.send_start()
@@ -1449,9 +1449,9 @@ async def test_priv_write_sr_during_tbit(dut):
 
     # SCL is HIGH, SDA is HIGH (abort_byte LSB=1).
     # Create Sr without providing a SCL posedge for the T-bit:
-    # SDA HIGH→LOW while SCL is HIGH = START/RESTART condition.
+    # SDA HIGH->LOW while SCL is HIGH = START/RESTART condition.
     await Timer(1, "ns")
-    i3c_controller.sda = 0  # SDA falling → RESTART detected by bus_monitor
+    i3c_controller.sda = 0  # SDA falling -> RESTART detected by bus_monitor
     await Timer(100, "ns")
 
     # Complete the bus frame with STOP

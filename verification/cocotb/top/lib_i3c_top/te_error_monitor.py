@@ -232,7 +232,7 @@ class PostTe2DataIntegrityMonitor:
 
     Uses clock-edge sampling (not RisingEdge on te2_err) to match RTL
     behavior: the te2_err_priv_wr signal can glitch for one delta cycle
-    during the RxPWriteData→RxPWriteTbit FSM transition when the stale
+    during the RxPWriteData->RxPWriteTbit FSM transition when the stale
     byte-done coincides with the new state_q.  All RTL consumers of
     te2_err are registered, so the glitch is harmless in hardware.
     Sampling at the clock edge filters these transient glitches.

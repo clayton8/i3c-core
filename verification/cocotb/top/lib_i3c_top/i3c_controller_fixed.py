@@ -6,7 +6,7 @@ This module provides extensions to the I3cController from cocotbext-i3c that add
 arbitration-aware IBI handling, chaining, and stress testing.
 
 Key Features:
-    - Arbitration-aware write_addr_header: detects IBI during S→0x7E phase
+    - Arbitration-aware write_addr_header: detects IBI during S->0x7E phase
       per I3C spec Sec.5.1.2.2.1 and handles it inline
     - Automatic IBI retry in i3c_write/i3c_read/i3c_ccc_write/i3c_ccc_read
     - One-shot IBI chaining knobs: CCC, Private Write, skip_data, max_data
@@ -33,7 +33,7 @@ from cocotb.triggers import Event, FallingEdge, Timer, NextTimeStep
 class IbiArbitrationEvent(Exception):
     pass
 
-# Max retries when IBI keeps firing during transfer Start→0x7E
+# Max retries when IBI keeps firing during transfer Start->0x7E
 _MAX_IBI_RETRIES = 10
 
 
@@ -62,7 +62,7 @@ class I3cControllerFixed(I3cController):
     # =========================================================================
 
     def set_ibi_chain_ccc(self, ccc, ccc_data=None, ccc_addr=None):
-        """Configure: after next IBI ACK/NACK, chain Sr→CCC before STOP."""
+        """Configure: after next IBI ACK/NACK, chain Sr->CCC before STOP."""
         assert self._ibi_chain_write_addr is None, \
             "Cannot set CCC chain while write chain is active"
         self._ibi_chain_ccc = ccc
@@ -70,7 +70,7 @@ class I3cControllerFixed(I3cController):
         self._ibi_chain_ccc_addr = ccc_addr
 
     def set_ibi_chain_write(self, addr, data):
-        """Configure: after next IBI ACK/NACK, chain Sr→Private Write before STOP."""
+        """Configure: after next IBI ACK/NACK, chain Sr->Private Write before STOP."""
         assert self._ibi_chain_ccc is None, \
             "Cannot set write chain while CCC chain is active"
         self._ibi_chain_write_addr = addr
@@ -145,7 +145,7 @@ class I3cControllerFixed(I3cController):
         """Drive a bit in open-drain and read back the bus value.
 
         Per I3C spec Sec.5.1.2.2.1: if the device drives Hi-Z (1) but reads
-        Low (0), another device is driving → arbitration lost.
+        Low (0), another device is driving -> arbitration lost.
 
         Returns:
             (arb_ok, bus_value): arb_ok is False if we lost arbitration.
@@ -265,7 +265,7 @@ class I3cControllerFixed(I3cController):
         return result
 
     async def _execute_chain_ccc(self, chain, result):
-        """Execute Sr→CCC chain after IBI handling."""
+        """Execute Sr->CCC chain after IBI handling."""
         await self.send_start()
         # Use base class send_byte for 0x7E after Sr (not arbitrable)
         await I3cController.write_addr_header(self, I3C_RSVD_BYTE)
@@ -292,7 +292,7 @@ class I3cControllerFixed(I3cController):
         await self.send_stop()
 
     async def _execute_chain_write(self, chain, result):
-        """Execute Sr→Private Write chain after IBI handling."""
+        """Execute Sr->Private Write chain after IBI handling."""
         await self.send_start()
         await I3cController.write_addr_header(self, I3C_RSVD_BYTE)
         await self.send_start()
@@ -383,7 +383,7 @@ class I3cControllerFixed(I3cController):
         inject_tbit_err: bool = False,
         send_rsvd: bool = True,
     ) -> I3cPWResp:
-        """I3C Private Write with automatic IBI retry during S→0x7E."""
+        """I3C Private Write with automatic IBI retry during S->0x7E."""
         await self.take_bus_control()
         self.log_info(f"I3C: Write data ({mode.name}) {data} @ {hex(addr)}")
 
@@ -427,7 +427,7 @@ class I3cControllerFixed(I3cController):
         mode: I3cXferMode = I3cXferMode.PRIVATE,
         send_rsvd: bool = True,
     ) -> I3cPRResp:
-        """I3C Private Read with automatic IBI retry during S→0x7E."""
+        """I3C Private Read with automatic IBI retry during S->0x7E."""
         await self.take_bus_control()
         data = bytearray()
         self.log_info(f"I3C: Read data ({mode.name}) @ {hex(addr)}")
@@ -470,7 +470,7 @@ class I3cControllerFixed(I3cController):
         stop: bool = True,
         pull_scl_low: bool = False,
     ) -> Iterable[bool]:
-        """Issue CCC Write with automatic IBI retry during S→0x7E."""
+        """Issue CCC Write with automatic IBI retry during S->0x7E."""
         await self.take_bus_control()
         is_broadcast = ccc <= 0x7F
 
@@ -525,7 +525,7 @@ class I3cControllerFixed(I3cController):
         defining_byte: Optional[int] = None,
         stop: bool = True,
     ) -> Iterable[tuple]:
-        """Issue directed CCC Read with automatic IBI retry during S→0x7E."""
+        """Issue directed CCC Read with automatic IBI retry during S->0x7E."""
         if isinstance(addr, int):
             addr = [addr]
 
@@ -942,7 +942,7 @@ class I3cControllerFixed(I3cController):
         Execute ENTDAA from the controller side.
 
         Protocol:
-          S + 7E/W + ACK → 0x07 + T-bit
+          S + 7E/W + ACK -> 0x07 + T-bit
           For each target:
             Sr + 7E/R + ACK
             Read 64 bits (PID+BCR+DCR) via recv_bit_od

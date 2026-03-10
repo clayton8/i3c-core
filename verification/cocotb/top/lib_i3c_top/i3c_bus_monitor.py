@@ -604,7 +604,7 @@ class I3cBusMonitor:
             return
 
         if self._is_addressed_to_dut or self._is_broadcast:
-            # ENTDAA: Sr + 7'h7E/R ACK → enter DAA data phase (S5.1.4.2)
+            # ENTDAA: Sr + 7'h7E/R ACK -> enter DAA data phase (S5.1.4.2)
             if self._is_entdaa and self._is_broadcast and self._rnw == 1:
                 self._phase = BusPhase.ENTDAA
                 self._entdaa_bit_count = 0
@@ -801,7 +801,7 @@ class I3cBusMonitor:
         Controller drives ACK low in OD; NACK = passive (not driving).
 
         Check 6 scheduling: If ACKed (SDA=0), schedule a tSCO handoff check
-        for the Target→PP transition to MDB (S5.1.2.3.2).
+        for the Target->PP transition to MDB (S5.1.2.3.2).
         """
         # OD mode check: DUT should not be driving PP during IBI ACK/NACK
         if self._dut_is_driving() and self._dut_is_pp():

@@ -652,13 +652,13 @@ async def test_ibi_initiation_bus_available_vs_start(dut):
     # Queue IBI, then immediately issue a controller Start (before Bus Available).
     # DUT enters RxFByteArb on this Start and drives its IBI address.
     # It loses arbitration on the RnW bit (DUT=1 vs controller=0) but
-    # exercises the Bus Start initiation path (Idle → RxFByteArb).
+    # exercises the Bus Start initiation path (Idle -> RxFByteArb).
     # After the write's STOP + Bus Available, DUT retries via IbiDriveAddr.
     mdb_b = 0xB2
     data_b = [0x02]
     await send_ibi(tb, mdb_b, data_b)
 
-    # Bare Start → TARGET_ADDRESS+W: DUT arbitrates, loses on RnW bit
+    # Bare Start -> TARGET_ADDRESS+W: DUT arbitrates, loses on RnW bit
     write_data_b = [0x00]
     await i3c_controller.i3c_write(TARGET_ADDRESS, write_data_b, send_rsvd=False)
 
@@ -902,8 +902,8 @@ async def test_ibi_arb_loss_address(dut):
     address phase. RTL sets ibi_inhibit — DUT must NOT retry on the next
     Start, only after Bus Available condition.
     """
-    DUT_ADDR = 0x60   # Higher address → lower priority
-    VIP_ADDR = 0x20   # Lower address → wins arbitration
+    DUT_ADDR = 0x60   # Higher address -> lower priority
+    VIP_ADDR = 0x20   # Lower address -> wins arbitration
 
     i3c_controller, i3c_target_vip, tb = await test_setup(
         dut, static_addr=DUT_ADDR,
@@ -969,7 +969,7 @@ async def test_ibi_arb_loss_rnw_bit(dut):
     # Controller writes to DUT's own address without 0x7E header.
     # DUT enters RxFByteArb and drives (TARGET_ADDRESS<<1|1);
     # controller drives (TARGET_ADDRESS<<1|0). Bits 7-1 match,
-    # bit 0 differs → DUT loses on RnW.
+    # bit 0 differs -> DUT loses on RnW.
     write_data = [0xDE, 0xAD]
     resp = await i3c_controller.i3c_write(
         TARGET_ADDRESS, write_data, send_rsvd=False,
@@ -998,7 +998,7 @@ async def test_ibi_arb_loss_rnw_bit(dut):
 
 
 # =============================================================================
-# Test 15: NACK → Sr → Private Write (Flow 4)
+# Test 15: NACK -> Sr -> Private Write (Flow 4)
 # =============================================================================
 
     await tb.teardown()
@@ -1006,9 +1006,9 @@ async def test_ibi_arb_loss_rnw_bit(dut):
 @cocotb.test()
 async def test_ibi_nack_sr_private_write(dut):
     """
-    Flow 4: Controller NACKs IBI then chains Sr → Private Write to the
+    Flow 4: Controller NACKs IBI then chains Sr -> Private Write to the
     target within the same bus frame. Target must NOT attempt IBI on
-    the chained Repeated Start (WaitRestart→RxFByte, not RxFByteArb).
+    the chained Repeated Start (WaitRestart->RxFByte, not RxFByteArb).
     """
     i3c_controller, _, tb = await test_setup(dut)
     await init_ibi(i3c_controller, tb)
@@ -1017,7 +1017,7 @@ async def test_ibi_nack_sr_private_write(dut):
     data = [0x55, 0x66]
     await send_ibi(tb, mdb, data)
 
-    # NACK IBI, then Sr → Private Write to target
+    # NACK IBI, then Sr -> Private Write to target
     write_payload = [0xDE, 0xAD]
     i3c_controller.enable_ibi(False)
     i3c_controller.set_ibi_chain_write(TARGET_ADDRESS, write_payload)
@@ -1048,7 +1048,7 @@ async def test_ibi_nack_sr_private_write(dut):
 
 
 # =============================================================================
-# Test 16: NACK → Sr → Directed DISEC (Flow 6)
+# Test 16: NACK -> Sr -> Directed DISEC (Flow 6)
 # =============================================================================
 
     await tb.teardown()
@@ -1056,7 +1056,7 @@ async def test_ibi_nack_sr_private_write(dut):
 @cocotb.test()
 async def test_ibi_nack_sr_directed_disec(dut):
     """
-    Flow 6: Controller NACKs IBI then chains Sr → Directed DISEC with
+    Flow 6: Controller NACKs IBI then chains Sr -> Directed DISEC with
     DISINT to the target. Uses CCC 0x81 (directed SET) with addr+W
     direction. Verifies IBI_EN clears and target stops retrying.
     """
@@ -1067,7 +1067,7 @@ async def test_ibi_nack_sr_directed_disec(dut):
     data = [0xCA, 0xFE]
     await send_ibi(tb, mdb, data)
 
-    # NACK IBI, then Sr → Directed DISEC (CCC 0x81, SET → addr+W)
+    # NACK IBI, then Sr -> Directed DISEC (CCC 0x81, SET -> addr+W)
     i3c_controller.enable_ibi(False)
     i3c_controller.set_ibi_chain_ccc(
         CCC.DIRECT.DISEC,
@@ -1167,12 +1167,12 @@ async def test_ibi_accept_no_mdb_stop(dut):
 async def test_ibi_accept_no_mdb_sr_ccc(dut):
     """
     Flow 8: Our target always sends MDB (BCR[2]=1). Controller ACKs but
-    sends Sr → CCC without reading MDB. Target should report a non-success
+    sends Sr -> CCC without reading MDB. Target should report a non-success
     IBI status since the MDB was never consumed.
 
     DESIGN CHOICE: This I3C target does not support IBIs without MDB
     (BCR[2]=0 mode). When the controller violates the BCR[2]=1 contract
-    by sending Sr → CCC before reading the MDB, the IBI status is not
+    by sending Sr -> CCC before reading the MDB, the IBI status is not
     updated and the orphaned IBI re-fires. This is expected behavior
     for an unsupported flow.
 
@@ -1187,7 +1187,7 @@ async def test_ibi_accept_no_mdb_sr_ccc(dut):
     data = [0x22]
     await send_ibi(tb, mdb, data)
 
-    # ACK but refuse to read MDB, chain Sr → CCC instead
+    # ACK but refuse to read MDB, chain Sr -> CCC instead
     i3c_controller.set_ibi_skip_data(True)
     i3c_controller.set_ibi_chain_ccc(CCC.BCAST.ENEC, ccc_data=[0x0B])
 
@@ -1211,14 +1211,14 @@ async def test_ibi_accept_no_mdb_sr_ccc(dut):
 
 
 # =============================================================================
-# Test 19: ACK, tbit abort, Sr → CCC (Flow 12)
+# Test 19: ACK, tbit abort, Sr -> CCC (Flow 12)
 # =============================================================================
 
 @cocotb.test()
 async def test_ibi_tbit_abort_sr_ccc(dut):
     """
     Flow 12: Controller ACKs IBI, reads partial data (T-bit abort by
-    stopping early), then chains Sr → CCC. The target should report
+    stopping early), then chains Sr -> CCC. The target should report
     IbiPartialData status and the CCC should execute correctly.
     """
     i3c_controller, _, tb = await test_setup(dut)
@@ -1228,7 +1228,7 @@ async def test_ibi_tbit_abort_sr_ccc(dut):
     full_data = [0xCA, 0xFE, 0xBA, 0xBE, 0xDD, 0xEE]
     await send_ibi(tb, mdb, full_data)
 
-    # ACK and read only MDB + 2 data bytes, then Sr → GETSTATUS
+    # ACK and read only MDB + 2 data bytes, then Sr -> GETSTATUS
     i3c_controller.set_ibi_max_data(2)
     i3c_controller.set_ibi_chain_ccc(
         CCC.DIRECT.GETSTATUS,
@@ -1328,7 +1328,7 @@ async def test_ibi_retry_ctr_fw_reset(dut):
     data = [0xAA, 0xBB]
     await send_ibi(tb, mdb, data)
 
-    # NACK attempt 1 → counter becomes 1
+    # NACK attempt 1 -> counter becomes 1
     i3c_controller.enable_ibi(False)
 
     result = await i3c_controller.wait_for_ibi_event()
@@ -1342,7 +1342,7 @@ async def test_ibi_retry_ctr_fw_reset(dut):
         1,
     )
 
-    # NACK attempt 2 → counter becomes 1 again (was reset to 0)
+    # NACK attempt 2 -> counter becomes 1 again (was reset to 0)
     result = await i3c_controller.wait_for_ibi_event()
     assert result["ack"] is False, f"IBI ACK mismatch: expected False, got {result['ack']}"
 
@@ -1493,9 +1493,9 @@ async def test_rxfbytearb_collision_blind_drive(dut):
     DUT enters RxFByteArb driving IBI byte {0x5A, 1} = 0xB5.  Controller
     drives a write to the same address: {0x5A, 0} = 0xB4.  Bits 7..1
     match; at bit 0 the DUT drives 1 (IBI/read) but reads 0 (controller
-    write) → DUT loses arbitration.
+    write) -> DUT loses arbitration.
 
-    After arb loss the DUT transitions RxFByteArb → RxFByte → CheckFByte
+    After arb loss the DUT transitions RxFByteArb -> RxFByte -> CheckFByte
     and processes the controller's valid byte (addr 0x5A, Write).  Since
     0x5A matches the DUT's own address, the DUT ACKs and accepts the
     private write data.  After Bus Available the DUT retries IBI.
@@ -1510,7 +1510,7 @@ async def test_rxfbytearb_collision_blind_drive(dut):
     # Controller writes to DUT's own address without 0x7E header.
     # DUT enters RxFByteArb driving {TARGET_ADDRESS<<1|1};
     # controller drives {TARGET_ADDRESS<<1|0}.  Bits 7-1 match,
-    # bit 0 differs → DUT loses on RnW (0 dominant in OD).
+    # bit 0 differs -> DUT loses on RnW (0 dominant in OD).
     write_data = [0xCA, 0xFE]
     resp = await i3c_controller.i3c_write(
         TARGET_ADDRESS, write_data, send_rsvd=False,
@@ -1539,7 +1539,7 @@ async def test_rxfbytearb_collision_blind_drive(dut):
 
 
 # =============================================================================
-# Test: IbiFailureRetry from Idle — flush ignored → interrupt flood
+# Test: IbiFailureRetry from Idle — flush ignored -> interrupt flood
 # =============================================================================
 
     await tb.teardown()

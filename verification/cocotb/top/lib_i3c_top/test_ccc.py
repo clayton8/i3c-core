@@ -1138,7 +1138,7 @@ async def test_ccc_rstact_vt_detect(dut):
 @cocotb.test()
 async def test_ccc_rstact_vt_detect_no_reset_arm(dut):
     """
-    Verify DB=0x04 does not arm a reset action: default peripheral→escalation
+    Verify DB=0x04 does not arm a reset action: default peripheral->escalation
     path still works after sending RSTACT with VT detect defining byte.
     """
     log = logging.getLogger("test_ccc_rstact_vt_detect_no_reset_arm")
@@ -1158,7 +1158,7 @@ async def test_ccc_rstact_vt_detect_no_reset_arm(dut):
         i3c_controller, RSTACT_DEF_BYTE.VIRTUAL_TARGET_DETECT,
         "direct", tgt_addr)
 
-    # 1st reset pattern → default peripheral reset (rstact not armed)
+    # 1st reset pattern -> default peripheral reset (rstact not armed)
     await i3c_controller.send_target_reset_pattern()
     await ClockCycles(tb.clk, 10)
     log.info(f"1st pattern: peripheral_reset_o={int(dut.peripheral_reset_o)}, "
@@ -1172,7 +1172,7 @@ async def test_ccc_rstact_vt_detect_no_reset_arm(dut):
     dut.peripheral_reset_done_i.value = 0
     await ClockCycles(tb.clk, 10)
 
-    # 2nd reset pattern → escalated reset (no intervening RSTACT/GETSTATUS)
+    # 2nd reset pattern -> escalated reset (no intervening RSTACT/GETSTATUS)
     await i3c_controller.send_target_reset_pattern()
     await ClockCycles(tb.clk, 10)
     log.info(f"2nd pattern: peripheral_reset_o={int(dut.peripheral_reset_o)}, "
@@ -1295,7 +1295,7 @@ async def test_ccc_getcaps(dut):
     for tgt_addr in [DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR]:
         is_virt = (tgt_addr == VIRT_DYNAMIC_ADDR)
 
-        # No defining byte → 3 bytes (default GETCAPS)
+        # No defining byte -> 3 bytes (default GETCAPS)
         responses = await i3c_controller.i3c_ccc_read(
             ccc=CCC.DIRECT.GETCAPS, addr=tgt_addr, count=3)
         data = responses[0][1]
@@ -1305,14 +1305,14 @@ async def test_ccc_getcaps(dut):
         assert data[2] == expected_byte2, \
             f"GETCAPS byte2: expected 0x{expected_byte2:02X}, got 0x{data[2]:02X}"
 
-        # DB=0x00 → same 3 bytes
+        # DB=0x00 -> same 3 bytes
         responses = await i3c_controller.i3c_ccc_read(
             ccc=CCC.DIRECT.GETCAPS, addr=tgt_addr, count=3, defining_byte=0x00)
         data = responses[0][1]
         assert data[0] == 0x00 and data[1] == 0x01 and data[2] == expected_byte2, \
             f"GETCAPS DB=0x00: expected [00,01,{expected_byte2:02X}], got {[hex(b) for b in data]}"
 
-        # DB=0x93 → 1 byte (TESTCAP: 0x35)
+        # DB=0x93 -> 1 byte (TESTCAP: 0x35)
         responses = await i3c_controller.i3c_ccc_read(
             ccc=CCC.DIRECT.GETCAPS, addr=tgt_addr, count=1, defining_byte=0x93)
         data = responses[0][1]
@@ -1398,17 +1398,17 @@ async def test_ccc_rstact_read_action(dut):
             f"rst_action_o after arm 0x02: expected 0x02, got 0x{int(rst_action_sig):02X}"
         await i3c_controller.send_stop()
 
-        # Read with DB=0x00 in new frame → arm cleared by START → 0x80
+        # Read with DB=0x00 in new frame -> arm cleared by START -> 0x80
         val = await read_rstact(i3c_controller, 0x00, tgt_addr)
         assert val == 0x80, \
             f"RSTACT read after START: expected 0x80 (cleared), got 0x{val:02X}"
 
-        # Read recovery time (DB=0x81) → should return 0xFF
+        # Read recovery time (DB=0x81) -> should return 0xFF
         val = await read_rstact(i3c_controller, 0x81, tgt_addr)
         assert val == 0xFF, \
             f"RSTACT read DB=0x81: expected 0xFF, got 0x{val:02X}"
 
-        # Read recovery time (DB=0x82) → should return 0xFF
+        # Read recovery time (DB=0x82) -> should return 0xFF
         val = await read_rstact(i3c_controller, 0x82, tgt_addr)
         assert val == 0xFF, \
             f"RSTACT read DB=0x82: expected 0xFF, got 0x{val:02X}"
@@ -1517,7 +1517,7 @@ async def test_ccc_rstact_arm_clear_on_start(dut):
         ccc=CCC.DIRECT.GETSTATUS, addr=random.choice([DA, VDA]), count=2)
     # The START at beginning of this CCC read cleared rstact_armed
 
-    # Send target reset pattern → should get DEFAULT behavior (peripheral reset)
+    # Send target reset pattern -> should get DEFAULT behavior (peripheral reset)
     await i3c_controller.i3c_ccc_write(
         ccc=CCC.BCAST.RSTACT, defining_byte=0x01, stop=False)
     await i3c_controller.send_target_reset_pattern()
@@ -1583,8 +1583,8 @@ async def test_ccc_unknown_broadcast(dut):
 @cocotb.test()
 async def test_ccc_addr_lifecycle(dut):
     """
-    Full address lifecycle: RSTDAA → SETDASA → verify → SETNEWDA → verify →
-    RSTDAA → verify cleared. Tests both main and virtual targets.
+    Full address lifecycle: RSTDAA -> SETDASA -> verify -> SETNEWDA -> verify ->
+    RSTDAA -> verify cleared. Tests both main and virtual targets.
     """
     log = logging.getLogger("test_ccc_addr_lifecycle")
 
@@ -1597,7 +1597,7 @@ async def test_ccc_addr_lifecycle(dut):
     vda_reg = tb.reg_map.I3C_EC.STDBYCTRLMODE.STBY_CR_VIRT_DEVICE_ADDR
 
     # Step 1: SETDASA to assign initial addresses
-    log.info(f"SETDASA: main={SA}→{DA1}, virt={VSA}→{VDA1}")
+    log.info(f"SETDASA: main={SA}->{DA1}, virt={VSA}->{VDA1}")
     await i3c_controller.i3c_ccc_write(
         ccc=CCC.DIRECT.SETDASA, directed_data=[(SA, [DA1 << 1])], stop=False)
     await i3c_controller.i3c_ccc_write(
@@ -1613,7 +1613,7 @@ async def test_ccc_addr_lifecycle(dut):
     assert virt_da == VDA1 and virt_valid == 1, f"Virt DA: {virt_da} valid={virt_valid}"
 
     # Step 2: SETNEWDA to change addresses
-    log.info(f"SETNEWDA: main={DA1}→{DA2}, virt={VDA1}→{VDA2}")
+    log.info(f"SETNEWDA: main={DA1}->{DA2}, virt={VDA1}->{VDA2}")
     await i3c_controller.i3c_ccc_write(
         ccc=CCC.DIRECT.SETNEWDA, directed_data=[(DA1, [DA2 << 1])], stop=False)
     await i3c_controller.i3c_ccc_write(
@@ -1649,7 +1649,7 @@ async def test_ccc_chain_bcast(dut):
     i3c_controller, _, tb = await test_setup(dut)
     await ClockCycles(tb.clk, 50)
 
-    # Chain: SETMWL → SETMRL (broadcast, no STOP between them)
+    # Chain: SETMWL -> SETMRL (broadcast, no STOP between them)
     mwl_val = random.randint(0, 0xFFFF)
     mrl_val = random.randint(0, 0xFFFF)
     ibil_val = random.randint(0, 0xFF)
@@ -1684,7 +1684,7 @@ async def test_ccc_chain_direct(dut):
         dynamic_addr=DYNAMIC_ADDR, virtual_dynamic_addr=VIRT_DYNAMIC_ADDR)
     await ClockCycles(tb.clk, 50)
 
-    # Chain: SETMWL to main → SETMWL to VT (both in one frame)
+    # Chain: SETMWL to main -> SETMWL to VT (both in one frame)
     mwl_val = random.randint(0, 0xFFFF)
     await i3c_controller.i3c_ccc_write(
         ccc=CCC.DIRECT.SETMWL,
@@ -1728,8 +1728,8 @@ async def test_ccc_enthdr_all_codes(dut):
 async def test_ccc_te5_wrong_direction(dut):
     """
     TE5 error: wrong R/W direction for direct CCC.
-    - GET CCC sent with W direction → NACK
-    - SET CCC sent with R direction → NACK
+    - GET CCC sent with W direction -> NACK
+    - SET CCC sent with R direction -> NACK
     """
     (STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR) = \
         random.sample(VALID_I3C_ADDRESSES, 4)
@@ -1740,13 +1740,13 @@ async def test_ccc_te5_wrong_direction(dut):
     await ClockCycles(tb.clk, 50)
 
     for tgt_addr in [DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR]:
-        # GET CCC with Write direction → NACK
+        # GET CCC with Write direction -> NACK
         acks = await i3c_controller.i3c_ccc_write(
             ccc=CCC.DIRECT.GETBCR, directed_data=[(tgt_addr, [0x00])])
         assert acks[0] == False, \
             f"GETBCR with W direction to 0x{tgt_addr:02X} should NACK"
 
-        # SET CCC with Read direction → NACK
+        # SET CCC with Read direction -> NACK
         responses = await i3c_controller.i3c_ccc_read(
             ccc=CCC.DIRECT.SETMWL, addr=tgt_addr, count=2)
         assert responses[0][0] == False, \
@@ -2099,8 +2099,8 @@ async def test_ccc_setdasa_padding_err(dut):
     await tb.write_csr_field(err_intr_addr, framing_stat_field, 1)
     await ClockCycles(tb.clk, 5)
 
-    # ---- Test 1: SETDASA with bad padding bit → framing error, address NOT applied ----
-    log.info(f"SETDASA with bad padding: addr={STATIC_ADDR:#x} → DA={DYNAMIC_ADDR:#x} | 1")
+    # ---- Test 1: SETDASA with bad padding bit -> framing error, address NOT applied ----
+    log.info(f"SETDASA with bad padding: addr={STATIC_ADDR:#x} -> DA={DYNAMIC_ADDR:#x} | 1")
     bad_data_byte = (DYNAMIC_ADDR << 1) | 1  # bit[0]=1 is the error
     await i3c_controller.i3c_ccc_write(
         ccc=CCC.DIRECT.SETDASA, directed_data=[(STATIC_ADDR, [bad_data_byte])])
@@ -2125,8 +2125,8 @@ async def test_ccc_setdasa_padding_err(dut):
     await tb.write_csr_field(err_intr_addr, framing_stat_field, 1)
     await ClockCycles(tb.clk, 5)
 
-    # ---- Test 2: Good SETDASA → should work normally ----
-    log.info(f"SETDASA with good padding: addr={STATIC_ADDR:#x} → DA={DYNAMIC_ADDR:#x}")
+    # ---- Test 2: Good SETDASA -> should work normally ----
+    log.info(f"SETDASA with good padding: addr={STATIC_ADDR:#x} -> DA={DYNAMIC_ADDR:#x}")
     good_data_byte = (DYNAMIC_ADDR << 1)  # bit[0]=0
     await i3c_controller.i3c_ccc_write(
         ccc=CCC.DIRECT.SETDASA, directed_data=[(STATIC_ADDR, [good_data_byte])], stop=False)
@@ -2140,10 +2140,10 @@ async def test_ccc_setdasa_padding_err(dut):
     da_val = await tb.read_csr_field(da_reg_addr, da_field)
     assert da_val == DYNAMIC_ADDR, f"DA should be {DYNAMIC_ADDR:#x}, got {da_val:#x}"
 
-    # ---- Test 3: SETNEWDA with bad padding bit → framing error, address unchanged ----
+    # ---- Test 3: SETNEWDA with bad padding bit -> framing error, address unchanged ----
     NEW_ADDR = random.choice([a for a in VALID_I3C_ADDRESSES
                               if a not in (STATIC_ADDR, VIRT_STATIC_ADDR, DYNAMIC_ADDR, VIRT_DYNAMIC_ADDR)])
-    log.info(f"SETNEWDA with bad padding: DA={DYNAMIC_ADDR:#x} → {NEW_ADDR:#x} | 1")
+    log.info(f"SETNEWDA with bad padding: DA={DYNAMIC_ADDR:#x} -> {NEW_ADDR:#x} | 1")
     bad_data_byte = (NEW_ADDR << 1) | 1
     await i3c_controller.i3c_ccc_write(
         ccc=CCC.DIRECT.SETNEWDA, directed_data=[(DYNAMIC_ADDR, [bad_data_byte])])
@@ -2357,8 +2357,8 @@ async def test_ccc_entdaa_te3_te4(dut):
     """
     Verify TE3 and TE4 error handling during ENTDAA.
 
-    TE3: Parity error on assigned address → target NACKs, retries on next Sr+7E/R.
-    TE4: Invalid reserved byte (not 7E/R) → target NACKs, waits for STOP.
+    TE3: Parity error on assigned address -> target NACKs, retries on next Sr+7E/R.
+    TE4: Invalid reserved byte (not 7E/R) -> target NACKs, waits for STOP.
 
     """
     log = logging.getLogger("test_ccc_entdaa_te3_te4")
@@ -2441,7 +2441,7 @@ async def test_ccc_entdaa_te3_te4(dut):
 async def test_ccc_entdaa_arb_lost(dut):
     """
     Verify ENTDAA arbitration-lost path: when arbitration_lost_i is asserted
-    during ID bit transmission, the DUT enters LostArbitration → WaitStart and
+    during ID bit transmission, the DUT enters LostArbitration -> WaitStart and
     retries on the next Sr+7E/R round.
 
     Uses cocotb signal force on the internal arbitration_lost_i signal.
@@ -2722,12 +2722,12 @@ async def test_ccc_getstatus_abort_then_chain_setmwl(dut):
     followed by a different CCC must NOT clear the error.
 
     Bus sequence (no STOP between abort and new CCC):
-      S → 0x7E/W → GETSTATUS → Sr → ADDR/R → byte0 → Sr(abort)
-        → 0x7E/W → SETMWL → Sr → ADDR/W → byte0 → byte1 → STOP
+      S -> 0x7E/W -> GETSTATUS -> Sr -> ADDR/R -> byte0 -> Sr(abort)
+        -> 0x7E/W -> SETMWL -> Sr -> ADDR/W -> byte0 -> byte1 -> STOP
 
     RTL path exercised:
-      ccc.sv TxDataTbit → Sr → RxTargetAddr → TxTargetAddrAck (0x7E/W)
-        → NextCCC → WaitCCC → new SETMWL processing → DoneCCC
+      ccc.sv TxDataTbit -> Sr -> RxTargetAddr -> TxTargetAddrAck (0x7E/W)
+        -> NextCCC -> WaitCCC -> new SETMWL processing -> DoneCCC
       get_status_done_o must NOT fire because command_code changed to SETMWL.
     """
     log = logging.getLogger("test_ccc_getstatus_abort_chain")
@@ -3954,7 +3954,7 @@ async def test_ccc_entdaa_stop_in_ackrsvdbyte(dut):
         dut, STATIC_ADDR, VIRT_STATIC_ADDR)
     await ClockCycles(tb.clk, 50)
 
-    # Raw ENTDAA: S + 7E/W + 0x07 + Sr + 7E/R + ACK bit → STOP during ACK
+    # Raw ENTDAA: S + 7E/W + 0x07 + Sr + 7E/R + ACK bit -> STOP during ACK
     log.info("ENTDAA with STOP during AckRsvdByte")
     await i3c_controller.take_bus_control()
     await i3c_controller.send_start()
