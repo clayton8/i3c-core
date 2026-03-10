@@ -207,7 +207,6 @@ module recovery_handler
     // Recovery status
     output logic payload_available_o,
     output logic image_activated_o,
-    output logic recovery_mode_enter_o,
     input  logic virtual_device_sel_i,
     input  logic xfer_in_progress_i,
 
@@ -1096,8 +1095,7 @@ module recovery_handler
       .indirect_fifo_overflow_err_o,
       .rx_desc_wvalid_i(ctl_tti_rx_desc_queue_wvalid_i),
       .rx_desc_wdata_i (ctl_tti_rx_desc_queue_wdata_i),
-      .exec_pending_o(recovery_exec_pending),
-      .recovery_mode_enter_o
+      .exec_pending_o(recovery_exec_pending)
   );
 
   //----------------------------------------------------------------------------

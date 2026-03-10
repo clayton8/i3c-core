@@ -194,8 +194,6 @@ module controller_standby_i3c
   input  logic peripheral_reset_done_i,
   output logic escalated_reset_o,
 
-  // recovery mode
-  input  logic recovery_mode_enter_i,
   output logic virtual_device_sel_o,
   output logic xfer_in_progress_o,
   output logic in_hdr_mode_o
@@ -691,7 +689,6 @@ module controller_standby_i3c
     .tx_byte_valid_o           (tx_fifo_rvalid),
     .tx_byte_ready_i           (tx_fifo_rready),
 
-    .recovery_mode_enter_i     (recovery_mode_enter_i),
     .tx_end_o                  (tx_pr_end_o)
   );
 

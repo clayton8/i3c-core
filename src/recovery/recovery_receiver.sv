@@ -223,7 +223,6 @@ module recovery_receiver
     output logic readonly_err_o,
     output logic unsupported_err_o,
     output logic exec_pending_o,
-    output logic recovery_mode_enter_o,
     output logic rx_fifo_overflow_err_o,       // RX FIFO overflow error (always reported)
     output logic indirect_fifo_overflow_err_o, // INDIRECT_FIFO overflow error
 
@@ -536,13 +535,6 @@ module recovery_receiver
       premature_stop_q <= 1'b0;
     end
   end
-
-  //----------------------------------------------------------------------------
-  // Recovery Mode Enter Pulse
-  //----------------------------------------------------------------------------
-  // Generate a single-cycle pulse when transitioning from Idle to RxCmd.
-  // This signals the start of a new recovery command to downstream logic.
-  assign recovery_mode_enter_o = (state_q == Idle) && (state_d == RxCmd);
 
   //----------------------------------------------------------------------------
   // Next State Logic

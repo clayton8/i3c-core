@@ -256,8 +256,6 @@ module controller
     output logic escalated_reset_o,
 
     output logic err_o,
-    input  logic recovery_mode_enter_i,
-
     // Individual TE error outputs for interrupt reporting
     output logic te0_err_o,
     output logic te1_err_o,
@@ -674,7 +672,6 @@ module controller
     .peripheral_reset_o,
     .peripheral_reset_done_i,
     .escalated_reset_o,
-    .recovery_mode_enter_i,
     .te0_err_o,
     .te1_err_o,
     .te2_err_o,

@@ -563,7 +563,6 @@ module i3c
   logic te5_err;
   logic framing_err;
 
-  logic recovery_mode_enter;
   logic virtual_device_sel;
   logic xfer_in_progress;
   logic in_hdr_mode;
@@ -787,8 +786,6 @@ module i3c
       .escalated_reset_o,
 
       .err_o(controller_error),
-      .recovery_mode_enter_i(recovery_mode_enter),
-
       .te0_err_o(te0_err),
       .te1_err_o(te1_err),
       .te2_err_o(te2_err),
@@ -1287,7 +1284,6 @@ module i3c
       // Received I2C/I3C address along with RnW# bit
       .ctl_bus_addr_i(rx_bus_addr),
       .ctl_bus_addr_valid_i(rx_bus_addr_valid),
-      .recovery_mode_enter_o(recovery_mode_enter),
       .virtual_device_sel_i(virtual_device_sel),
       .xfer_in_progress_i(xfer_in_progress),
       .pec_err_det_en_i(hwif_tti_out.TARGET_ERR_CTRL.RI_PEC_ERR_DET_EN.value),

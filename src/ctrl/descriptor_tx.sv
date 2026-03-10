@@ -40,10 +40,7 @@ module descriptor_tx import i3c_pkg::*; #(
   input  logic      tx_start_i,
   output logic      tx_end_o,
   input  logic      tx_abort_i,
-  output logic      tx_desc_avail_o,
-
-  // recovery mode
-  input  logic recovery_mode_enter_i
+  output logic      tx_desc_avail_o
 );
 
   logic [TtiTxDescDataWidth-1:0] tx_descriptor;
@@ -59,7 +56,7 @@ module descriptor_tx import i3c_pkg::*; #(
   logic flush;
 
   assign tti_tx_desc_queue_rready_o = tti_tx_desc_queue_rvalid_i && !descriptor_valid && tx_start_i
-                                      && !(flush || tx_abort_i || recovery_mode_enter_i);
+                                      && !(flush || tx_abort_i);
 
   assign tx_desc_avail_o = tti_tx_desc_queue_rvalid_i;
 
@@ -68,7 +65,7 @@ module descriptor_tx import i3c_pkg::*; #(
       tx_descriptor    <= '0;
       descriptor_valid <= '0;
     end else begin
-      if (tx_end || tx_abort_i || recovery_mode_enter_i) begin
+      if (tx_end || tx_abort_i ) begin
         tx_descriptor    <= '0;
         descriptor_valid <= '0;
       end else if (tti_tx_desc_queue_rready_o) begin
@@ -83,7 +80,7 @@ module descriptor_tx import i3c_pkg::*; #(
       flush <= 1'b0;
     end else begin
       if (!flush) begin
-        if ((byte_counter != 16'h0) && (tx_abort_i || recovery_mode_enter_i)) begin
+        if ((byte_counter != 16'h0) && tx_abort_i ) begin
           flush <= 1'b1;
         end
       end else begin
