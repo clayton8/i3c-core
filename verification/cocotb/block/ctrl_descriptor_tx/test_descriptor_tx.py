@@ -12,7 +12,6 @@ async def setup(dut):
     """ """
     await ClockCycles(dut.clk_i, 10)
     dut.tti_tx_desc_queue_rvalid_i.value = 0
-    dut.recovery_mode_enter_i.value = 0
     dut.tti_tx_queue_rvalid_i.value = 0
     dut.tti_tx_queue_empty_i.value = 1
     dut.tx_abort_i.value = 0
