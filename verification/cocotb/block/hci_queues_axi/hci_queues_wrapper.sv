@@ -794,8 +794,7 @@ module hci_queues_wrapper
       .ctl_tti_ibi_queue_ready_thld_o(tti_ibi_ready_thld_o),
       .ctl_tti_ibi_queue_ready_thld_trig_o(tti_ibi_ready_thld_trig_o),
 
-      // Recovery mode
-      .recovery_mode_enter_o(),
+
 
       // Error detection enables
       .pec_err_det_en_i('0),
