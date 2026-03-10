@@ -62,11 +62,11 @@ VERDI_PLI ?= 1
 ifeq ($(SIM), vcs)
     COMPILE_ARGS += -assert svaext
     COMPILE_ARGS += -Xcflags='-Wno-error=implicit-function-declaration -Wno-error=int-conversion'
+    COMPILE_ARGS += -kdb
     ifeq ($(VERDI_PLI), 1)
         COMPILE_ARGS += -P $(VERDI_HOME)/share/PLI/VCS/LINUX64/novas.tab $(VERDI_HOME)/share/PLI/VCS/LINUX64/pli.a
     else
-        COMPILE_ARGS += -debug_access+all
-    COMPILE_ARGS += -kdb +vcs+fsdbon
+        COMPILE_ARGS += -debug_access+all +vcs+fsdbon
     endif
     ifeq ($(WAVES), 1)
         # Sim args seem to work for both wave dumping types (?)
