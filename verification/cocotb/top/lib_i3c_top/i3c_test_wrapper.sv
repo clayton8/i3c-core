@@ -49,6 +49,10 @@ module i3c_test_wrapper #(
     input  logic [AxiUserWidth-1:0] aruser,
     input  logic [  AxiIdWidth-1:0] arid,
     input  logic                    arlock,
+    input  logic [             3:0] arcache,
+    input  logic [             2:0] arprot,
+    input  logic [             3:0] arqos,
+    input  logic [             3:0] arregion,
     input  logic                    arvalid,
     output logic                    arready,
 
@@ -67,6 +71,10 @@ module i3c_test_wrapper #(
     input  logic [AxiUserWidth-1:0] awuser,
     input  logic [  AxiIdWidth-1:0] awid,
     input  logic                    awlock,
+    input  logic [             3:0] awcache,
+    input  logic [             2:0] awprot,
+    input  logic [             3:0] awqos,
+    input  logic [             3:0] awregion,
     input  logic                    awvalid,
     output logic                    awready,
 
@@ -175,6 +183,69 @@ i3c_bus_harness #(
     .scl_o     (bus_scl)
 );
 
+`ifdef I3C_USE_AXI
+// AXI4 subordinate interface of the DUT; cocotb drives the discrete
+// AXI pins of this wrapper, so they are wired onto the interface here
+axi_if #(
+    .AW(AxiAddrWidth),
+    .DW(AxiDataWidth),
+    .UW(AxiUserWidth),
+    .IW(AxiIdWidth)
+) s_axi_if (
+    .clk  (aclk),
+    .rst_n(areset_n)
+);
+
+// AXI Read Channels
+assign s_axi_if.araddr  = araddr;
+assign s_axi_if.arburst = arburst;
+assign s_axi_if.arsize  = arsize;
+assign s_axi_if.arlen   = arlen;
+assign s_axi_if.aruser  = aruser;
+assign s_axi_if.arid    = arid;
+assign s_axi_if.arlock  = arlock;
+assign s_axi_if.arcache = arcache;
+assign s_axi_if.arprot  = arprot;
+assign s_axi_if.arqos   = arqos;
+assign s_axi_if.arregion = arregion;
+assign s_axi_if.arvalid = arvalid;
+assign arready          = s_axi_if.arready;
+
+assign rdata            = s_axi_if.rdata;
+assign rresp            = s_axi_if.rresp;
+assign rid              = s_axi_if.rid;
+assign rlast            = s_axi_if.rlast;
+assign rvalid           = s_axi_if.rvalid;
+assign s_axi_if.rready  = rready;
+
+// AXI Write Channels
+assign s_axi_if.awaddr  = awaddr;
+assign s_axi_if.awburst = awburst;
+assign s_axi_if.awsize  = awsize;
+assign s_axi_if.awlen   = awlen;
+assign s_axi_if.awuser  = awuser;
+assign s_axi_if.awid    = awid;
+assign s_axi_if.awlock  = awlock;
+assign s_axi_if.awcache = awcache;
+assign s_axi_if.awprot  = awprot;
+assign s_axi_if.awqos   = awqos;
+assign s_axi_if.awregion = awregion;
+assign s_axi_if.awvalid = awvalid;
+assign awready          = s_axi_if.awready;
+
+assign s_axi_if.wdata   = wdata;
+assign s_axi_if.wstrb   = wstrb;
+assign s_axi_if.wuser   = '0;
+assign s_axi_if.wlast   = wlast;
+assign s_axi_if.wvalid  = wvalid;
+assign wready           = s_axi_if.wready;
+
+assign bresp            = s_axi_if.bresp;
+assign bid              = s_axi_if.bid;
+assign bvalid           = s_axi_if.bvalid;
+assign s_axi_if.bready  = bready;
+`endif
+
 i3c_wrapper xi3c_wrapper (
     .clk_i,
     .rst_ni,
@@ -194,47 +265,7 @@ i3c_wrapper xi3c_wrapper (
     .hsel_i(hsel),
     .hready_i(hready),
 `elsif I3C_USE_AXI
-    .araddr_i(araddr),
-    .arburst_i(arburst),
-    .arsize_i(arsize),
-    .arlen_i(arlen),
-    .aruser_i(aruser),
-    .arid_i(arid),
-    .arlock_i(arlock),
-    .arvalid_i(arvalid),
-    .arready_o(arready),
-
-    .rdata_o(rdata),
-    .rresp_o(rresp),
-    .rid_o(rid),
-    .rlast_o(rlast),
-    .rvalid_o(rvalid),
-    .rready_i(rready),
-    .ruser_o(),
-
-    .awaddr_i(awaddr),
-    .awburst_i(awburst),
-    .awsize_i(awsize),
-    .awlen_i(awlen),
-    .awuser_i(awuser),
-    .awid_i(awid),
-    .awlock_i(awlock),
-    .awvalid_i(awvalid),
-    .awready_o(awready),
-
-    .wdata_i(wdata),
-    .wstrb_i(wstrb),
-    .wlast_i(wlast),
-    .wvalid_i(wvalid),
-    .wready_o(wready),
-    .wuser_i('0),
-
-    .bresp_o(bresp),
-    .bid_o(bid),
-    .bvalid_o(bvalid),
-    .bready_i(bready),
-    .buser_o(),
-
+    .s_axi_if(s_axi_if),
 `ifdef AXI_ID_FILTERING
       .disable_id_filtering_i(disable_id_filtering_i),
       .priv_ids_i(priv_ids_i),
